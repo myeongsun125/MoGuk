@@ -1,0 +1,89 @@
+# MoGuk CI — 게이트 ①·② (기획서 '배포와 무중단 운영'의 3단계 게이트 중 1~2단계)
+#   게이트 ①: 정적 검증 (compose 문법, 앱 임포트 검증)
+#   게이트 ②: 이미지 빌드 + Trivy 취약점 스캔 → main 머지 시 GHCR 푸시
+#   게이트 ③(스테이징 헬스체크 → 운영 반영)은 deploy.yml에서 수행 (8/4 예정)
+#
+# 필요 시크릿: 없음 — GHCR 푸시는 GitHub이 자동 발급하는 GITHUB_TOKEN 사용.
+#   (EC2 SSH 키 등은 deploy.yml 단계에서 명선팀장이 등록)
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/moguk-backend
+
+jobs:
+  # ── 게이트 ① 정적 검증 ─────────────────────────────
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose 문법 검증
+        run: docker compose config -q
+
+      - name: 앱 임포트 검증 (문법 오류 조기 차단)
+        run: |
+          python3 -m pip install --quiet -r backend/requirements.txt
+          python3 -c "from app.main import app; print('import OK:', app.title)"
+        working-directory: .
+        env:
+          PYTHONPATH: backend
+
+  # ── 게이트 ② 빌드 + 취약점 스캔 (+ main이면 푸시) ──
+  build-scan-push:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # GHCR 푸시용 GITHUB_TOKEN 권한
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 이미지 메타데이터 (태그 전략)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-          # 모든 빌드: 커밋 추적용
+            type=ref,event=tag            # vX.Y.Z 태그: 릴리스 버전
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 이미지 빌드 (로컬 로드)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          load: true
+          tags: ${{ env.IMAGE }}:scan-target
+
+      - name: Trivy 취약점 스캔 (CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:scan-target
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true   # 패치 미존재 취약점은 게이트에서 제외 (노이즈 차단)
+          exit-code: "1"         # CRITICAL/HIGH 발견 시 빌드 실패 = 배포 차단
+
+      - name: GHCR 로그인 (main/태그 푸시 시에만)
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: GHCR 푸시 (main/태그 푸시 시에만)
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
