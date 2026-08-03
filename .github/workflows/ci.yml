@@ -64,7 +64,7 @@ jobs:
           tags: ${{ env.IMAGE }}:scan-target
 
       - name: Trivy 취약점 스캔 (CRITICAL/HIGH)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE }}:scan-target
           severity: CRITICAL,HIGH
