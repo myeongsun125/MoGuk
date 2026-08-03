@@ -1,0 +1,43 @@
+# MoGuk — 개발용 Compose (v0)
+# 사용: cp .env.example .env && docker compose up -d --build
+# 참고: 헬스체크 30초 주기·restart 정책은 기획서 장애 매트릭스의 실측 대상.
+#       prod 구성(infra/docker-compose.prod.yml, Caddy 포함)은 8/3 EC2 배포 단계에서 추가.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-moguk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moguk}
+      POSTGRES_DB: ${POSTGRES_DB:-moguk}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-moguk} -d ${POSTGRES_DB:-moguk}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moguk}:${POSTGRES_PASSWORD:-moguk}@db:5432/${POSTGRES_DB:-moguk}
+      APP_VERSION: ${APP_VERSION:-0.1.0-dev}
+      APP_SLOT: ${APP_SLOT:-dev}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # curl이 없는 slim 이미지에서도 동작하도록 표준 라이브러리 사용
+      test: ["CMD", "python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); sys.exit(0 if r.status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
