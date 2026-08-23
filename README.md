@@ -33,8 +33,9 @@ curl -s -XPOST localhost:8000/api/v1/ask -H 'content-type: application/json' -d 
 
 ## /health 계약 (변경 시 병갑과 합의)
 
-- `GET /health` → **200**(정상) / **503**(핵심 컴포넌트 이상)
-- 응답: `status`, `version`, `slot`(blue/green), `components{api, db, llm}`
+- `GET /health` → **200**(정상) / **503**(핵심 컴포넌트 이상). 공통 필드: `status`, `version`, `slot`(blue/green), `role`, `components`
+- **core-api**: `components{api, db, llm}` — 200/503 판정 = `components.db`
+- **edge-api**: `components{api, core_relay}` — DB 체크 없음(M-22). `core_relay` = core-api 가 보내는 `POST /internal/core-heartbeat` 신선도. 하트비트 전/지연 시 `status: degraded` 로 표면화하되 200 유지
 - 이 계약은 blue-green 배포 게이트·자동 재기동 판정 기준이므로 임의 변경 금지.
 
 ## 브랜치 전략 (경량)
