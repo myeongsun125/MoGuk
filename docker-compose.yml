@@ -1,17 +1,30 @@
-# MoGuk — 개발용 Compose (v0)
-# 사용: cp .env.example .env && docker compose up -d --build
-# 참고: 헬스체크 30초 주기·restart 정책은 기획서 장애 매트릭스의 실측 대상.
-#       prod 구성(infra/docker-compose.prod.yml, Caddy 포함)은 8/3 EC2 배포 단계에서 추가.
+# MoGuk — 개발용 Compose (skeleton v3, docs/skeleton-v3.md §5) [병갑]
+# 사용: cp .env.example .env → POSTGRES_PASSWORD 등 채움 → docker compose up -d --build
+#       stt·dagster 는 이미지 자리만 확보(profile full) — 기본 up 에서는 제외되어 나머지 6종이 먼저 뜬다.
+#       전체: docker compose --profile full up -d
+#
+# 네트워크:
+#   core_net — postgres, ollama, stt, core-api, dagster. internal: true (외부 라우트 없음).
+#   edge_net — caddy, edge-api, frontend, (edge-db: M-23 자리).
+#   core-api → edge-api 는 outbound 단방향만(M-22). edge 계열 env 에는 내부 DB 자격증명·호스트명을 두지 않는다
+#   (연결 불가 상태가 정답). Docker 네트워크는 대칭이므로 방향성은 "core-api가 edge_net에서 리슨하지 않고,
+#   edge-api 는 core 로 호출하지 않는다"(앱 레벨)로 보장 — 병갑 검토 항목.
+# ollama 모델 pull: core_net 이 internal 이라 컨테이너 안에서 pull 불가. 호스트에서 볼륨에 직접:
+#   docker run --rm -v moguk_ollama_models:/root/.ollama ollama/ollama pull qwen3:8b   (qwen3:4b 도 동일, M-03)
+
+name: moguk
 
 services:
-  db:
+  # ── core_net ──────────────────────────────────────────────
+  postgres:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-moguk}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moguk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (.env)}
       POSTGRES_DB: ${POSTGRES_DB:-moguk}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks: [core_net]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-moguk} -d ${POSTGRES_DB:-moguk}"]
       interval: 10s
@@ -19,19 +32,48 @@ services:
       retries: 5
     restart: unless-stopped
 
-  backend:
+  ollama:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [core_net]
+    # GPU 머신: deploy.resources.reservations.devices 추가 (병갑)
+    restart: unless-stopped
+
+  stt:
+    # faster-whisper 전용 컨테이너 (M-18). 이미지 자리만 — 빌드/배포는 병갑 트랙.
+    image: ${STT_IMAGE:-moguk-stt:dev}
+    profiles: [full]
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+    mem_limit: 2g
+    cpus: 2
+    networks: [core_net]
+    restart: unless-stopped
+
+  core-api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-moguk}:${POSTGRES_PASSWORD:-moguk}@db:5432/${POSTGRES_DB:-moguk}
+      API_ROLE: core
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moguk}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (.env)}@postgres:5432/${POSTGRES_DB:-moguk}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+      OLLAMA_FALLBACK_MODEL: ${OLLAMA_FALLBACK_MODEL:-qwen3:4b}
+      STT_URL: http://stt:8000
+      EDGE_API_URL: http://edge-api:8000
+      EXTERNAL_LLM_API_KEY: ${EXTERNAL_LLM_API_KEY:-}
+      TENANT_CRYPTO_KEY: ${TENANT_CRYPTO_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-}
       APP_VERSION: ${APP_VERSION:-0.1.0-dev}
       APP_SLOT: ${APP_SLOT:-dev}
-    ports:
-      - "8000:8000"
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
+    networks: [core_net, edge_net]   # edge_net 가입은 edge-api 로의 outbound 전용 (위 주석)
     healthcheck:
-      # curl이 없는 slim 이미지에서도 동작하도록 표준 라이브러리 사용
       test: ["CMD", "python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); sys.exit(0 if r.status==200 else 1)"]
       interval: 30s
       timeout: 5s
@@ -39,5 +81,76 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  dagster:
+    # Dagster 웹서버+데몬 (M-16). 이미지 자리만 — pipeline/ 에셋화(8/24) 시 build 로 전환 [명선·병갑]
+    image: ${DAGSTER_IMAGE:-moguk-dagster:dev}
+    profiles: [full]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moguk}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (.env)}@postgres:5432/${POSTGRES_DB:-moguk}
+      OLLAMA_URL: http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [core_net]
+    restart: unless-stopped
+
+  # ── edge_net ──────────────────────────────────────────────
+  edge-api:
+    build: ./backend
+    environment:
+      # 내부 DB 자격증명·호스트명 없음 — edge 는 core 로 연결할 수 없어야 정답 (M-22)
+      API_ROLE: edge
+      JWT_SECRET: ${JWT_SECRET:-}
+      APP_VERSION: ${APP_VERSION:-0.1.0-dev}
+      APP_SLOT: ${APP_SLOT:-dev}
+    ports:
+      - "8000:8000"   # dev 직접 호출용 (curl localhost:8000/health). prod 는 caddy 경유만
+    networks: [edge_net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); sys.exit(0 if r.status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    networks: [edge_net]
+    restart: unless-stopped
+
+  edge-db:
+    # M-23 암호문 시연 저장소 자리 — published_content 단일 테이블, 8/26 알파에서 확정. 폴백 = 봉인 컬럼 at-rest.
+    image: postgres:16-alpine
+    profiles: [full]
+    environment:
+      POSTGRES_USER: ${EDGE_DB_USER:-edge}
+      POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD:?EDGE_DB_PASSWORD is required (.env)}
+      POSTGRES_DB: ${EDGE_DB_NAME:-edge}
+    volumes:
+      - edgedata:/var/lib/postgresql/data
+    networks: [edge_net]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [edge-api, frontend]
+    networks: [edge_net]
+    restart: unless-stopped
+
+networks:
+  core_net:
+    internal: true   # 외부 라우트 없음 (§5)
+  edge_net:
+
 volumes:
   pgdata:
+  ollama_models:
+  caddy_data:
+  edgedata:

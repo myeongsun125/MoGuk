@@ -1,5 +1,5 @@
 # MoGuk CI — 게이트 ①·② (기획서 '배포와 무중단 운영'의 3단계 게이트 중 1~2단계)
-#   게이트 ①: 정적 검증 (compose 문법, 앱 임포트 검증)
+#   게이트 ①: 정적 검증 (compose 문법, 앱 임포트 검증, pytest)
 #   게이트 ②: 이미지 빌드 + Trivy 취약점 스캔 → main 머지 시 GHCR 푸시
 #   게이트 ③(스테이징 헬스체크 → 운영 반영)은 deploy.yml에서 수행 (8/4 예정)
 #
@@ -27,14 +27,22 @@ jobs:
 
       - name: Compose 문법 검증
         run: docker compose config -q
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-secret   # compose 의 ${POSTGRES_PASSWORD:?} 필수화 통과용 (R1, A-04)
+          EDGE_DB_PASSWORD: ci-only-not-a-secret    # edge-db (M-23 자리) 동일
 
       - name: 앱 임포트 검증 (문법 오류 조기 차단)
         run: |
-          python3 -m pip install --quiet -r backend/requirements.txt
+          python3 -m pip install --quiet -r backend/requirements-dev.txt
           python3 -c "from app.main import app; print('import OK:', app.title)"
         working-directory: .
         env:
           PYTHONPATH: backend
+          API_ROLE: core                                     # core 역할의 필수 env 검증 경로를 탄다
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:1/ci   # 기본값 제거(A-04) → core 는 import 시 필수. 닿지 않는 포트
+
+      - name: pytest 게이트 (A-07)
+        run: python3 -m pytest -q
 
   # ── 게이트 ② 빌드 + 취약점 스캔 (+ main이면 푸시) ──
   build-scan-push:

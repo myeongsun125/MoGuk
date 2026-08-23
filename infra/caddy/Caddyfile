@@ -1,0 +1,12 @@
+# MoGuk edge 리버스 프록시 (dev). prod: 도메인·TLS 자동발급 — 병갑 [infra]
+:80 {
+	handle /api/* {
+		reverse_proxy edge-api:8000
+	}
+	handle /health {
+		reverse_proxy edge-api:8000
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
+}

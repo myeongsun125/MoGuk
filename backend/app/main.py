@@ -1,65 +1,31 @@
-"""MoGuk API — infra stub (v0)
+"""MoGuk API 엔트리 — 라우터 include만. 로직은 services/로 위임. [새봄]
 
-인프라 리허설(blue-green 전환, 자동 재기동, 배포 게이트)의 기준점이 되는
-최소 애플리케이션. 백엔드 본 구현(새봄)이 이 파일을 대체하되,
-/health 의 응답 계약(스키마·상태코드)은 유지한다.
-
-계약:
-- GET /health → 200 (전 컴포넌트 정상) | 503 (핵심 컴포넌트 이상)
-- 응답 필드: status, version, slot(blue/green), components{api,db,llm}
+- 운영 엔드포인트 `/health`, `/`는 루트(Base 밖). compose 헬스체크·CI 게이트·blue-green
+  판정이 소비하므로 경로·응답 계약(status/version/slot/components, 200/503) 변경 금지.
+- 비즈니스 API는 `/api/v1/*` (docs/skeleton-v3.md §3).
+- 같은 이미지가 API_ROLE=edge|core 로 두 번 기동된다 (§5 edge-api / core-api).
+  edge 는 내부 DB 자격증명·호스트명을 갖지 않으며 core 로 호출하지 않는다 (M-22).
 """
 
-import os
-import time
-
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 
-APP_VERSION = os.getenv("APP_VERSION", "0.1.0-dev")
-APP_SLOT = os.getenv("APP_SLOT", "dev")  # blue | green | dev — 무중단 전환 검증용 식별자
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://moguk:moguk@db:5432/moguk"
-)
+from app.routers import admin, ask, auth, chat, health, learn, notifications, reports
+from app.services.system_service import APP_SLOT, APP_VERSION, role, validate_env
 
-app = FastAPI(title="MoGuk API (infra stub)", version=APP_VERSION)
+validate_env()  # core 는 DATABASE_URL 필수 — 미설정 시 여기서 기동 실패 (R1)
+API_ROLE = role()  # edge | core
 
+app = FastAPI(title=f"MoGuk API ({API_ROLE})", version=APP_VERSION)
 
-def check_db() -> dict:
-    """DB 연결·응답을 점검한다. 실패해도 예외를 밖으로 던지지 않는다."""
-    t0 = time.perf_counter()
-    try:
-        import psycopg
+# 루트 운영 엔드포인트
+app.include_router(health.router)
 
-        with psycopg.connect(DATABASE_URL, connect_timeout=2) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-        return {
-            "status": "ok",
-            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
-        }
-    except Exception as exc:  # noqa: BLE001 — health는 원인 유형만 노출
-        return {"status": "fail", "error": type(exc).__name__}
-
-
-@app.get("/health")
-def health() -> JSONResponse:
-    db = check_db()
-    healthy = db["status"] == "ok"
-    return JSONResponse(
-        status_code=200 if healthy else 503,
-        content={
-            "status": "ok" if healthy else "degraded",
-            "version": APP_VERSION,
-            "slot": APP_SLOT,
-            "components": {
-                "api": {"status": "ok"},
-                "db": db,
-                "llm": {"status": "not_wired"},  # 어댑터 연결 시 갱신 (새봄 파트)
-            },
-        },
-    )
+# 비즈니스 API
+API_V1 = "/api/v1"
+for r in (auth, learn, ask, reports, chat, notifications, admin):
+    app.include_router(r.router, prefix=API_V1)
 
 
 @app.get("/")
 def root() -> dict:
-    return {"service": "MoGuk", "version": APP_VERSION, "slot": APP_SLOT}
+    return {"service": "MoGuk", "role": API_ROLE, "version": APP_VERSION, "slot": APP_SLOT}

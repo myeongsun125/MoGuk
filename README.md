@@ -8,25 +8,34 @@
 git clone https://github.com/myeongsun125/MoGuk.git && cd MoGuk
 cp .env.example .env          # 로컬 비밀번호 등 수정
 docker compose up -d --build
-curl -s localhost:8000/health  # {"status":"ok", ...} 확인
+curl -s localhost:8000/health  # {"status":"ok", ...} 확인 (edge-api)
+curl -s -XPOST localhost:8000/api/v1/ask -H 'content-type: application/json' -d '{"question":"...","lang":"vi"}'  # mock 응답
 ```
 
 내리기: `docker compose down` (DB 데이터 유지) / 초기화: `docker compose down -v`
 
-## 디렉터리와 소유권
+## 디렉터리와 소유권 (docs/skeleton-v3.md §1 기준 — 그 문서가 SSOT)
 
 | 경로 | 담당 | 내용 |
 |---|---|---|
-| `backend/` | 새봄 | FastAPI. 현재는 인프라 스텁(`app/main.py`) — 본 구현으로 대체하되 `/health` 계약 유지 |
-| `frontend/` | 정현 | React (예정) |
-| `ingestion/` | 명선 | 문서 적재 파이프라인 (예정) — 임베딩 bge-m3 고정 |
-| `infra/` | 병갑 | prod compose, Caddy(HTTPS), 배포·복구 스크립트 |
-| `.github/workflows/` | 병갑 | CI/CD (예정: build → Trivy 스캔 → GHCR → deploy) |
+| `backend/` | 새봄 | FastAPI `app/` — routers·agents·services·modules·models·workers. 같은 이미지가 `API_ROLE=edge\|core` 로 2회 기동 |
+| `frontend/` | 정현 | React (worker/admin 앱, i18n). 현재 nginx 자리표시자 |
+| `pipeline/` | 명선 | Dagster 에셋 5종 (documents_raw → … → manager_report) |
+| `db/migrations/`, `scripts/apply_tenant.sh` | 명선 | 테넌트 스키마 템플릿 DDL (schema-per-tenant) |
+| `experiments/` | 명선·새봄 | 예선 정량 실험 (testset·mistranslation_eval·gate_eval) |
+| `data/seed/` | 명선 | 시드 데이터 (manuals·kosha·glossary·phrases·quiz·safety_courses) |
+| `infra/`, `docker-compose*.yml`, `.env.example`, `.github/workflows/` | 병갑 | compose(core_net/edge_net 8서비스), Caddy, CI/CD, blue-green |
+| `tests/` | 새봄 | pytest (CI 게이트) — `pytest -q` (pytest.ini 가 backend 를 pythonpath 로 잡음) |
+| `docs/` | 전원 | `skeleton-v3.md`(SSOT) · `DECISIONS.md` · `WORKLOG/` · `archive/` |
+
+퀵스타트 참고: `.env` 에 `POSTGRES_PASSWORD` 는 **필수**(미설정 시 compose 가 거부). `stt`·`dagster` 는 `--profile full` 에서만 기동.
+테넌트 생성: `scripts/apply_tenant.sh <slug> --compose`.
 
 ## /health 계약 (변경 시 병갑과 합의)
 
-- `GET /health` → **200**(정상) / **503**(핵심 컴포넌트 이상)
-- 응답: `status`, `version`, `slot`(blue/green), `components{api, db, llm}`
+- `GET /health` → **200**(정상) / **503**(핵심 컴포넌트 이상). 공통 필드: `status`, `version`, `slot`(blue/green), `role`, `components`
+- **core-api**: `components{api, db, llm}` — 200/503 판정 = `components.db`
+- **edge-api**: `components{api, core_relay}` — DB 체크 없음(M-22). `core_relay` = core-api 가 보내는 `POST /internal/core-heartbeat` 신선도. 하트비트 전/지연 시 `status: degraded` 로 표면화하되 200 유지
 - 이 계약은 blue-green 배포 게이트·자동 재기동 판정 기준이므로 임의 변경 금지.
 
 ## 브랜치 전략 (경량)

@@ -1,0 +1,9 @@
+{
+  "_schema": {
+    "source_idx": "int (sentences_30.items index)",
+    "type": "term_swap | negation | number",
+    "ko": "string",
+    "answer_vi": "string"
+  },
+  "items": []
+}

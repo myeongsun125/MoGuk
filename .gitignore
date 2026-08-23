@@ -19,3 +19,6 @@ Thumbs.db
 # Secrets
 .env
 *.key
+
+# Test / tooling
+.pytest_cache/
