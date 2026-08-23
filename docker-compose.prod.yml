@@ -1,6 +1,6 @@
 # MoGuk — prod Compose 골격 (docs/skeleton-v3.md §1/§5). 실내용은 병갑 트랙 8/25–26 (blue-green, GHCR 이미지, TLS).
 # 사용(예정): docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-#   - core_net internal: true (외부 라우트 없음)
+#   - core_net internal: true 는 dev compose 에서 이미 적용
 #   - edge-api host 포트 미노출 (caddy 경유만)
 #   - backend/frontend 는 build 대신 ghcr.io/<owner>/moguk-* 이미지 + APP_SLOT=blue|green
 
@@ -10,7 +10,3 @@ services:
   caddy:
     environment:
       CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
-
-networks:
-  core_net:
-    internal: true
