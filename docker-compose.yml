@@ -4,10 +4,15 @@
 #       전체: docker compose --profile full up -d
 #
 # 네트워크:
-#   core_net — postgres, ollama, stt, core-api, dagster. 외부 라우트 없음(internal).
-#   edge_net — caddy, edge-api, frontend.
-#   core-api → edge-api 는 outbound 단방향만. Docker 네트워크는 대칭이므로 방향성은
-#   "core-api가 edge_net에서 리슨하지 않는다"(앱 레벨)로 보장 — 병갑 검토 항목.
+#   core_net — postgres, ollama, stt, core-api, dagster. internal: true (외부 라우트 없음).
+#   edge_net — caddy, edge-api, frontend, (edge-db: M-23 자리).
+#   core-api → edge-api 는 outbound 단방향만(M-22). edge 계열 env 에는 내부 DB 자격증명·호스트명을 두지 않는다
+#   (연결 불가 상태가 정답). Docker 네트워크는 대칭이므로 방향성은 "core-api가 edge_net에서 리슨하지 않고,
+#   edge-api 는 core 로 호출하지 않는다"(앱 레벨)로 보장 — 병갑 검토 항목.
+# ollama 모델 pull: core_net 이 internal 이라 컨테이너 안에서 pull 불가. 호스트에서 볼륨에 직접:
+#   docker run --rm -v moguk_ollama_models:/root/.ollama ollama/ollama pull qwen3:8b   (qwen3:4b 도 동일, M-03)
+
+name: moguk
 
 services:
   # ── core_net ──────────────────────────────────────────────
@@ -34,7 +39,7 @@ services:
     volumes:
       - ollama_models:/root/.ollama
     networks: [core_net]
-    # GPU 머신: deploy.resources.reservations.devices 추가 (병갑). 모델 pull: ollama pull qwen3:8b qwen3:4b (M-03)
+    # GPU 머신: deploy.resources.reservations.devices 추가 (병갑)
     restart: unless-stopped
 
   stt:
@@ -93,17 +98,14 @@ services:
   edge-api:
     build: ./backend
     environment:
+      # 내부 DB 자격증명·호스트명 없음 — edge 는 core 로 연결할 수 없어야 정답 (M-22)
       API_ROLE: edge
-      DATABASE_URL: postgresql://${POSTGRES_USER:-moguk}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (.env)}@postgres:5432/${POSTGRES_DB:-moguk}
       JWT_SECRET: ${JWT_SECRET:-}
       APP_VERSION: ${APP_VERSION:-0.1.0-dev}
       APP_SLOT: ${APP_SLOT:-dev}
     ports:
       - "8000:8000"   # dev 직접 호출용 (curl localhost:8000/health). prod 는 caddy 경유만
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks: [edge_net, core_net]   # 스켈레톤 단계: /health 의 DB 체크를 위해 core_net 가입 — 본 구현에서 core-api 경유로 전환 시 제거 (M-xx 채번 대상)
+    networks: [edge_net]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8000/health', timeout=3); sys.exit(0 if r.status==200 else 1)"]
       interval: 30s
@@ -114,6 +116,19 @@ services:
 
   frontend:
     build: ./frontend
+    networks: [edge_net]
+    restart: unless-stopped
+
+  edge-db:
+    # M-23 암호문 시연 저장소 자리 — published_content 단일 테이블, 8/26 알파에서 확정. 폴백 = 봉인 컬럼 at-rest.
+    image: postgres:16-alpine
+    profiles: [full]
+    environment:
+      POSTGRES_USER: ${EDGE_DB_USER:-edge}
+      POSTGRES_PASSWORD: ${EDGE_DB_PASSWORD:?EDGE_DB_PASSWORD is required (.env)}
+      POSTGRES_DB: ${EDGE_DB_NAME:-edge}
+    volumes:
+      - edgedata:/var/lib/postgresql/data
     networks: [edge_net]
     restart: unless-stopped
 
@@ -131,10 +146,11 @@ services:
 
 networks:
   core_net:
-    # prod 는 internal: true (외부 라우트 없음). dev 는 컨테이너 내부 `ollama pull` 편의상 해제 — 병갑 확인 항목.
+    internal: true   # 외부 라우트 없음 (§5)
   edge_net:
 
 volumes:
   pgdata:
   ollama_models:
   caddy_data:
+  edgedata:
