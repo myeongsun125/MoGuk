@@ -48,6 +48,8 @@ axis-platform/
 
 테넌시: schema-per-tenant. 마이그레이션은 스키마명 파라미터를 받아 `tenant_{slug}`에 적용. 미들웨어가 요청 컨텍스트에서 `SET search_path`.
 
+> **DDL 원문의 단일 출처는 `db/migrations/001_tenant_template.sql`** — 아래 블록과 충돌 시 마이그레이션 우선 (R4, 2026-08-23 PR #3 승인). 마이그레이션은 `CREATE EXTENSION vector`(DB 레벨)·`tenant_settings` 시드·멱등화(`IF NOT EXISTS`/`OR REPLACE`)를 포함한다.
+
 ```sql
 CREATE SCHEMA IF NOT EXISTS tenant_{slug};
 SET search_path TO tenant_{slug};
@@ -306,3 +308,5 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-19 | 암호화 = AES-GCM 저장 시 암호화 + HTTPS. 브라우저 복호화(E2E)는 로드맵 | 확정 |
 | M-20 | 본선 D-day 확정 시 워크플로우 일정 조정 | 미결·외부 |
 | M-21 | [본선 후 메모] 근로자별 관리 페이지: 임계값 상향/완화 + LLM 자연어 난이도 조절, 관리자 고위험 오버라이드 | 이월 |
+| M-22 | edge-api 는 내부 DB 자격증명·호스트명을 갖지 않고 core_net 에 가입하지 않는다(연결 불가가 정답). edge `/health` = self + core 릴레이 도달성(core-api → edge-api outbound 하트비트 `POST /internal/core-heartbeat` 신선도)만, DB 체크 없음. core_net `internal: true` | 확정 (2026-08-23, PR #3) |
+| M-23 | 암호문 시연 저장소 = edge_net 의 경량 edge-db(`published_content` 단일 테이블). 폴백 = 봉인 컬럼 at-rest. compose 에 `edge-db` 자리만(profile full) | **8/26 알파에서 확정** |
