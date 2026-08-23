@@ -1,0 +1,9 @@
+{
+  "mock": true,
+  "answer": "Trước khi vận hành máy ép, hãy kiểm tra nút dừng khẩn cấp và đảm bảo tấm chắn an toàn đã đóng.",
+  "sources": [
+    {"document_id": 1, "chunk_id": 12, "title": "프레스 작업 안전수칙", "category": "safety"}
+  ],
+  "verify": {"score": 0.93, "passed": true, "gated": false},
+  "trace_id": "mock-trace-0001"
+}
