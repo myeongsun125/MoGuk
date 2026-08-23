@@ -1,4 +1,4 @@
-"""테스트 공통 — DATABASE_URL 은 런타임 필수 env 이므로 테스트에서만 더미로 주입 (닿지 않는 포트)."""
+"""테스트 공통 — core 역할 경로도 돌리기 위해 DATABASE_URL 더미 주입(닿지 않는 포트). 역할은 테스트에서 monkeypatch."""
 
 import os
 
