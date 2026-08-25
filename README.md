@@ -16,6 +16,8 @@ curl -s -XPOST localhost:8000/api/v1/ask -H 'content-type: application/json' -d 
 
 ## 디렉터리와 소유권 (docs/skeleton-v3.md §1 기준 — 그 문서가 SSOT)
 
+> **SSOT 위계** — ① `docs/skeleton-v3.md` = 기술 계약(DDL·API·M-xx 대장, 원문 수정 금지) ② `docs/BLUEPRINT.md` = 설계 SSOT·부트스트랩 1번 진입점(무엇을 왜) ③ `PROTOCOL.md`·`GOVERNANCE.md`·`WORKFLOW.md`·`WORKORDER.md`·`GATE_CHECK.md` = 운영 규칙(skeleton-v3 하위). 충돌 시 ① > ② > ③.
+
 | 경로 | 담당 | 내용 |
 |---|---|---|
 | `backend/` | 새봄 | FastAPI `app/` — routers·agents·services·modules·models·workers. 같은 이미지가 `API_ROLE=edge\|core` 로 2회 기동 |
@@ -26,7 +28,7 @@ curl -s -XPOST localhost:8000/api/v1/ask -H 'content-type: application/json' -d 
 | `data/seed/` | 명선 | 시드 데이터 (manuals·kosha·glossary·phrases·quiz·safety_courses) |
 | `infra/`, `docker-compose*.yml`, `.env.example`, `.github/workflows/` | 병갑 | compose(core_net/edge_net 8서비스), Caddy, CI/CD, blue-green |
 | `tests/` | 새봄 | pytest (CI 게이트) — `pytest -q` (pytest.ini 가 backend 를 pythonpath 로 잡음) |
-| `docs/` | 전원 | `skeleton-v3.md`(SSOT) · `DECISIONS.md` · `WORKLOG/` · `archive/` |
+| `docs/` | 전원 | `skeleton-v3.md`(기술 계약 SSOT) · **`BLUEPRINT.md`(설계 SSOT = 부트스트랩 1번 진입점)** · `WORKFLOW.md`(게이트 V1~V7·컷라인·리스크) · `PROTOCOL.md`(운영 체계·HANDOFF·부트스트랩) · `WORKORDER.md`(트랙×구간 작업 지시) · `GATE_CHECK.md`(머지 전 크로스체크) · `GOVERNANCE.md`(거버넌스 8개) · `APPEAL_POINTS.md`(발표 원본) · `DECISIONS.md` · `WORKLOG/` · `archive/` |
 
 퀵스타트 참고: `.env` 에 `POSTGRES_PASSWORD` 는 **필수**(미설정 시 compose 가 거부). `stt`·`dagster` 는 `--profile full` 에서만 기동.
 테넌트 생성: `scripts/apply_tenant.sh <slug> --compose`.
