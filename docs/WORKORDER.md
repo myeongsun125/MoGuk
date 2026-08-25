@@ -76,7 +76,7 @@ SB V3-1(위험보고 API) ──→ JH V3-2(위험보고 관리 화면) · MS V3
 |---|---|---|
 | V2-1 (26) | llm_adapter 실구현: local=ollama qwen3:8b, external=openai gpt-4o-mini(timeout 8s, external→local 폴백, tier_used 기록). FakeLLM 교체 | `pytest tests/ -k adapter` green(신규 테스트 포함) + core /health llm=ok + 외부 키 제거 상태에서 호출 시 local 폴백 동작 로그 |
 | V2-2 (26) | RAG /ask: retrieve(top-k=4, meta_filter)→근거 강제 프롬프트→sources·trace·latency 기록. grounded=false→unanswered_queue insert | `curl --data-binary @q_vi.json .../api/v1/ask` → sources 길이≥1 + trace_id 존재. 무근거 질문 1건 → `SELECT count(*) FROM unanswered_queue WHERE status='open'` ≥1 |
-| V3-1 (27) | 위험보고: POST /reports 202 즉시 + jobs 워커(SKIP LOCKED, STT→요약+severity 로컬 티어, 3회 실패 시 보존+알림). **수신 구조 = edge 단기 버퍼 → core outbound pull(M-25), TTL 정리 크론 포함 — API 계약은 §5의 M-25a 합의 후** | 텍스트 보고 → 202 + 5초 내 `SELECT ko_summary, severity, status FROM risk_reports ORDER BY id DESC LIMIT 1` → 요약 not null, status='submitted' |
+| V3-1 (27) | 위험보고: POST /reports 202 즉시 + jobs 워커(SKIP LOCKED, STT→요약+severity 로컬 티어, 3회 실패 시 보존+알림). **수신 구조 = S3 단기 버퍼 → core outbound pull(M-25). 텍스트 보고·/ask 등 실시간 요청은 M-28 릴레이 — 파라미터는 §5 합의 후** | 텍스트 보고 → 202 + 5초 내 `SELECT ko_summary, severity, status FROM risk_reports ORDER BY id DESC LIMIT 1` → 요약 not null, status='submitted' |
 | V3-2 (27) | 인증(초대 토큰→PIN 해시→JWT/리프레시) + 하트비트 스케줄러(core→edge) | activate→login→JWT로 보호 엔드포인트 200, 무토큰 401. edge /health core_relay=ok(age_s < 60) |
 | V4-1 (28) | 게이트 C+A: verify_backtranslation(bge-m3 코사인, τ 가값 0.80)·is_high_risk(OR)·안전만 차단+전체 배지 | corrupted_30 중 negation 1건 질의 → 응답 gated=true("관리자 확인 필요") + 일반 질의 → verify.score 배지 존재 |
 | V5-1 (29) | 상담챗(학습상태 주입, 로컬 고정) + crypto seal/open + 퀴즈 생성 파이프 연결 | /chat 응답 + `SELECT count(*) FROM conversations` ≥2 + `pytest -k crypto` 왕복 green + trace route.tier='local' 확인 |
@@ -102,16 +102,17 @@ SB V3-1(위험보고 API) ──→ JH V3-2(위험보고 관리 화면) · MS V3
 | V5-1 (29) | 동결 지원 + edge-db 포함 판정(M-23) 총괄 보고 | M-23 판정 근거 1줄 보고 → 총괄 확정 |
 | V6~V7 (30–31) | blue-green 승격+전환 시연, 배포 리허설, GPU 전환 최종 판단 | V7에서 무중단 전환 시연: 구버전→신버전 전환 중 `/health` 연속 200 로그 |
 
-## §5. 합의 대기 계약 (G2 — 새봄·병갑 27일 오전까지 합의 → skeleton §3 반영, M-25a 채번)
-초안 (총괄 제안):
+## §5. 합의 대기 계약 (G2 — 새봄·병갑, 27일 오전까지 합의 → skeleton §3 반영)
+릴레이 계약(M-28) 총괄 초안:
 ```
-POST /internal/media          (edge 수신: multipart audio → 암호화 저장, TTL 등록) → 201 {media_ref}
-GET  /internal/media/pending  (core가 outbound pull: 미처리 목록) → [{media_ref, sealed_blob, created_at}]
-POST /internal/media/{ref}/ack (core 처리 완료 통지 → edge 사본 삭제)
-※ 셋 다 caddy 미라우팅(내부 전용), core→edge 방향만 — M-22 불변조건 유지
+POST /internal/relay/enqueue    (edge 내부 함수가 큐 적재 — 외부 미노출)
+GET  /internal/relay/pending    (core outbound 폴링: 미처리 요청 batch)
+POST /internal/relay/{id}/respond (core → edge 응답 회신 → edge가 대기 중 HTTP 응답 완결)
+※ 전부 core→edge 방향 또는 edge 내부 — M-22 준수. 폴링 주기·batch 크기·타임아웃은 새봄·병갑 합의로 확정.
+미디어(M-25)는 엔드포인트 불요 — edge가 S3 직접 적재(write-only IAM), core가 S3 pull.
 ```
 
 ## §6. 후속 체크박스 (PR #4 본문에 기재)
-- [ ] G2: M-25a 엔드포인트 합의(새봄+병갑) → skeleton §3 반영
+- [ ] G2: 릴레이 계약(M-28) 파라미터 합의 — 새봄+병갑, 27일 오전까지 → skeleton §3 반영
 - [ ] G4: docs/GIT_RULES.md 병갑 원문 커밋 (BG V2-2 행에 포함됨)
 - [ ] M-23: edge-db 판정 (V5, 병갑 보고→총괄 확정)

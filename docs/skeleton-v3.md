@@ -312,6 +312,7 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-22 | edge-api 는 내부 DB 자격증명·호스트명을 갖지 않고 core_net 에 가입하지 않는다(연결 불가가 정답). edge `/health` = self + core 릴레이 도달성(core-api → edge-api outbound 하트비트 `POST /internal/core-heartbeat` 신선도)만, DB 체크 없음. core_net `internal: true` | 확정 (2026-08-23, PR #3) |
 | M-23 | 암호문 시연 저장소 = edge_net 의 경량 edge-db(`published_content` 단일 테이블). 폴백 = 봉인 컬럼 at-rest. compose 에 `edge-db` 자리만(profile full) | **8/26 알파에서 확정** |
 | M-24 | 문서 위계: PRELIM=상위 계약 / M-xx=유일 변경 경로(R6 신설) / 개념별 원문 소유(R4) / 진입점=BLUEPRINT(최초 1회 PRELIM) | 확정 |
-| M-25 | 미디어 플로우: edge 암호화 단기 버퍼(TTL 1–2일) → core outbound pull(M-22 단방향 유지) → STT·요약·자동 문서화 → edge 사본 삭제. S3=DB 백업 전용(데모 환경 한정), 타깃 온프렘 백업은 로드맵 | 확정 |
+| M-25 | 미디어(음성) 플로우: edge가 수신 즉시 암호화해 S3 단기 버퍼에 적재(lifecycle TTL 1–2일 자동 삭제) → core가 outbound pull(S3 read) → STT·요약·자동 문서화 → 처리 완료 시 S3 객체 즉시 삭제. S3 용도 = DB 백업 + 미디어 단기 버퍼 2개로 한정. edge는 S3 write-only 자격, core는 read+delete 자격(IAM 분리). [R6 사유: PRELIM "S3" 명시의 이행 — 외부 존 체류는 암호화+단기 TTL로 최소화, M-22 단방향 유지] | 확정 |
 | M-26 | 본선 시연=전체 플로우(영상 1–2분+라이브). PRELIM "선택 모듈 1종"=안전교육으로 충족(최소 약속이며 상한 아님), 학습·퀴즈=코어(이해 검증 실체), 상담챗=초과 이행 | 확정 |
 | M-27 | PRELIM 정량 목표 ⑤(도입·사용 의향 설문 4.0+): 배포했으나 회수 저조로 수치 미확보 — 추후 보정 예정. 데이터 조작 금지 원칙 명기. 발표에서는 측정 방법·목표로 서술 | 보류(추후 보정) |
+| M-28 | 실시간 요청 릴레이(최종형 단일 설계, 임시안 없음): 근로자 앱 요청(/ask·/reports 등)은 edge가 릴레이 큐에 적재 → core가 짧은 주기 outbound 폴링으로 pull → 처리 → 응답을 edge에 회신 → edge가 HTTP 응답 완결. M-22(edge는 core 호출 안 함) 완전 준수. 응답 지연은 V2에서 실측(측정 #4에 릴레이 왕복 포함), 1초 초과 시 개선 항목으로 채번. 구현: 인프라 선행(병갑 — S3·IAM·compose) 후 릴레이 코드(새봄 — backend 소유), 병갑은 M-22 준수 리뷰 | 확정 |

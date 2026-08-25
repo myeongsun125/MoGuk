@@ -13,15 +13,17 @@
 - 읽기 진입점: 최초 1회 PRELIM_PROPOSAL 필독 → 이후 세션은 BLUEPRINT → WORKFLOW → skeleton-v3 → PROTOCOL → 최신 HANDOFF
 
 ## 0. 역할
-- **Master = claude.ai (명선 세션)** — 설계·게이트 판정·핸드오프 저작·M-xx 채번. 코드 검증 시 핵심부 인용 요구.
-- **Executor = 로컬 Claude Code** — 구현·자체 테스트·보고. 게이트 판정 권한 없음(보고 후 Master 승인 대기).
-- **트랙 오너 4인** — 명선(pipeline/experiments/data), 새봄(backend), 정현(frontend), 병갑(infra/compose/CI). 디렉토리 소유권 = Git 규칙 §7.
+- **총괄 Master = 명선 세션**: 게이트 PASS/FIX 판정 · M-xx 확정 채번 · 계약 개정 승인 · HANDOFF 취합
+- **트랙 Master = 각 팀원 자신의 claude.ai 세션**: 자기 트랙 설계 구체화 · CC 지시 · 보고 검증 · HANDOFF 저작 · M-xx 후보 제안 (판정·채번·계약 수정·타 트랙 지시 불가)
+- **Executor = 각 팀원의 로컬 Claude Code**: 구현·자체 테스트·보고 (설계 판단·계약 이탈 구현·판정 불가)
+- 권한표·부트스트랩 원문 = WORKORDER §0
+- **트랙 오너 4인** — 명선(pipeline/experiments/data), 새봄(backend), 정현(frontend), 병갑(infra/compose/CI). 디렉토리 소유권 = GIT_RULES.md(예정, BG V2-2 커밋) §7.
 
 ## 1. 일일 사이클 (Final_ 직렬 사이클의 4인 병렬 변형)
-1. Master가 트랙별 작업지시서/일일 목표 확인 (작업지시서 = 07 문서)
+1. 총괄 Master가 트랙별 작업지시서/일일 목표 확인 (작업지시서 = docs/WORKORDER.md) → 트랙 Master가 자기 구간을 CC 지시로 구체화
 2. 각 트랙 실행 — 작업 시작 시 Draft PR 오픈, granular 커밋, 하루 최소 1회 push, CI green 단위로 수시 머지
 3. 밤 게이트(V표) — 트랙별 HANDOFF 4장 제출 (§4 템플릿)
-4. Master 판정: **GATE PASS / FIX** (FIX면 교정 지시 → 익일 오전 재판정)
+4. 총괄 Master 판정: **GATE PASS / FIX** (FIX면 교정 지시 → 익일 오전 재판정)
 5. 컨텍스트 무거우면 새 챗 — §6 부트스트랩으로 재개
 
 ## 2. 검증 게이트 (요일 교정 확정판)
