@@ -1,0 +1,59 @@
+{
+  "_meta": {
+    "module": "safety",
+    "title": "선반·프레스 안전 수칙",
+    "origin": "seed",
+    "status": "draft",
+    "draft": true,
+    "review_note": "q_vi 전부 초안. 원어민 검수 전 시연 문구로 확정 금지.",
+    "source_docs": ["data/seed/manuals/cnc_lathe_manual.md", "data/seed/manuals/press_manual.md"],
+    "safety_course_ref": "data/seed/safety_courses/special_press.json"
+  },
+  "items": [
+    {
+      "q_ko": "선반 작업 중 장갑에 대한 규정으로 옳은 것은 무엇입니까?",
+      "q_vi": "Quy định nào sau đây về găng tay khi vận hành máy tiện là đúng?",
+      "choices": ["반드시 착용한다", "운전 중에는 착용하지 않는다", "얇은 장갑만 착용한다", "한 손만 착용한다"],
+      "answer_idx": 1,
+      "explain_ko": "장갑이 회전체에 감기면 손이 함께 말려 들어갑니다. 운전 중 장갑 착용은 금지이며, 청소·정비 시에만 보호장갑을 사용합니다. (선반 매뉴얼 §4.1, §4.3)",
+      "source": "cnc_lathe_manual.md §4.1",
+      "draft": true
+    },
+    {
+      "q_ko": "척 렌치를 사용한 뒤에는 어떻게 해야 합니까?",
+      "q_vi": "Sau khi sử dụng chìa khóa mâm cặp thì phải làm gì?",
+      "choices": ["척에 꽂아 둔다", "바닥에 놓아 둔다", "반드시 뽑아서 지정 위치에 걸어 둔다", "주머니에 넣고 작업한다"],
+      "answer_idx": 2,
+      "explain_ko": "척 렌치를 꽂아 둔 채 기동하면 렌치가 튀어나가 중대재해로 이어집니다. 사용 즉시 뽑아 지정 위치에 겁니다. (선반 매뉴얼 §3.3, §4.2)",
+      "source": "cnc_lathe_manual.md §3.3",
+      "draft": true
+    },
+    {
+      "q_ko": "프레스에서 소재를 넣고 뺄 때 올바른 방법은 무엇입니까?",
+      "q_vi": "Cách đúng để đưa vật liệu vào và lấy ra trên máy ép là gì?",
+      "choices": ["손으로 빠르게 넣고 뺀다", "집게, 자석봉, 진공흡착기를 사용한다", "장갑을 끼고 손으로 넣는다", "슬라이드가 내려오는 중에 넣는다"],
+      "answer_idx": 1,
+      "explain_ko": "금형 사이에는 절대 손을 넣지 않습니다. 제품이 금형에 붙었을 때도 집게나 자석봉을 사용합니다. (프레스 매뉴얼 §3.4, §4.1)",
+      "source": "press_manual.md §4.1",
+      "draft": true
+    },
+    {
+      "q_ko": "금형 아래에서 정비 작업을 할 때 반드시 해야 하는 것은 무엇입니까?",
+      "q_vi": "Khi bảo trì phía dưới khuôn, việc bắt buộc phải làm là gì?",
+      "choices": ["브레이크만 믿고 작업한다", "안전블록을 삽입한다", "슬라이드를 상사점에 두기만 한다", "동료에게 버튼 앞을 지키게 한다"],
+      "answer_idx": 1,
+      "explain_ko": "유압이나 브레이크만 믿지 않고 안전블록을 물리적으로 삽입해야 슬라이드 낙하를 막을 수 있습니다. 주전원 차단과 잠금·표지(LOTO)도 함께 실시합니다. (프레스 매뉴얼 §4.4)",
+      "source": "press_manual.md §4.4",
+      "draft": true
+    },
+    {
+      "q_ko": "작업 중 비상 상황이 발생했을 때 가장 먼저 해야 할 행동은 무엇입니까?",
+      "q_vi": "Khi xảy ra tình huống khẩn cấp trong lúc làm việc, việc đầu tiên cần làm là gì?",
+      "choices": ["관리자에게 전화한다", "비상정지 버튼을 누른다", "기계에서 멀리 떨어진다", "원인을 먼저 확인한다"],
+      "answer_idx": 1,
+      "explain_ko": "비상정지 버튼을 먼저 누른 뒤 큰 소리로 \"비상 정지! 멈춰 주세요!\"라고 외쳐 주변에 알리고, 주전원을 차단합니다. 신체가 끼인 경우 임의로 기계를 조작하지 말고 119에 신고합니다. (선반 매뉴얼 §6.3, 프레스 매뉴얼 §6.3)",
+      "source": "press_manual.md §6.3",
+      "draft": true
+    }
+  ]
+}

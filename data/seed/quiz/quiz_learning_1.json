@@ -1,0 +1,58 @@
+{
+  "_meta": {
+    "module": "learning",
+    "title": "HK-200 선반·PR-120 프레스 작동 원리와 절차",
+    "origin": "seed",
+    "status": "draft",
+    "draft": true,
+    "review_note": "q_vi 전부 초안. 원어민 검수 전 시연 문구로 확정 금지.",
+    "source_docs": ["data/seed/manuals/cnc_lathe_manual.md", "data/seed/manuals/press_manual.md"]
+  },
+  "items": [
+    {
+      "q_ko": "HK-200 선반에서 전원을 켠 다음 가장 먼저 해야 하는 동작은 무엇입니까?",
+      "q_vi": "Trên máy tiện HK-200, thao tác đầu tiên phải làm sau khi bật nguồn là gì?",
+      "choices": ["절삭유 농도 측정", "원점복귀", "공작물 고정", "프로그램 편집"],
+      "answer_idx": 1,
+      "explain_ko": "원점복귀를 하지 않으면 좌표가 어긋나 공구가 척에 충돌할 수 있습니다. (선반 매뉴얼 §2.3, §3.2)",
+      "source": "cnc_lathe_manual.md §2.3",
+      "draft": true
+    },
+    {
+      "q_ko": "절삭유의 역할이 아닌 것은 무엇입니까?",
+      "q_vi": "Đâu KHÔNG phải là vai trò của dung dịch tưới nguội?",
+      "choices": ["가공점 냉각", "공구와 재료 사이 윤활", "칩 배출", "주축 회전수 상승"],
+      "answer_idx": 3,
+      "explain_ko": "절삭유는 냉각·윤활·칩 배출을 담당합니다. 회전수를 올리는 기능은 없습니다. (선반 매뉴얼 §2.2)",
+      "source": "cnc_lathe_manual.md §2.2",
+      "draft": true
+    },
+    {
+      "q_ko": "공작물을 척에 고정할 때 물림 길이의 기준은 무엇입니까?",
+      "q_vi": "Khi kẹp phôi gia công vào mâm cặp, tiêu chuẩn về chiều dài kẹp là gì?",
+      "choices": ["공작물 지름의 0.5배 이상", "공작물 지름의 1.5배 이상", "공작물 길이의 절반 이상", "기준 없음"],
+      "answer_idx": 1,
+      "explain_ko": "물림 길이는 공작물 지름의 1.5배 이상이어야 합니다. 부족하면 가공 중 공작물이 빠져나갑니다. (선반 매뉴얼 §3.3)",
+      "source": "cnc_lathe_manual.md §3.3",
+      "draft": true
+    },
+    {
+      "q_ko": "PR-120 프레스에서 클러치가 한 번 물리면 어떻게 됩니까?",
+      "q_vi": "Trên máy ép PR-120, điều gì xảy ra khi ly hợp đã ăn khớp một lần?",
+      "choices": ["버튼을 떼면 즉시 그 자리에 멈춘다", "슬라이드가 내려가는 동작을 완료한다", "브레이크가 자동으로 걸린다", "플라이휠이 정지한다"],
+      "answer_idx": 1,
+      "explain_ko": "한 번 클러치가 물리면 슬라이드는 하강 동작을 완료합니다. 그래서 프레스 안전은 손이 들어가기 전에 막는 방식으로 설계됩니다. (프레스 매뉴얼 §2.1)",
+      "source": "press_manual.md §2.1",
+      "draft": true
+    },
+    {
+      "q_ko": "프레스 금형을 교체하는 절차로 올바른 것은 무엇입니까?",
+      "q_vi": "Quy trình thay khuôn trên máy ép nào sau đây là đúng?",
+      "choices": ["혼자서 빠르게 교체한다", "전원을 켠 채로 상형을 먼저 분리한다", "주전원 차단·LOTO 후 안전블록을 삽입하고 2인 1조로 교체한다", "금형을 손으로 들어 옮긴다"],
+      "answer_idx": 2,
+      "explain_ko": "금형 교체는 주전원 차단과 잠금·표지(LOTO), 안전블록 삽입, 2인 1조가 원칙입니다. 표준 금형 1조는 180 kg이므로 크레인이나 대차로 옮깁니다. (프레스 매뉴얼 §3.2)",
+      "source": "press_manual.md §3.2",
+      "draft": true
+    }
+  ]
+}
