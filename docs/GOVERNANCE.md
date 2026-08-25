@@ -19,7 +19,8 @@ V1 26(수)오전 0단계 → V2 26(수)밤 실데이터 /ask → V3 27(목)밤 �
 
 ### 3-2. Master/Executor 전원 적용 + 권한 분리
 - 팀원 각자 = 트랙 Master(claude.ai: 자기 트랙 설계·CC 검증·HANDOFF 저작) + Executor(CC: 구현·보고)
-- **게이트 PASS/FIX 판정·M-xx 확정 채번 = 총괄 Master(명선 세션) 단일 창구.** 트랙 Master는 "M-xx 후보"로 제안만.
+- **게이트 PASS/FIX 판정·M-xx 확정 채번·계약 문서(skeleton·BLUEPRINT) 개정 승인·HANDOFF 취합 = 총괄 Master(명선 세션) 단일 창구.** 트랙 Master는 "M-xx 후보"로 제안만, 타 트랙 지시 불가.
+- Executor(CC)는 구현·자체 테스트·보고만 — 설계 판단·계약과 다른 임의 구현·판정 불가. 3층 표와 부트스트랩 3종 = WORKORDER §0.
 
 ### 3-3. 모델·effort 권장 (발행 프롬프트 첫 줄 표기)
 - 설계·판정·문서 저작: Fable 5, effort 높음 / 정리·초안·대조: Sonnet 4.6, 낮음 / CC: 기본(감사·대형 리팩토링만 ultrathink)
