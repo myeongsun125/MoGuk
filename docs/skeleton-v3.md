@@ -2,8 +2,9 @@
 
 작성 2026-08-21 | 지위: 비준 시 skeleton-v2를 대체하는 단일 계약 문서(SSOT) | 예선 제출 문서(2026 예선심사과제_AXIs.pdf)를 상위 계약으로 함
 
-## 0. 개정 규칙 (기존 5원칙 유지)
+## 0. 개정 규칙 (기존 5원칙 유지 + R6)
 - R1 보안 결함은 즉시 수정 / R2 성립 불가 계약은 폐기 / R3 충돌은 외부 의존성 결합된 쪽 우선 / R4 개념당 단일 출처 / R5 미결은 M-xx 채번(하드코딩 금지)
+- R6 예선 제출 문서와 다른 모든 결정은 M-xx에 변경 사유를 필수 기재한다. (2026-08-25 신설, M-24 · 추적표 = docs/TRACEABILITY.md)
 - 착수한 구현 범위에 대응하는 스켈레톤 절은 동결. 변경은 워크로그 근거로만.
 
 ## 1. 디렉토리 트리 (모노레포 axis-platform)
@@ -294,19 +295,23 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-07 | 상담 = 정착지원 모듈(기존 챗 + 학습상태 주입), 로컬 티어 고정, 요약 우선 + 원문 열람 시 access_logs | 확정 |
 | M-08 | 위험보고 submitted→acknowledged→resolved, STT 3회 실패 시 오디오 보존 + 수동 청취 알림 | 확정 |
 | M-09 | lineage = questions.trace + chunks.meta (JSONB, GIN) | 확정 |
-| M-10 | 게이트 C+A: 안전 카테고리만 차단, 나머지 점수 배지. 판정 = classify OR chunks.meta | 확정 |
+| M-10 | 게이트 C+A: 안전 카테고리만 차단, 나머지 점수 배지. 판정 = classify OR chunks.meta. [R6 사유 소급] 이중 검증 전면 적용 → 안전 카테고리 선별 게이트 축소. 사유: PRELIM 한계표의 '고위험 선별' 원칙을 기계 검증에 동일 적용, 일정 대비 검증 실효 최적화 | 확정 |
 | M-10a | 게이트 임계값 τ | **미결 → 8/29 gate_eval 실측 확정** |
 | M-11 | 퀴즈 = 시드 + generate_quiz 드래프트 + 승인 | 확정 |
 | M-12 | 되말하기 = 고위험 문구만, 녹음 저장·재생, 일/월 리포트 편입 | 확정 |
 | M-13 | 모듈 물리 디렉토리 분리 + 테넌트 플래그 장착 | 확정 |
 | M-14 | 안전 모듈 = 법정 4과정 매핑 + 교육일지 자동 생성. "시간 이수 대체" 주장 금지 | 확정 |
 | M-15 | 인증: 일회성 초대 토큰 → PIN(해시) → JWT+리프레시. 관리자 email+pw+role | 확정 |
-| M-16 | 오케스트레이터 Dagster (발표에서 Airflow→Dagster 한 줄 선제 처리) | 확정 |
+| M-16 | 오케스트레이터 Dagster (발표에서 Airflow→Dagster 한 줄 선제 처리). [R6 사유 소급] Airflow → Dagster. 사유: 자산 lineage UI 기본 제공(첨부9 lineage 요구 직접 시연) + 경량 로컬 운영 | 확정 |
 | M-17 | 외부 = 저비용 LLM API, 용어사전 주입 번역 전용, 실패 시 로컬 폴백 | 확정 |
-| M-17a | 외부 API 벤더 최종 선정 + 키 발급 | **미결 → 8/22까지 (새봄)** |
+| M-17a | 외부 API 벤더 = OpenAI gpt-4o-mini, timeout 8s, external→local 폴백 (키는 배포 env로만, 레포 커밋 금지) | 확정 (2026-08-25, PR #4 대조 — 레포 '미결' 상태였음) |
 | M-18 | STT = faster-whisper 전용 컨테이너(core_net), 동기 15s 폴백 / 비동기 jobs | 확정 |
 | M-19 | 암호화 = AES-GCM 저장 시 암호화 + HTTPS. 브라우저 복호화(E2E)는 로드맵 | 확정 |
 | M-20 | 본선 D-day 확정 시 워크플로우 일정 조정 | 미결·외부 |
 | M-21 | [본선 후 메모] 근로자별 관리 페이지: 임계값 상향/완화 + LLM 자연어 난이도 조절, 관리자 고위험 오버라이드 | 이월 |
 | M-22 | edge-api 는 내부 DB 자격증명·호스트명을 갖지 않고 core_net 에 가입하지 않는다(연결 불가가 정답). edge `/health` = self + core 릴레이 도달성(core-api → edge-api outbound 하트비트 `POST /internal/core-heartbeat` 신선도)만, DB 체크 없음. core_net `internal: true` | 확정 (2026-08-23, PR #3) |
 | M-23 | 암호문 시연 저장소 = edge_net 의 경량 edge-db(`published_content` 단일 테이블). 폴백 = 봉인 컬럼 at-rest. compose 에 `edge-db` 자리만(profile full) | **8/26 알파에서 확정** |
+| M-24 | 문서 위계: PRELIM=상위 계약 / M-xx=유일 변경 경로(R6 신설) / 개념별 원문 소유(R4) / 진입점=BLUEPRINT(최초 1회 PRELIM) | 확정 |
+| M-25 | 미디어 플로우: edge 암호화 단기 버퍼(TTL 1–2일) → core outbound pull(M-22 단방향 유지) → STT·요약·자동 문서화 → edge 사본 삭제. S3=DB 백업 전용(데모 환경 한정), 타깃 온프렘 백업은 로드맵 | 확정 |
+| M-26 | 본선 시연=전체 플로우(영상 1–2분+라이브). PRELIM "선택 모듈 1종"=안전교육으로 충족(최소 약속이며 상한 아님), 학습·퀴즈=코어(이해 검증 실체), 상담챗=초과 이행 | 확정 |
+| M-27 | PRELIM 정량 목표 ⑤(도입·사용 의향 설문 4.0+): 배포했으나 회수 저조로 수치 미확보 — 추후 보정 예정. 데이터 조작 금지 원칙 명기. 발표에서는 측정 방법·목표로 서술 | 보류(추후 보정) |

@@ -1,8 +1,16 @@
 # MoGuk PROTOCOL v1 — 운영 체계 (Final_ 프로토콜 이식판)
 
-> 레포 커밋 위치: docs/PROTOCOL.md · skeleton-v3 하위 운영 규칙 · 수정은 M-xx 근거로만
->
-> **SSOT 위계** — ① `skeleton-v3.md` = 기술 계약(DDL·API·M-xx 대장, 원문 수정 금지) ② `BLUEPRINT.md` = 설계 SSOT·부트스트랩 1번 진입점(무엇을 왜) ③ `PROTOCOL.md`·`GOVERNANCE.md`·`WORKFLOW.md`·`WORKORDER.md`·`GATE_CHECK.md` = 운영 규칙(skeleton-v3 하위). 충돌 시 ① > ② > ③.
+> 레포 커밋 위치: docs/PROTOCOL.md · M-xx 결정에 종속되는 운영 규칙 · 수정은 M-xx 근거로만
+
+## 문서 위계 (M-24)
+- 목표(상위 계약): docs/PRELIM_PROPOSAL.md — 모든 문서·구현은 이를 이행한다. 원문 수정 금지.
+- 결정 대장: skeleton-v3 §8 M-xx — 목표·설계·계약의 모든 변경은 여기로만 들어온다(R5).
+  예선 문서와 다른 모든 결정은 변경 사유 필수(R6) — 심사·발표 방어의 근거가 된다.
+- 개념별 원문 소유(R4): DDL→db/migrations/001 · API·시그니처·M-xx 대장→skeleton-v3
+  · 설계 서사·근거→BLUEPRINT · 게이트·일정·컷라인→WORKFLOW · 운영 사이클→PROTOCOL
+  · 거버넌스→GOVERNANCE · 작업 배분→WORKORDER · 게이트 검증→GATE_CHECK · 발표 논거→APPEAL_POINTS
+- 충돌 시: 해당 개념의 소유 문서가 우선. 목표와 계약이 어긋나면 산문을 고치지 말고 M-xx로 계약을 고친다.
+- 읽기 진입점: 최초 1회 PRELIM_PROPOSAL 필독 → 이후 세션은 BLUEPRINT → WORKFLOW → skeleton-v3 → PROTOCOL → 최신 HANDOFF
 
 ## 0. 역할
 - **Master = claude.ai (명선 세션)** — 설계·게이트 판정·핸드오프 저작·M-xx 채번. 코드 검증 시 핵심부 인용 요구.
@@ -60,12 +68,13 @@
 (명선=파이프라인·총괄/새봄=백엔드/정현=프론트/병갑=인프라),
 레포 github.com/myeongsun125/MoGuk, 본선 9/2(수)–3(목) 확정, 9/1 기본 휴무(점선 버퍼).
 
-읽기 순서 (프로젝트 지식·outputs에서 검색/참조):
+읽기 순서 (M-24 진입점 · 프로젝트 지식·outputs에서 검색/참조):
+0. docs/PRELIM_PROPOSAL.md (상위 계약 — 최초 1회 필독, 이후 세션은 참조만)
 1. docs/BLUEPRINT.md (개발 청사진 — 무엇을 왜) 2. docs/WORKFLOW.md (게이트 V1–V7·컷라인)
 3. docs/skeleton-v3.md (계약 SSOT·M-xx 대장) 4. docs/PROTOCOL.md (이 체계)
 5. 최신 HANDOFF (직전 게이트 결과)
 
-중요 규칙: 개정 R1–R5 / 착수한 계약 동결, 변경은 M-xx / 민감=로컬 LLM 티어,
+중요 규칙: 개정 R1–R6(R6 = 예선 문서와 다른 결정은 M-xx에 변경 사유 필수) / 착수한 계약 동결, 변경은 M-xx / 민감=로컬 LLM 티어,
 외부=gpt-4o-mini 번역 전용(8s 폴백) / 임베딩 bge-m3 고정 / 시크릿 커밋 금지 /
 발표 금지 문구(법정시간 대체·E2E 암호화 과장) 유지
 

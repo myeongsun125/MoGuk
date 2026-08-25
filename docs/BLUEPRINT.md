@@ -2,8 +2,16 @@
 
 > 8/25 발행 · 상위 계약: 예선 제출 문서 · 세부 계약: docs/skeleton-v3.md(DDL·API·시그니처 원문) · 실행 규칙: PROTOCOL.md·GOVERNANCE.md·WORKORDER.md
 > 이 문서는 "무엇을 어떻게 만드는가"의 단일 길잡이다. 모든 결정은 M-xx로 잠겨 있고, 변경은 총괄 Master 채번으로만.
->
-> **SSOT 위계** — ① `skeleton-v3.md` = 기술 계약(DDL·API·M-xx 대장, 원문 수정 금지) ② `BLUEPRINT.md` = 설계 SSOT·부트스트랩 1번 진입점(무엇을 왜) ③ `PROTOCOL.md`·`GOVERNANCE.md`·`WORKFLOW.md`·`WORKORDER.md`·`GATE_CHECK.md` = 운영 규칙(skeleton-v3 하위). 충돌 시 ① > ② > ③.
+
+## 문서 위계 (M-24)
+- 목표(상위 계약): docs/PRELIM_PROPOSAL.md — 모든 문서·구현은 이를 이행한다. 원문 수정 금지.
+- 결정 대장: skeleton-v3 §8 M-xx — 목표·설계·계약의 모든 변경은 여기로만 들어온다(R5).
+  예선 문서와 다른 모든 결정은 변경 사유 필수(R6) — 심사·발표 방어의 근거가 된다.
+- 개념별 원문 소유(R4): DDL→db/migrations/001 · API·시그니처·M-xx 대장→skeleton-v3
+  · 설계 서사·근거→BLUEPRINT · 게이트·일정·컷라인→WORKFLOW · 운영 사이클→PROTOCOL
+  · 거버넌스→GOVERNANCE · 작업 배분→WORKORDER · 게이트 검증→GATE_CHECK · 발표 논거→APPEAL_POINTS
+- 충돌 시: 해당 개념의 소유 문서가 우선. 목표와 계약이 어긋나면 산문을 고치지 말고 M-xx로 계약을 고친다.
+- 읽기 진입점: 최초 1회 PRELIM_PROPOSAL 필독 → 이후 세션은 BLUEPRINT → WORKFLOW → skeleton-v3 → PROTOCOL → 최신 HANDOFF
 
 ## 1. 한 줄 정의
 50인 미만 제조 사업장의 외국인 근로자(vi·in)가 모국어로 배우고(학습카드·퀴즈), 묻고(RAG 질의응답), 보고하며(위험 보고), 관리자는 이해도를 데이터로 확인하는 플랫폼. 핵심 주장 = "번역이 아니라 이해의 증명" + 민감 데이터 온프렘 격리.
@@ -52,6 +60,7 @@ edge는 내부 DB 자격증명·호스트명을 보유하지 않는다 (차단 =
 
 ### 4-4. 위험 보고 (V3 빌드, M-08)
 음성/텍스트 → 202 즉시 접수 → jobs 워커: STT→로컬 LLM 요약+severity(high|medium|low) → 상태머신 **submitted→acknowledged→resolved** (전이마다 acked_by/at·resolution_note = 책임 추적, 어필 ②). STT 3회 실패 시에도 오디오 보존+"직접 청취" 알림 — 안전 정보 무유실 설계. 대시보드 "미확인" = submitted 카운트.
+- 미디어 플로우(M-25): 위험보고 오디오 = edge 암호화 단기 버퍼(TTL 1–2일) → core outbound pull(M-22 단방향 유지) → STT·요약·자동 문서화 → edge 사본 삭제.
 
 ### 4-5. STT (M-18)
 전용 컨테이너(core_net, 외부 STT 원천 배제 — 음성=민감). 동기(음성 질문): timeout 15s → 폴백 안내 응답(에러 금지). 비동기(위험보고): 위 워커. 따라말하기는 STT 미적용.
@@ -81,5 +90,5 @@ modules/{learning,safety,speaking,settlement} 물리 디렉토리 + tenant_setti
 V2 = §4-1 (재료: 시드) → V3 = §4-3·4·6·9 → V4 = §4-2 + 통합 → V5 = §4-7·8·10 + 동결 → V6 = §5 측정 → V7 = 리허설·blue-green.
 
 ## 7. 잠긴 결정 대장 (원문 = skeleton-v3 §8)
-M-01 이해도 / M-02 bge-m3 / M-03 qwen3 / M-04 스키마 테넌시 / M-05 무근거 편입 / M-06 알림함 / M-07 상담 프라이버시 / M-08 위험보고 상태머신 / M-09 lineage JSONB / M-10(+a τ) 게이트 C+A / M-11 퀴즈 / M-12 되말하기 / M-13 모듈 / M-14 안전=법정 매핑 / M-15 인증 / M-16 Dagster / M-17(+a gpt-4o-mini·8s) / M-18 STT / M-19 암호화 수위 / M-20 본선 9/2–3 확정·9/1 기본 휴무(점선 버퍼) / M-21 관리페이지·오버라이드 이월 / M-22 단방향 불변조건 / M-23 edge-db 미정
+M-01 이해도 / M-02 bge-m3 / M-03 qwen3 / M-04 스키마 테넌시 / M-05 무근거 편입 / M-06 알림함 / M-07 상담 프라이버시 / M-08 위험보고 상태머신 / M-09 lineage JSONB / M-10(+a τ) 게이트 C+A / M-11 퀴즈 / M-12 되말하기 / M-13 모듈 / M-14 안전=법정 매핑 / M-15 인증 / M-16 Dagster / M-17(+a gpt-4o-mini·8s) / M-18 STT / M-19 암호화 수위 / M-20 본선 9/2–3 확정·9/1 기본 휴무(점선 버퍼) / M-21 관리페이지·오버라이드 이월 / M-22 단방향 불변조건 / M-23 edge-db 미정 / M-24 문서 위계(PRELIM 상위 계약·R6) / M-25 미디어 플로우(edge 버퍼→core pull→처리→사본 삭제, S3=DB 백업 전용) / M-26 시연=전체 플로우·"모듈 1종"=안전교육(상한 아님) / M-27 정량 목표 ⑤ 설문 미확보(보류·조작 금지)
 발표 금지 문구: 법정시간 대체 · E2E 암호화 · Airflow 회피(선제 한 줄) · 미측정 수치 단정

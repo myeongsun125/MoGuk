@@ -25,7 +25,7 @@
 |---|---|---|
 | V2-1 (26) | llm_adapter 실구현: ollama qwen3:8b + openai gpt-4o-mini(timeout 8s, external→local 폴백, tier_used 기록) | FakeLLM 교체 |
 | V2-2 (26) | RAG /ask: retrieve(top-k=4, meta_filter)→근거 강제 프롬프트→sources·trace·latency 기록, grounded=false→unanswered_queue insert | V2 E2E 통과 |
-| V3-1 (27) | 위험보고: 202+jobs 워커(SKIP LOCKED, 요약+severity 로컬 티어, 3회 실패 시 보존+알림) | 알파에서 시연 |
+| V3-1 (27) | 위험보고: 202+jobs 워커(SKIP LOCKED, 요약+severity 로컬 티어, 3회 실패 시 보존+알림). 수신 구조 = edge 단기 버퍼 → core outbound pull(M-25), TTL 정리 크론 포함 | 알파에서 시연 |
 | V3-2 (27) | 인증(초대 토큰→PIN 해시→JWT/리프레시) + 하트비트 스케줄러(core→edge, M-22) | edge /health degraded 해소 |
 | V4-1 (28) | 게이트 C+A: verify_backtranslation(bge-m3 코사인, τ 가값 0.80)·is_high_risk(OR 규칙)·안전만 차단+전체 배지 | 오역 차단 데모 |
 | V5-1 (29) | 상담챗(학습상태 주입, 로컬 고정) + crypto seal/open + 퀴즈 생성 파이프 연결 | 동결 전 머지 |
