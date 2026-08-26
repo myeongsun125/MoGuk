@@ -1,3 +1,10 @@
-# frontend 자리표시자 — React 빌드(Vite) 도입 시 multi-stage 로 교체 [정현]
+# Vite 멀티스테이지 빌드 [정현] — V2-1
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
 FROM nginx:alpine
-COPY public/ /usr/share/nginx/html/
+COPY --from=build /app/dist /usr/share/nginx/html
