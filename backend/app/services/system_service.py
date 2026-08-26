@@ -54,8 +54,13 @@ def check_db() -> dict:
 
 
 def check_llm() -> dict:
-    # 어댑터(services/llm_adapter.py) 연결 시 ollama 모델 탑재 여부로 ok|degraded 판정 [새봄]
-    return {"status": "not_wired"}
+    """ollama 모델 탑재 여부로 ok|degraded 판정 (M-03). 200/503 판정에는 관여하지 않는다 — 기준은 db 뿐."""
+    try:
+        from app.services.llm_adapter import probe
+
+        return probe()
+    except Exception as exc:  # noqa: BLE001 — health 는 원인 유형만 노출
+        return {"status": "fail", "error": type(exc).__name__}
 
 
 # ── edge-api 컴포넌트 ─────────────────────────────────────────
