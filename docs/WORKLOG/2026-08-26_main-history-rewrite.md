@@ -1,6 +1,6 @@
 # 2026-08-26 — main 히스토리 재작성 1회 (규칙 예외 기록)
 
-**[MS|V1|0826 15:13]** main 히스토리 재작성 1회 — 사유: 커밋 트레일러 제거(공개 전환 대비), 총괄 승인, 재발 방지 = settings.json attribution + PR 반려 규칙. **이후 main force-push는 재금지.**
+**[MS|V1|0826 15:13]** main 히스토리 재작성 1회 — 사유: Claude 트레일러 제거(공개 전환 대비), 총괄 승인. 재발 방지 = settings.json attribution 무효화 + PR 반려 규칙(GIT_RULES 반영 예정). **이후 main force-push 재금지.**
 
 | 항목 | 내용 |
 |---|---|
