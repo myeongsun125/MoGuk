@@ -2,6 +2,16 @@
 
 온프레미스 LLM·RAG 기반, 외국인 근로자가 모국어로 일을 배우고 이해를 증명하는 플랫폼.
 
+## 문서 위계 (M-24)
+- 목표(상위 계약): docs/PRELIM_PROPOSAL.md — 모든 문서·구현은 이를 이행한다. 원문 수정 금지.
+- 결정 대장: skeleton-v3 §8 M-xx — 목표·설계·계약의 모든 변경은 여기로만 들어온다(R5).
+  예선 문서와 다른 모든 결정은 변경 사유 필수(R6) — 심사·발표 방어의 근거가 된다.
+- 개념별 원문 소유(R4): DDL→db/migrations/001 · API·시그니처·M-xx 대장→skeleton-v3
+  · 설계 서사·근거→BLUEPRINT · 게이트·일정·컷라인→WORKFLOW · 운영 사이클→PROTOCOL
+  · 거버넌스→GOVERNANCE · 작업 배분→WORKORDER · 게이트 검증→GATE_CHECK · 발표 논거→APPEAL_POINTS
+- 충돌 시: 해당 개념의 소유 문서가 우선. 목표와 계약이 어긋나면 산문을 고치지 말고 M-xx로 계약을 고친다.
+- 읽기 진입점: 최초 1회 PRELIM_PROPOSAL 필독 → 이후 세션은 BLUEPRINT → WORKFLOW → skeleton-v3 → PROTOCOL → 최신 HANDOFF
+
 ## 퀵스타트 (전 팀원 공통)
 
 ```bash
@@ -14,7 +24,7 @@ curl -s -XPOST localhost:8000/api/v1/ask -H 'content-type: application/json' -d 
 
 내리기: `docker compose down` (DB 데이터 유지) / 초기화: `docker compose down -v`
 
-## 디렉터리와 소유권 (docs/skeleton-v3.md §1 기준 — 그 문서가 SSOT)
+## 디렉터리와 소유권 (docs/skeleton-v3.md §1 기준 — 문서 위계는 위 M-24)
 
 | 경로 | 담당 | 내용 |
 |---|---|---|
@@ -26,7 +36,7 @@ curl -s -XPOST localhost:8000/api/v1/ask -H 'content-type: application/json' -d 
 | `data/seed/` | 명선 | 시드 데이터 (manuals·kosha·glossary·phrases·quiz·safety_courses) |
 | `infra/`, `docker-compose*.yml`, `.env.example`, `.github/workflows/` | 병갑 | compose(core_net/edge_net 8서비스), Caddy, CI/CD, blue-green |
 | `tests/` | 새봄 | pytest (CI 게이트) — `pytest -q` (pytest.ini 가 backend 를 pythonpath 로 잡음) |
-| `docs/` | 전원 | `skeleton-v3.md`(SSOT) · `DECISIONS.md` · `WORKLOG/` · `archive/` |
+| `docs/` | 전원 | **`PRELIM_PROPOSAL.md`(상위 계약 = 예선 제출 문서 원문, 최초 1회 필독)** · `skeleton-v3.md`(기술 계약 SSOT·M-xx 대장) · **`BLUEPRINT.md`(설계 SSOT = 부트스트랩 1번 진입점)** · `TRACEABILITY.md`(PRELIM↔구현 결정 추적표, R6 사유 색인) · `WORKFLOW.md`(게이트 V1~V7·컷라인·리스크) · `PROTOCOL.md`(운영 체계·HANDOFF·부트스트랩) · `WORKORDER.md`(트랙×구간 작업 지시) · `GATE_CHECK.md`(머지 전 크로스체크) · `GOVERNANCE.md`(거버넌스 8개) · `APPEAL_POINTS.md`(발표 원본) · `DECISIONS.md` · `WORKLOG/` · `archive/` |
 
 퀵스타트 참고: `.env` 에 `POSTGRES_PASSWORD` 는 **필수**(미설정 시 compose 가 거부). `stt`·`dagster` 는 `--profile full` 에서만 기동.
 테넌트 생성: `scripts/apply_tenant.sh <slug> --compose`.
