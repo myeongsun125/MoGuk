@@ -1,0 +1,79 @@
+# data/sources/manifest.yaml — M-29 근거 자료 SSOT. 여기 없는 ID는 어디서도 쓸 수 없다.
+# status: pending | fetched | collected | hold(라이선스 미확인) | fetch_failed
+sources:
+  - id: LAW-KOSH-RULE
+    title: 산업안전보건기준에 관한 규칙
+    publisher: 고용노동부
+    url: https://www.law.go.kr
+    license: 법령(저작권 비대상)
+    lang: ko
+    target: [프레스 등의 방호장치, 금형조정작업의 위험 방지, 정비·청소·급유 시 운전정지, 공작기계(선반) 관련 조문]
+    file: null
+    retrieved_at: null
+    status: pending
+    note: null
+  - id: LAW-KOSH-ENF
+    title: 산업안전보건법 시행규칙 — 안전보건교육 별표(교육시간·교육내용, 프레스 특별교육 항목)
+    publisher: 고용노동부
+    url: https://www.law.go.kr
+    license: 법령(저작권 비대상)
+    lang: ko
+    target: [특별교육 대상 작업 중 프레스 항목, 교육시간]
+    file: null
+    retrieved_at: null
+    status: pending
+    note: null
+  - id: KOSHA-PRESS
+    title: null            # 프레스 안전작업 자료 1건
+    publisher: 안전보건공단
+    url: null
+    license: 미확인        # 공공누리 n유형 확인 후 기입
+    lang: ko
+    file: null
+    retrieved_at: null
+    status: pending
+  - id: KOSHA-LATHE
+    title: null            # 선반·공작기계 안전작업 자료 1건
+    publisher: 안전보건공단
+    url: null
+    license: 미확인
+    lang: ko
+    file: null
+    retrieved_at: null
+    status: pending
+  - id: KOSHA-ML-01        # 16개국어 자료 — ko/vi/id 3파일 한 세트, ML-02·03 동일 형식으로 추가
+    title: null
+    publisher: 안전보건공단
+    url: null
+    license: 미확인
+    lang: [ko, vi, id]
+    file: {ko: null, vi: null, id: null}
+    retrieved_at: null
+    status: pending
+  - id: NCS-LATHE
+    title: null            # NCS 학습모듈 선반가공 — 작업 절차 단원
+    publisher: 한국산업인력공단
+    url: null
+    license: 미확인
+    lang: ko
+    file: null
+    retrieved_at: null
+    status: pending
+  - id: NCS-PRESS
+    title: null            # NCS 학습모듈 프레스가공 — 작업 절차 단원
+    publisher: 한국산업인력공단
+    url: null
+    license: 미확인
+    lang: ko
+    file: null
+    retrieved_at: null
+    status: pending
+  - id: EPS-GUIDE
+    title: null            # 고용허가제 취업교육 교재 또는 다국어 안전 가이드 1건
+    publisher: 한국산업인력공단
+    url: null
+    license: 미확인
+    lang: [ko, vi, id]
+    file: {ko: null, vi: null, id: null}
+    retrieved_at: null
+    status: pending
