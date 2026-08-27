@@ -1,0 +1,64 @@
+.invite-screen {
+  min-height: 100vh;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.invite-screen h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.lang-select {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lang-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+.lang-btn.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+
+.invite-screen form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.invite-screen input {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+}
+
+.invite-screen button[type="submit"] {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.invite-screen button[type="submit"]:disabled {
+  opacity: 0.6;
+}
+
+.invite-screen .error {
+  color: #c0392b;
+  font-size: 0.9rem;
+}
