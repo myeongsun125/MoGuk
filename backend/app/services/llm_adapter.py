@@ -51,6 +51,10 @@ DEFAULT_NUM_PREDICT = 200
 DEFAULT_PROBE_TIMEOUT_S = 2.0
 SUPPORTED_EXTERNAL_PROVIDERS = ("openai",)
 
+# M-02 비가역: bge-m3 / 1024 고정. M-02a: 런타임 = ollama /api/embed 단일.
+DEFAULT_EMBED_MODEL = "bge-m3"
+EMBED_DIM = 1024
+
 # 예산 계측용 — 테스트가 이 이름을 monkeypatch 한다.
 _now: Callable[[], float] = time.perf_counter
 
@@ -138,6 +142,11 @@ def deadline_s() -> float:
 
 def num_predict() -> int:
     return _env_int_positive("LLM_NUM_PREDICT", DEFAULT_NUM_PREDICT)
+
+
+def embed_model() -> str:
+    """M-02a: 임베딩 런타임은 ollama 단일. 모델은 bge-m3 고정(M-02)."""
+    return _env("EMBED_MODEL", DEFAULT_EMBED_MODEL)
 
 
 def _probe_timeout_s() -> float:
@@ -291,9 +300,36 @@ def complete(
     return LLMResult(text="", tier_used="local", model=used_model, latency_ms=elapsed(), error=error)
 
 
+def _call_ollama_embed(model: str, texts: list[str], timeout_s: float) -> list[list[float]]:
+    r = httpx.post(
+        f"{ollama_url()}/api/embed",
+        json={"model": model, "input": texts, "keep_alive": _env("OLLAMA_KEEP_ALIVE", "10m")},
+        timeout=timeout_s,
+    )
+    r.raise_for_status()
+    return r.json()["embeddings"]
+
+
 def embed(texts: list[str]) -> list[list[float]]:
-    # bge-m3 / 1024 고정 (M-02 비가역), 런타임 = ollama /api/embed (M-02a). V2-2 에서 구현.
-    raise NotImplementedError("[새봄] services.llm_adapter.embed")
+    """bge-m3 / 1024 고정(M-02 비가역). 런타임 = ollama /api/embed 단일(M-02a).
+
+    인제스천(Dagster)과 질의(어댑터)가 같은 런타임을 써야 벡터가 일치한다 — 다른 런타임 혼용 금지.
+    차원이 1024가 아니면 적재·질의 정합이 깨지므로 즉시 예외를 올린다.
+    """
+    if not texts:
+        return []
+    model = embed_model()
+    vectors = _call_ollama_embed(model, texts, local_timeout_s())
+    if len(vectors) != len(texts):
+        raise ValueError(
+            f"embed: 입력 {len(texts)}건 대비 벡터 {len(vectors)}건 반환 (model={model})"
+        )
+    for i, vec in enumerate(vectors):
+        if len(vec) != EMBED_DIM:
+            raise ValueError(
+                f"embed: 차원 불일치 — {len(vec)} != {EMBED_DIM} (M-02 고정, model={model}, idx={i})"
+            )
+    return vectors
 
 
 # ── /health 용 프로브 (services/system_service.check_llm 이 호출) ──
