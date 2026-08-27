@@ -8,10 +8,10 @@ sources:
     license: 법령(저작권 비대상)
     lang: ko
     target: [프레스 등의 방호장치, 금형조정작업의 위험 방지, 정비·청소·급유 시 운전정지, 공작기계(선반) 관련 조문]
-    file: null
-    retrieved_at: null
-    status: pending
-    note: null
+    file: data/sources/raw/LAW-KOSH-RULE.xml
+    retrieved_at: 2026-08-27T08:40:17Z
+    status: fetched
+    note: "MST=273603 공포 20250901 현행. 조문 853건. target 대응 — 프레스 방호장치=제103조(프레스 등의 위험 방지), 금형조정=제104조(금형조정작업의 위험 방지), 운전정지=제92조(정비 등의 작업 시의 운전정지 등)·제91조(고장난 기계의 정비 등), 선반=제87조제6항(원동기ㆍ회전축 등의 위험 방지, 돌출 회전 가공물 덮개ㆍ울)·제102조(탑승의 금지, 수직선반 테이블). 선반 전용 조문은 없음"
   - id: LAW-KOSH-ENF
     title: 산업안전보건법 시행규칙 — 안전보건교육 별표(교육시간·교육내용, 프레스 특별교육 항목)
     publisher: 고용노동부
@@ -19,10 +19,10 @@ sources:
     license: 법령(저작권 비대상)
     lang: ko
     target: [특별교육 대상 작업 중 프레스 항목, 교육시간]
-    file: null
-    retrieved_at: null
-    status: pending
-    note: null
+    file: data/sources/raw/LAW-KOSH-ENF.xml
+    retrieved_at: 2026-08-27T08:40:17Z
+    status: fetched
+    note: "MST=288431 공포 20260728 현행. 조문 278건. target 대응 — 제26조(교육시간 및 교육내용 등) + 별표4(안전보건교육 교육과정별 교육시간)·별표5(안전보건교육 교육대상별 교육내용). 프레스 특별교육 대상작업=별표5 제1호 라목 제11호(동력 프레스기계 5대 이상 보유 사업장). 별표4·5 모두 별표내용 텍스트 확보(첨부 의존 아님)"
   - id: KOSHA-PRESS
     title: null            # 프레스 안전작업 자료 1건
     publisher: 안전보건공단
