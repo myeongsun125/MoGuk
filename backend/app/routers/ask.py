@@ -1,24 +1,32 @@
-"""/ask — 질의 (agents/graph 엔트리). 현재 fixture mock 응답 (§7 Mock 경계). [새봄]
+"""/ask — 질의 (agents/graph 엔트리). V2-2 실구현. [새봄]
 
-mock 응답에는 "mock": true 가 포함된다 — 실연동 교체 시 제거하고 grep으로 잔여 확인.
+skeleton-v3 §3: POST /ask {question, lang} → {answer, sources[], verify:{score,passed,gated}, trace_id}
+mock 은 제거됨 — backend/app/fixtures/ask.json 은 프론트 fixture 동기화 기준으로 남겨둔다(JH 소유 cutover).
 """
 
-import json
-from pathlib import Path
-
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
+
+from app.agents.graph import run_ask
 
 router = APIRouter(prefix="/ask", tags=["ask"])
 
-_FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "ask.json"
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1)
+    lang: str = Field(default="vi")
 
 
 @router.post("")
-def ask(body: dict) -> dict:
-    # {question, lang} → {answer, sources[], verify:{score,passed,gated}, trace_id}
-    fixture = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-    fixture["echo"] = {"question": body.get("question"), "lang": body.get("lang")}
-    return fixture
+def ask(body: AskRequest) -> dict:
+    # 인증(V3-2) 전이라 worker_id 는 미상 — questions.worker_id NULL 로 기록된다.
+    result = run_ask(body.question, body.lang, worker_id=None)
+    return {
+        "answer": result.answer,
+        "sources": result.sources,
+        "verify": result.verify,
+        "trace_id": result.trace_id,
+    }
 
 
 @router.post("/voice")
