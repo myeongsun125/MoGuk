@@ -74,7 +74,7 @@ SB V3-1(위험보고 API) ──→ JH V3-2(위험보고 관리 화면) · MS V3
 ### SB 새봄 (backend/) — 권장: Fable 5 높음(에이전트 설계) / CC 기본
 | 구간 | 작업 | 확인 방법 |
 |---|---|---|
-| V2-1 (26) | llm_adapter 실구현: local=ollama qwen3:8b, external=openai gpt-4o-mini(timeout 8s, external→local 폴백, tier_used 기록). FakeLLM 교체 | `pytest tests/ -k adapter` green(신규 테스트 포함) + core /health llm=ok + 외부 키 제거 상태에서 호출 시 local 폴백 동작 로그 |
+| V2-1 (26) | llm_adapter 실구현: local=ollama qwen3:8b, external=openai gpt-4o-mini(external timeout 8s (LLM_TIMEOUT_EXTERNAL_S, M-30), external→local 폴백, tier_used 기록). FakeLLM 교체 | `pytest tests/ -k adapter` green(신규 테스트 포함) + core /health llm=ok + 외부 키 제거 상태에서 호출 시 local 폴백 동작 로그 |
 | V2-2 (26) | RAG /ask: retrieve(top-k=4, meta_filter)→근거 강제 프롬프트→sources·trace·latency 기록. grounded=false→unanswered_queue insert | `curl --data-binary @q_vi.json .../api/v1/ask` → sources 길이≥1 + trace_id 존재. 무근거 질문 1건 → `SELECT count(*) FROM unanswered_queue WHERE status='open'` ≥1 |
 | V3-1 (27) | 위험보고: POST /reports 202 즉시 + jobs 워커(SKIP LOCKED, STT→요약+severity 로컬 티어, 3회 실패 시 보존+알림). **수신 구조 = S3 단기 버퍼 → core outbound pull(M-25). 텍스트 보고·/ask 등 실시간 요청은 M-28 릴레이 — 파라미터는 §5 합의 후** | 텍스트 보고 → 202 + 5초 내 `SELECT ko_summary, severity, status FROM risk_reports ORDER BY id DESC LIMIT 1` → 요약 not null, status='submitted' |
 | V3-2 (27) | 인증(초대 토큰→PIN 해시→JWT/리프레시) + 하트비트 스케줄러(core→edge) | activate→login→JWT로 보호 엔드포인트 200, 무토큰 401. edge /health core_relay=ok(age_s < 60) |
