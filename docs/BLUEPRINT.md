@@ -30,7 +30,7 @@ edge는 내부 DB 자격증명·호스트명을 보유하지 않는다 (차단 =
 ```
 
 ### 2-2. LLM 티어 라우팅 (M-03·17 확정)
-- `complete(prompt, tier)` 단일 어댑터. tier="local"=ollama qwen3:8b(폴백 4b), tier="external"=openai gpt-4o-mini(timeout 8s → 로컬 자동 폴백, tier_used 기록)
+- `complete(prompt, tier)` 단일 어댑터. tier="local"=ollama qwen3:8b(폴백 4b), tier="external"=openai gpt-4o-mini(external timeout 8s (LLM_TIMEOUT_EXTERNAL_S, M-30) → 로컬 자동 폴백, tier_used 기록)
 - 티어 정책: 사업장 지식·상담·위험보고·PII = **로컬 고정**. 외부는 비민감 일반 번역 전용(용어사전 프롬프트 주입).
 - 임베딩 = bge-m3/1024 전역 고정 (M-02, 비가역 — 변경 시 chunks 전체 재적재)
 
