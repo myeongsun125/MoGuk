@@ -41,7 +41,7 @@ edge는 내부 DB 자격증명·호스트명을 보유하지 않는다 (차단 =
 
 ## 3. 데이터 계층 (M-04 스키마 분리 — 상세 DDL은 migrations/001이 원문)
 - 테넌트 = PG schema-per-tenant, 미들웨어 search_path. 시연 킬샷: `\dn`
-- 21테이블 요지: documents(origin: upload|admin_answer|seed) / chunks(vector 1024 + meta JSONB: category·machine) / glossary(term_ko·vi·in, draft→approved) / quiz_sets·items·attempts / **v_comprehension 뷰 = 세트별 최신 점수, 라벨 <80 red·80–89 yellow·≥90 green (M-01: 통과 90, 재시험, 임계값 tenant_settings 보관·UI 미노출)** / questions(=qa_logs: sources·grounded·trace JSONB·latency) / unanswered_queue / conversations(risk_flag) / notifications(범용 쪽지, M-06) / risk_reports / jobs / phrases·speaking_records / safety_courses·records / access_logs / invites·workers·admins
+- 22테이블 요지: documents(origin: upload|admin_answer|seed) / chunks(vector 1024 + meta JSONB: category·machine) / glossary(term_ko·vi·in, draft→approved) / quiz_sets·items·attempts / **v_comprehension 뷰 = 세트별 최신 점수, 라벨 <80 red·80–89 yellow·≥90 green (M-01: 통과 90, 재시험, 임계값 tenant_settings 보관·UI 미노출)** / questions(=qa_logs: sources·grounded·trace JSONB·latency) / unanswered_queue / conversations(risk_flag) / notifications(범용 쪽지, M-06) / risk_reports / jobs / phrases·speaking_records / safety_courses·records / access_logs / invites·workers·admins
 - lineage(M-09) = questions.trace JSONB(classify→retrieve hit·score→route tier→verify score) + chunks.meta, GIN 인덱스. 시연: "이 답이 왜 나왔나"를 쿼리 한 줄로.
 
 ## 4. 기능별 설계 (결정 번호 포함)

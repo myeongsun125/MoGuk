@@ -143,18 +143,22 @@ CREATE TABLE notifications (                        -- M-06 알림함(쪽지)
   title text NOT NULL, body text NOT NULL,
   read_at timestamptz, created_at timestamptz DEFAULT now());
 
-CREATE TABLE risk_reports (                         -- M-08
+CREATE TABLE risk_reports (                         -- M-08, M-08b, M-08c
   id serial PRIMARY KEY, worker_id int REFERENCES workers(id),
   source text NOT NULL CHECK (source IN ('voice','text')),
-  audio_ref text, original_text text, stt_confidence numeric,
+  audio_ref text, original_text text, lang text, stt_confidence numeric,
   ko_summary text, severity text CHECK (severity IN ('high','medium','low')),
   status text NOT NULL DEFAULT 'submitted'
     CHECK (status IN ('submitted','acknowledged','resolved')),
   processing_state text NOT NULL DEFAULT 'queued'
     CHECK (processing_state IN ('queued','running','done','failed')),
+  reporter_confirmed boolean NOT NULL DEFAULT false,              -- M-08c 보고자 확인 루프
   acked_by int, acked_at timestamptz,
   resolved_by int, resolved_at timestamptz, resolution_note text,
-  created_at timestamptz DEFAULT now(), processed_at timestamptz);
+  created_at timestamptz DEFAULT now(), processed_at timestamptz,
+  -- M-08b ①: 텍스트 접수는 원문 무조건 적재. voice/STT(V5) 경로는 NULL 허용 유지
+  CONSTRAINT risk_reports_text_requires_original
+    CHECK (source <> 'text' OR original_text IS NOT NULL));
 
 CREATE TABLE risk_report_events (                   -- M-08a 이력·감사 (append-only)
   id serial PRIMARY KEY,
