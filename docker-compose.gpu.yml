@@ -1,0 +1,12 @@
+# EC2(g4dn) 전용 GPU 오버레이 — 사용: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# 팀원 로컬은 이 파일 없이 기본 compose만 사용 (CPU 동작)
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+              
