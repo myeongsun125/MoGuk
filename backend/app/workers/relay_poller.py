@@ -57,7 +57,9 @@ def dispatch(
         from app.services.risk_reports import submit_text_report
 
         return 202, submit_text_report(
-            body.get("original_text", ""), lang=body.get("lang")
+            body.get("original_text", ""),
+            lang=body.get("lang"),
+            source=body.get("source", "text"),
         )
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
 

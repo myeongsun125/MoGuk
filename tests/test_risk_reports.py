@@ -10,6 +10,7 @@
 """
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +20,9 @@ from app.services import risk_reports
 from app.workers import job_runner
 
 client = TestClient(app, client=("127.0.0.1", 50000))
+
+CREATED_AT = datetime(2026, 8, 29, 12, 0, tzinfo=timezone.utc)
+CREATED_AT_ISO = CREATED_AT.isoformat()
 
 
 # ── 가짜 DB ───────────────────────────────────────────────
@@ -96,12 +100,12 @@ def test_intake_module_has_no_llm_dependency():
 
 
 def test_submit_text_report_single_transaction(monkeypatch):
-    store = _store(rows=[("INSERT INTO risk_reports", (77,)), ("INSERT INTO jobs", (9,))])
+    store = _store(rows=[("INSERT INTO risk_reports", (77, CREATED_AT)), ("INSERT INTO jobs", (9,))])
     monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
 
     out = risk_reports.submit_text_report("프레스 안전덮개가 열려 있습니다", lang="vi")
 
-    assert out == {"id": 77, "status": "submitted"}
+    assert out == {"id": 77, "status": "submitted", "created_at": CREATED_AT_ISO}
     sqls = _sqls(store)
     assert any("INSERT INTO risk_reports" in s for s in sqls)
     assert any("INSERT INTO jobs" in s for s in sqls)
@@ -126,7 +130,7 @@ def test_submit_text_report_single_transaction(monkeypatch):
 
 
 def test_submit_text_report_lang_optional(monkeypatch):
-    store = _store(rows=[("INSERT INTO risk_reports", (78,)), ("INSERT INTO jobs", (10,))])
+    store = _store(rows=[("INSERT INTO risk_reports", (78, CREATED_AT)), ("INSERT INTO jobs", (10,))])
     monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
 
     risk_reports.submit_text_report("원문만 있음")
@@ -135,7 +139,7 @@ def test_submit_text_report_lang_optional(monkeypatch):
 
 
 def test_post_reports_returns_202(monkeypatch):
-    store = _store(rows=[("INSERT INTO risk_reports", (81,)), ("INSERT INTO jobs", (11,))])
+    store = _store(rows=[("INSERT INTO risk_reports", (81, CREATED_AT)), ("INSERT INTO jobs", (11,))])
     monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
 
     r = client.post(
@@ -143,7 +147,7 @@ def test_post_reports_returns_202(monkeypatch):
     )
 
     assert r.status_code == 202
-    assert r.json() == {"id": 81, "status": "submitted"}
+    assert r.json() == {"id": 81, "status": "submitted", "created_at": CREATED_AT_ISO}
 
 
 def test_post_reports_rejects_empty_text():
@@ -372,7 +376,7 @@ async def test_reports_relay_roundtrip_edge_to_core(monkeypatch):
     relay.queue.reset()
 
     # core 측 디스패치가 쓰는 저장소는 스텁 DB 로 대체
-    store = _store(rows=[("INSERT INTO risk_reports", (91,)), ("INSERT INTO jobs", (12,))])
+    store = _store(rows=[("INSERT INTO risk_reports", (91, CREATED_AT)), ("INSERT INTO jobs", (12,))])
     monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
 
     edge = build_app("edge")
@@ -387,13 +391,16 @@ async def test_reports_relay_roundtrip_edge_to_core(monkeypatch):
         items = pend.json()["items"]
         assert len(items) == 1
         assert items[0]["method"] == "POST" and items[0]["path"] == "/api/v1/reports"
-        assert items[0]["body"] == {"original_text": "컨베이어 끼임 위험", "lang": "vi"}
+        # 릴레이 payload 는 검증 완료된 모델 덤프 — source 기본값이 채워져 넘어간다
+        assert items[0]["body"] == {
+            "original_text": "컨베이어 끼임 위험", "lang": "vi", "source": "text",
+        }
 
         # core 폴러의 로컬 디스패치 (HTTP 재귀 없음)
         status, payload = relay_poller.dispatch(
             items[0]["method"], items[0]["path"], items[0]["body"]
         )
-        assert status == 202 and payload == {"id": 91, "status": "submitted"}
+        assert status == 202 and payload == {"id": 91, "status": "submitted", "created_at": CREATED_AT_ISO}
 
         rr = await c.post(
             f"/internal/relay/{items[0]['request_id']}/respond",
@@ -404,7 +411,7 @@ async def test_reports_relay_roundtrip_edge_to_core(monkeypatch):
         resp = await posted
 
     assert resp.status_code == 202
-    assert resp.json() == {"id": 91, "status": "submitted"}
+    assert resp.json() == {"id": 91, "status": "submitted", "created_at": CREATED_AT_ISO}
 
     # core 측에서 접수 3종(원문·잡·이벤트)이 한 트랜잭션으로 기록됐다
     sqls = _sqls(store)
@@ -419,7 +426,7 @@ async def test_reports_relay_roundtrip_edge_to_core(monkeypatch):
 def test_relay_dispatch_supports_reports(monkeypatch):
     from app.workers import relay_poller
 
-    store = _store(rows=[("INSERT INTO risk_reports", (92,)), ("INSERT INTO jobs", (13,))])
+    store = _store(rows=[("INSERT INTO risk_reports", (92, CREATED_AT)), ("INSERT INTO jobs", (13,))])
     monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
 
     status, body = relay_poller.dispatch(
@@ -427,7 +434,7 @@ def test_relay_dispatch_supports_reports(monkeypatch):
     )
 
     assert status == 202
-    assert body == {"id": 92, "status": "submitted"}
+    assert body == {"id": 92, "status": "submitted", "created_at": CREATED_AT_ISO}
 
 
 def test_relay_dispatch_reports_requires_post():
@@ -435,3 +442,73 @@ def test_relay_dispatch_reports_requires_post():
 
     status, body = relay_poller.dispatch("GET", "/api/v1/reports", {})
     assert status == 404 and "디스패치 대상 아님" in body["detail"]
+
+
+# ── M-08b ④ 계약: source · 금지 필드 · created_at ─────────
+
+def test_source_defaults_to_text(monkeypatch):
+    store = _store(rows=[("INSERT INTO risk_reports", (93, CREATED_AT)), ("INSERT INTO jobs", (14,))])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/reports", json={"original_text": "원문"})
+
+    assert r.status_code == 202
+    assert _params_for(store, "INSERT INTO risk_reports")[0]["source"] == "text"
+
+
+def test_source_voice_rejected_until_v5():
+    """001 CHECK 집합은 수용하되 voice 는 audio 없이 성립 불가 → 501 (V5 해제)."""
+    r = client.post("/api/v1/reports", json={"original_text": "원문", "source": "voice"})
+
+    assert r.status_code == 501
+    assert r.json()["detail"]["error"] == "voice_intake_not_available"
+
+
+def test_source_unknown_value_is_422():
+    r = client.post("/api/v1/reports", json={"original_text": "원문", "source": "sms"})
+    assert r.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "field", ["tenant", "tenant_slug", "reporter", "reporter_id", "worker_id", "status", "id"]
+)
+def test_forbidden_body_fields_rejected_with_400(field, monkeypatch):
+    """테넌트·reporter 등 서버 도출 값은 무시가 아니라 400 거부 (M-08b ④, 위조 방지)."""
+    monkeypatch.setattr(
+        risk_reports.tenancy, "connect",
+        lambda *a, **k: pytest.fail("거부돼야 하는데 저장소 호출됨"),
+    )
+
+    r = client.post("/api/v1/reports", json={"original_text": "원문", field: "x"})
+
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert detail["error"] == "forbidden_fields"
+    assert detail["fields"] == [field]
+    assert detail["allowed"] == ["lang", "original_text", "source"]
+
+
+def test_created_at_present_and_iso(monkeypatch):
+    store = _store(rows=[("INSERT INTO risk_reports", (94, CREATED_AT)), ("INSERT INTO jobs", (15,))])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    body = client.post("/api/v1/reports", json={"original_text": "원문"}).json()
+
+    assert set(body) == {"id", "status", "created_at"}
+    assert body["created_at"] == "2026-08-29T12:00:00+00:00"
+    datetime.fromisoformat(body["created_at"])  # ISO8601 파싱 가능
+
+
+def test_dispatch_passes_source_through(monkeypatch):
+    from app.workers import relay_poller
+
+    store = _store(rows=[("INSERT INTO risk_reports", (95, CREATED_AT)), ("INSERT INTO jobs", (16,))])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/reports", {"original_text": "원문", "lang": "vi", "source": "text"}
+    )
+
+    assert status == 202
+    assert set(body) == {"id", "status", "created_at"}
+    assert _params_for(store, "INSERT INTO risk_reports")[0]["source"] == "text"

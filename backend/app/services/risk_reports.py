@@ -41,7 +41,7 @@ EV_SUMMARY_FAILED = "summary_failed"
 _INSERT_REPORT = """
 INSERT INTO risk_reports (worker_id, source, original_text, lang, status, processing_state)
 VALUES (%(worker_id)s, %(source)s, %(original_text)s, %(lang)s, %(status)s, %(processing_state)s)
-RETURNING id
+RETURNING id, created_at
 """
 
 # append-only — 이 모듈에 risk_report_events 대상 UPDATE/DELETE 는 존재하지 않는다 (M-08a)
@@ -96,12 +96,23 @@ def record_event(
     )
 
 
+def _iso(value) -> str | None:
+    """DB timestamptz → ISO8601 문자열."""
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 def submit_text_report(
-    original_text: str, lang: str | None = None, worker_id: int | None = None
+    original_text: str,
+    lang: str | None = None,
+    source: str = SOURCE_TEXT,
+    worker_id: int | None = None,
 ) -> dict:
     """텍스트 위험보고 접수 — 원문 적재 + 요약 잡 enqueue + 접수 이벤트를 한 트랜잭션으로.
 
-    LLM 을 호출하지 않는다(M-08b ①). 반환 = {"id", "status"}.
+    LLM 을 호출하지 않는다(M-08b ①). 반환 = {"id", "status", "created_at"} (M-08b ④).
+    worker_id 는 인증 컨텍스트에서 서버가 도출한다 — 요청 본문으로 받지 않는다.
     """
     with tenancy.connect() as conn:
         with conn.cursor() as cur:
@@ -109,14 +120,14 @@ def submit_text_report(
                 _INSERT_REPORT,
                 {
                     "worker_id": worker_id,
-                    "source": SOURCE_TEXT,
+                    "source": source,
                     "original_text": original_text,
                     "lang": lang,
                     "status": STATUS_SUBMITTED,
                     "processing_state": STATE_QUEUED,
                 },
             )
-            report_id = cur.fetchone()[0]
+            report_id, created_at = cur.fetchone()
 
             cur.execute(
                 _INSERT_JOB,
@@ -136,8 +147,8 @@ def submit_text_report(
             )
         conn.commit()
 
-    log.info("reports: 접수 report_id=%s job=%s lang=%s", report_id, job_id, lang)
-    return {"id": report_id, "status": STATUS_SUBMITTED}
+    log.info("reports: 접수 report_id=%s job=%s lang=%s source=%s", report_id, job_id, lang, source)
+    return {"id": report_id, "status": STATUS_SUBMITTED, "created_at": _iso(created_at)}
 
 
 def get_report(report_id: int) -> dict | None:
