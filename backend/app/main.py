@@ -6,7 +6,7 @@
 - 같은 이미지가 API_ROLE=edge|core 로 두 번 기동된다 (§5 edge-api / core-api).
   edge 는 내부 DB 자격증명·호스트명을 갖지 않으며 core 로 호출하지 않는다 (M-22).
 - 역할 분리 (M-28·M-28a): `/internal/relay/*` 는 edge 에만 마운트하고,
-  core→edge outbound 폴러는 core 에만 기동한다.
+  core→edge outbound 폴러·하트비트(M-15)는 core 에만 기동한다.
 """
 
 import asyncio
@@ -42,24 +42,27 @@ def _lifespan(api_role: str):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = None
+        tasks: list[asyncio.Task] = []
         stop = asyncio.Event()
         if poller_enabled(api_role):
+            from app.workers.heartbeat import run_heartbeat
             from app.workers.relay_poller import run_poller
 
-            task = asyncio.create_task(run_poller(stop))
+            tasks.append(asyncio.create_task(run_poller(stop)))
+            # core→edge outbound 하트비트 (M-22). 기존 수신부 사용, 신규 /internal 없음
+            tasks.append(asyncio.create_task(run_heartbeat(stop)))
         try:
             yield
         finally:
-            if task is not None:
-                stop.set()
+            stop.set()
+            for task in tasks:
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
                 except Exception as exc:  # noqa: BLE001 — 종료 경로에서 예외를 삼킨다
-                    log.warning("relay poller 종료 중 예외: %s", type(exc).__name__)
+                    log.warning("백그라운드 태스크 종료 중 예외: %s", type(exc).__name__)
 
     return lifespan
 
