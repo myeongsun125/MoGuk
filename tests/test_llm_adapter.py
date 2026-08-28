@@ -570,7 +570,9 @@ def test_adapter_probe_fail_when_ollama_unreachable(monkeypatch):
     assert p["error"] == "ConnectError"
 
 
-def test_adapter_embed_still_unimplemented():
-    """embed 는 V2-2(M-02a) 에서 구현 — 이번 구간 미교체임을 고정."""
-    with pytest.raises(NotImplementedError):
-        llm_adapter.embed(["텍스트"])
+def test_adapter_embed_is_implemented():
+    """embed 는 V2-2(M-02a)에서 구현됨 — 상세 계약은 tests/test_rag_ask.py."""
+    assert not isinstance(llm_adapter.embed, type(None))
+    assert llm_adapter.embed([]) == []
+    assert llm_adapter.embed_model() == "bge-m3"
+    assert llm_adapter.EMBED_DIM == 1024
