@@ -351,3 +351,87 @@ def test_stt_job_kind_is_not_reachable_from_summarize(monkeypatch):
     _patch_llm_ok(monkeypatch)
 
     job_runner.process_once()
+
+
+# ── c6: edge → 릴레이 → core 접수 왕복 (M-08b 배선) ───────
+
+@pytest.mark.asyncio
+async def test_reports_relay_roundtrip_edge_to_core(monkeypatch):
+    """근로자 앱 경로: edge POST /reports → 릴레이 pending → core 디스패치 → respond → 202."""
+    import asyncio
+
+    import httpx
+
+    from app.main import build_app
+    from app.services import relay
+    from app.workers import relay_poller
+
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "3")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "5")
+    relay.queue.reset()
+
+    # core 측 디스패치가 쓰는 저장소는 스텁 DB 로 대체
+    store = _store(rows=[("INSERT INTO risk_reports", (91,)), ("INSERT INTO jobs", (12,))])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    edge = build_app("edge")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=edge), base_url="http://edge"
+    ) as c:
+        posted = asyncio.create_task(
+            c.post("/api/v1/reports", json={"original_text": "컨베이어 끼임 위험", "lang": "vi"})
+        )
+
+        pend = await c.get("/internal/relay/pending")
+        items = pend.json()["items"]
+        assert len(items) == 1
+        assert items[0]["method"] == "POST" and items[0]["path"] == "/api/v1/reports"
+        assert items[0]["body"] == {"original_text": "컨베이어 끼임 위험", "lang": "vi"}
+
+        # core 폴러의 로컬 디스패치 (HTTP 재귀 없음)
+        status, payload = relay_poller.dispatch(
+            items[0]["method"], items[0]["path"], items[0]["body"]
+        )
+        assert status == 202 and payload == {"id": 91, "status": "submitted"}
+
+        rr = await c.post(
+            f"/internal/relay/{items[0]['request_id']}/respond",
+            json={"status_code": status, "body": payload},
+        )
+        assert rr.status_code == 200
+
+        resp = await posted
+
+    assert resp.status_code == 202
+    assert resp.json() == {"id": 91, "status": "submitted"}
+
+    # core 측에서 접수 3종(원문·잡·이벤트)이 한 트랜잭션으로 기록됐다
+    sqls = _sqls(store)
+    assert any("INSERT INTO risk_reports" in s for s in sqls)
+    assert any("INSERT INTO jobs" in s for s in sqls)
+    assert any("INSERT INTO risk_report_events" in s for s in sqls)
+    assert store["commits"] == 1
+
+    relay.queue.reset()
+
+
+def test_relay_dispatch_supports_reports(monkeypatch):
+    from app.workers import relay_poller
+
+    store = _store(rows=[("INSERT INTO risk_reports", (92,)), ("INSERT INTO jobs", (13,))])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/reports", {"original_text": "원문", "lang": None}
+    )
+
+    assert status == 202
+    assert body == {"id": 92, "status": "submitted"}
+
+
+def test_relay_dispatch_reports_requires_post():
+    from app.workers import relay_poller
+
+    status, body = relay_poller.dispatch("GET", "/api/v1/reports", {})
+    assert status == 404 and "디스패치 대상 아님" in body["detail"]

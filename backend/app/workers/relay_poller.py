@@ -4,6 +4,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
 루프 = GET edge/internal/relay/pending (long-poll) → 로컬 디스패치 → POST .../respond.
 
 디스패치는 라우터를 HTTP 로 다시 부르지 않고(재귀 금지) 처리 함수를 직접 호출한다.
+대상: POST /api/v1/ask(run_ask) · POST /api/v1/reports(submit_text_report, M-08b 배선).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -51,6 +52,13 @@ def dispatch(
             "verify": result.verify,
             "trace_id": result.trace_id,
         }
+    if method == "POST" and path == "/api/v1/reports":
+        # M-08b ①: LLM 비의존 결정론 접수. 라우터 재호출 없이 저장소 함수를 직접 부른다.
+        from app.services.risk_reports import submit_text_report
+
+        return 202, submit_text_report(
+            body.get("original_text", ""), lang=body.get("lang")
+        )
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
 
 

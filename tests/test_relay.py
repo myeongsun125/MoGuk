@@ -347,7 +347,8 @@ def test_poller_dispatch_maps_ask(monkeypatch):
 
 
 def test_poller_dispatch_unknown_path():
-    status, body = relay_poller.dispatch("POST", "/api/v1/reports", {})
+    """디스패치 대상은 /ask·/reports 2종 — 그 외는 404 (M-08b 배선 후)."""
+    status, body = relay_poller.dispatch("POST", "/api/v1/chat", {})
     assert status == 404
     assert "디스패치 대상 아님" in body["detail"]
 
