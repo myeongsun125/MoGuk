@@ -14,10 +14,16 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.routers import admin, ask, auth, chat, health, learn, notifications, relay, reports
-from app.services.relay import poller_enabled, relay_router_enabled
+from app.services.relay import (
+    INTERNAL_PREFIX,
+    is_internal_client,
+    poller_enabled,
+    relay_router_enabled,
+)
 from app.services.system_service import APP_SLOT, APP_VERSION, role, validate_env
 
 # uvicorn 기본 설정은 자체 로거만 잡고 root 에 핸들러를 두지 않아 앱 로그가 유실된다.
@@ -69,6 +75,20 @@ def build_app(api_role: str) -> FastAPI:
     # 릴레이 (M-28) — edge 전용. caddy 가 /internal 을 라우팅하지 않는다.
     if relay_router_enabled(api_role):
         app.include_router(relay.router)
+
+        @app.middleware("http")
+        async def internal_only(request: Request, call_next):
+            """M-22a: /internal/* 은 loopback·사설 대역 소스만. 그 외 403.
+
+            판정은 request.client.host 만 본다 — X-Forwarded-For 는 위조 가능하고,
+            caddy 가 /internal 을 라우팅하지 않으므로 프록시 경유 자체가 비정상이다.
+            """
+            if request.url.path.startswith(INTERNAL_PREFIX):
+                host = request.client.host if request.client else None
+                if not is_internal_client(host):
+                    log.warning("M-22a: /internal 외부 접근 거부 client=%s path=%s", host, request.url.path)
+                    return JSONResponse(status_code=403, content={"detail": "internal only"})
+            return await call_next(request)
 
     # 비즈니스 API
     for r in (auth, learn, ask, reports, chat, notifications, admin):

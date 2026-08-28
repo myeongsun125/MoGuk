@@ -3,6 +3,7 @@
 - 공통: 필드 status/version/slot/components
 - core: components{api,db,llm}, 200/503 = components.db (DB 없는 CI 에선 503 이 정상)
 - edge: components{api,core_relay}, DB 체크 없음, 하트비트 전=degraded(200) / 후=ok
+- /internal/core-heartbeat 는 M-22a 미들웨어 대상 — 사설 IP 클라이언트로 호출한다
 - /api/v1/ask 계약 테스트는 실연동 교체(V2-2)로 tests/test_rag_ask.py 로 이관
 """
 
@@ -10,7 +11,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-client = TestClient(app)
+# M-22a: /internal/* 은 loopback·사설 대역만 허용 — 하트비트 테스트용으로 127.0.0.1 을 명시한다.
+client = TestClient(app, client=("127.0.0.1", 50000))
 
 
 def test_health_core_contract(monkeypatch):

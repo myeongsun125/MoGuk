@@ -21,6 +21,7 @@ hold(20s) 는 보류(30s)·리스(60s) 와 독립이다 (M-28a 원문).
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import os
 import time
@@ -29,6 +30,32 @@ from dataclasses import dataclass, field
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+# M-22a: /internal/* 은 loopback + RFC1918(도커 브리지·core_net) 소스만 허용한다.
+INTERNAL_NETWORKS = (
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+)
+INTERNAL_PREFIX = "/internal/"
+
+
+def is_internal_client(host: str | None) -> bool:
+    """M-22a 판정 — request.client.host 만 본다. X-Forwarded-For 는 신뢰하지 않는다."""
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False  # 호스트명·비 IP 는 거부
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return any(ip.version == net.version and ip in net for net in INTERNAL_NETWORKS)
+
+
+# ── M-28a 파라미터 ────────────────────────────────────────
 
 DEFAULT_HOLD_S = 20.0
 DEFAULT_BATCH_MAX = 10

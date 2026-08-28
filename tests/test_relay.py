@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from app.main import build_app
-from app.services import relay
+from app.services import relay, system_service
 from app.workers import relay_poller
 
 
@@ -401,7 +401,10 @@ async def test_poller_loop_backs_off_and_stops(monkeypatch):
 
     stop = asyncio.Event()
     task = asyncio.create_task(relay_poller.run_poller(stop))
-    await asyncio.sleep(0.08)
+    for _ in range(100):  # 재시도 2회 관측될 때까지 (상한 있음)
+        if calls["n"] >= 2:
+            break
+        await asyncio.sleep(0.01)
     stop.set()
     await asyncio.wait_for(task, timeout=2)
 
@@ -413,3 +416,92 @@ def test_poller_edge_api_url_default(monkeypatch):
     assert relay_poller.edge_api_url() == "http://edge-api:8000"
     monkeypatch.setenv("EDGE_API_URL", "http://edge-api:8000/")
     assert relay_poller.edge_api_url() == "http://edge-api:8000"
+
+
+# ── M-22a: /internal/* 접근 제한 미들웨어 ─────────────────
+
+def _edge_client(client_addr: tuple[str, int]) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=build_app("edge"), client=client_addr),
+        base_url="http://edge",
+    )
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["127.0.0.1", "10.0.5.7", "172.18.0.3", "192.168.1.10", "::1", "::ffff:10.1.2.3"],
+)
+def test_is_internal_client_allows_loopback_and_rfc1918(host):
+    assert relay.is_internal_client(host) is True
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["203.0.113.5", "8.8.8.8", "172.32.0.1", "2001:db8::1", "testclient", "", None],
+)
+def test_is_internal_client_rejects_public_and_non_ip(host):
+    assert relay.is_internal_client(host) is False
+
+
+@pytest.mark.asyncio
+async def test_internal_allowed_from_private_ip(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "0")
+    async with _edge_client(("172.18.0.4", 40000)) as client:
+        r = await client.get("/internal/relay/pending")
+    assert r.status_code == 200
+    assert r.json() == {"items": []}
+
+
+@pytest.mark.asyncio
+async def test_internal_forbidden_from_public_ip(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "0")
+    async with _edge_client(("203.0.113.5", 40000)) as client:
+        r = await client.get("/internal/relay/pending")
+        r2 = await client.post(
+            "/internal/relay/00000000-0000-4000-8000-000000000000/respond",
+            json={"status_code": 200, "body": {}},
+        )
+    assert r.status_code == 403 and r.json() == {"detail": "internal only"}
+    assert r2.status_code == 403  # respond 도 동일하게 차단
+
+
+@pytest.mark.asyncio
+async def test_internal_ignores_forwarded_for_spoofing(monkeypatch):
+    """X-Forwarded-For 로 사설 IP 를 위장해도 통과하지 않는다."""
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "0")
+    async with _edge_client(("203.0.113.5", 40000)) as client:
+        r = await client.get(
+            "/internal/relay/pending",
+            headers={"X-Forwarded-For": "127.0.0.1", "X-Real-IP": "10.0.0.1"},
+        )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_internal_heartbeat_also_guarded(monkeypatch):
+    """/internal/core-heartbeat 도 같은 접두라 동일 규칙을 받는다."""
+    monkeypatch.setenv("API_ROLE", "edge")
+    # 하트비트 수신 시각은 모듈 전역 — 다른 테스트로 새지 않도록 teardown 에서 복원한다.
+    monkeypatch.setattr(system_service, "_core_heartbeat_at", None)
+    async with _edge_client(("203.0.113.5", 40000)) as client:
+        blocked = await client.post("/internal/core-heartbeat")
+    async with _edge_client(("10.0.0.9", 40000)) as client:
+        allowed = await client.post("/internal/core-heartbeat")
+    assert blocked.status_code == 403
+    assert allowed.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_business_paths_unaffected_by_guard(monkeypatch):
+    """/api/v1/*·/health 는 공인 IP 에서도 통과 — 미들웨어는 /internal 만 본다."""
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "0.1")
+    async with _edge_client(("203.0.113.5", 40000)) as client:
+        health = await client.get("/health")
+        ask = await client.post("/api/v1/ask", json={"question": "q", "lang": "vi"})
+    assert health.status_code == 200
+    assert ask.status_code == 504  # 릴레이 보류 초과 — 403 이 아니다
+
