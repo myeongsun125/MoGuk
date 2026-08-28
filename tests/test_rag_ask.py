@@ -7,6 +7,7 @@
 - M-05 / BLUEPRINT §4-1: grounded=false → 답변 차단 + unanswered_queue insert(status='open')
 - M-09: questions.trace 에 classify → retrieve(hit·score) → route.tier → verify 기록
 - M-17·M-30: /ask 는 tier="local", timeout_s=None 으로 어댑터를 호출한다
+- 엔드포인트 테스트는 API_ROLE=core 경로 (edge 는 릴레이 경유 — tests/test_relay.py)
 
 실데이터 E2E(마이그레이션 적용·chunks 적재·ollama 모델)는 보류 — 여기서는 DB·ollama 를 스텁으로 대체.
 """
@@ -411,6 +412,7 @@ def test_run_ask_survives_db_failure(monkeypatch):
 # ── POST /api/v1/ask — §3 응답 스키마 ─────────────────────
 
 def test_ask_endpoint_response_schema(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     store = _store()
     monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
     monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
@@ -428,6 +430,7 @@ def test_ask_endpoint_response_schema(monkeypatch):
 
 
 def test_ask_endpoint_gated_response(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     store = _store()
     monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
     monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [])
@@ -441,12 +444,14 @@ def test_ask_endpoint_gated_response(monkeypatch):
     assert body["verify"]["gated"] is True
 
 
-def test_ask_endpoint_rejects_empty_question():
+def test_ask_endpoint_rejects_empty_question(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     r = client.post("/api/v1/ask", json={"question": "", "lang": "vi"})
     assert r.status_code == 422
 
 
 def test_ask_endpoint_lang_defaults_to_vi(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     store = _store()
     monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
     monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
@@ -457,3 +462,132 @@ def test_ask_endpoint_lang_defaults_to_vi(monkeypatch):
     assert r.status_code == 200
     params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
     assert params["lang"] == "vi"
+
+
+# ── retrieve/embed 단계 예외 격리 (#14 BG 메모 ②) ─────────
+
+def test_run_ask_embed_failure_is_isolated(monkeypatch):
+    """embed(ollama HTTP) 오류 → 500 아님. gated 응답 + unanswered_queue 미적재."""
+    store = _store(question_id=51)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+
+    def _boom(q, k=4):
+        raise httpx.ConnectError("ollama refused")
+
+    monkeypatch.setattr(graph, "retrieve", _boom)
+    monkeypatch.setattr(graph, "complete", lambda *a, **k: pytest.fail("검색 실패인데 LLM 호출됨"))
+
+    result = graph.run_ask("프레스 점검?", "vi")
+
+    assert result.answer == ""
+    assert result.sources == []
+    assert result.verify == {"score": 0.0, "passed": False, "gated": True}
+    assert result.trace_id
+
+    sqls = [c[0] for c in store["calls"]]
+    assert any("INSERT INTO questions" in s for s in sqls)
+    assert not any("unanswered_queue" in s for s in sqls)  # 시스템 오류 ≠ 무근거
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    assert params["grounded"] is False
+    assert params["answer"] is None
+    trace = json.loads(params["trace"])
+    assert trace["route"]["error"] == "retrieve_failed[ConnectError]"
+    assert trace["retrieve"]["error"] == "retrieve_failed[ConnectError]"
+    assert trace["retrieve"]["hits"] == 0
+
+
+def test_run_ask_db_failure_in_retrieve_is_isolated(monkeypatch):
+    """pgvector 조회 DB 오류 → 200 + gated. qa_logs 기록도 실패하면 로그만 남기고 진행."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _boom_conn(slug=None):
+        raise RuntimeError("db down")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(graph.tenancy, "connect", _boom_conn)
+
+    def _boom(q, k=4):
+        raise RuntimeError("relation \"chunks\" does not exist")
+
+    monkeypatch.setattr(graph, "retrieve", _boom)
+    monkeypatch.setattr(graph, "complete", lambda *a, **k: pytest.fail("검색 실패인데 LLM 호출됨"))
+
+    result = graph.run_ask("프레스 점검?", "vi")
+
+    assert result.answer == ""
+    assert result.sources == []
+    assert result.verify["gated"] is True
+    assert result.verify["passed"] is False
+
+
+def test_ask_endpoint_returns_200_on_retrieve_failure(monkeypatch):
+    """라우터 레벨에서도 500 이 아니라 §3 스키마 200 이어야 한다."""
+    monkeypatch.setenv("API_ROLE", "core")
+    store = _store()
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(
+        graph, "retrieve", lambda q, k=4: (_ for _ in ()).throw(httpx.ReadTimeout("embed timeout"))
+    )
+
+    r = client.post("/api/v1/ask", json={"question": "프레스 점검?", "lang": "vi"})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"answer", "sources", "verify", "trace_id"}
+    assert body["answer"] == "" and body["sources"] == []
+    assert body["verify"] == {"score": 0.0, "passed": False, "gated": True}
+    assert not any("unanswered_queue" in c[0] for c in store["calls"])
+
+
+# ── trace.relay 계측 (M-28a, 내부 전용) ───────────────────
+
+def test_run_ask_records_relay_timestamps(monkeypatch):
+    """릴레이 경유 시 trace.relay 3필드(ISO8601) 기록 — 응답에는 노출하지 않는다."""
+    store = _store(question_id=61)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch)
+
+    result = graph.run_ask(
+        "q", "vi", relay_meta={"enqueued_at": 1756000000.0, "leased_at": 1756000000.25}
+    )
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    trace = json.loads(params["trace"])
+    assert set(trace["relay"]) == {"enqueued_at", "leased_at", "responded_at"}
+    assert trace["relay"]["enqueued_at"].startswith("2025-")
+    assert trace["relay"]["enqueued_at"].endswith("+00:00")  # ISO8601 UTC
+    assert trace["relay"]["leased_at"] > trace["relay"]["enqueued_at"]
+    assert trace["relay"]["responded_at"] is not None
+
+    # Answer(=API 응답 소스)에는 relay 가 없다
+    assert not hasattr(result, "relay")
+    assert set(result.verify) == {"score", "passed", "gated"}
+
+
+def test_run_ask_direct_path_omits_relay(monkeypatch):
+    """core 직접 경로(비릴레이)는 trace.relay 를 만들지 않는다."""
+    store = _store()
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch)
+
+    graph.run_ask("q", "vi")
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    assert "relay" not in json.loads(params["trace"])
+
+
+def test_ask_endpoint_body_never_exposes_relay(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
+    store = _store()
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch)
+
+    body = client.post("/api/v1/ask", json={"question": "q", "lang": "vi"}).json()
+
+    assert set(body) == {"answer", "sources", "verify", "trace_id"}
+    assert "relay" not in body and "trace" not in body

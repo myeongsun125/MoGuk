@@ -14,6 +14,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from app.agents.retrieve import Chunk, retrieve
 from app.models import Worker
@@ -67,6 +68,13 @@ ON CONFLICT (question_id) DO NOTHING
 """
 
 
+def _iso(ts: float | None) -> str | None:
+    """epoch 초 → ISO8601(UTC). None 은 그대로 둔다."""
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+
+
 def build_context(chunks: list[Chunk]) -> str:
     """근거 블록 — 각 청크에 번호·출처를 붙여 모델이 인용 대상을 구분하게 한다."""
     blocks = []
@@ -104,8 +112,13 @@ def _persist(
     sources: list[dict],
     trace: dict,
     latency_ms: int,
+    enqueue_unanswered: bool,
 ) -> int | None:
-    """questions 기록 + grounded=false 면 unanswered_queue 이관(M-05). 실패해도 응답은 막지 않는다."""
+    """questions 기록 + 무근거면 unanswered_queue 이관(M-05). 실패해도 응답은 막지 않는다.
+
+    시스템 오류(retrieve/embed/DB)는 무근거가 아니므로 enqueue_unanswered=False 로 들어온다
+    — 측정 #2(근거 인용률) 오염 방지.
+    """
     try:
         with tenancy.connect() as conn:
             with conn.cursor() as cur:
@@ -124,7 +137,7 @@ def _persist(
                     },
                 )
                 qid = cur.fetchone()[0]
-                if not grounded:
+                if enqueue_unanswered:
                     cur.execute(_INSERT_UNANSWERED, {"qid": qid})
             conn.commit()
         return qid
@@ -133,13 +146,33 @@ def _persist(
         return None
 
 
-def run_ask(question: str, lang: str, worker_id: int | None = None) -> Answer:
-    """POST /ask 본문. 근거 강제 → 무근거 차단(M-05) → qa_logs 기록(M-09)."""
+def run_ask(
+    question: str,
+    lang: str,
+    worker_id: int | None = None,
+    relay_meta: dict | None = None,
+) -> Answer:
+    """POST /ask 본문. 근거 강제 → 무근거 차단(M-05) → qa_logs 기록(M-09).
+
+    retrieve(embed HTTP·DB) 단계 예외는 격리한다 — 500 대신 §3 스키마로 gated 응답을 내고,
+    unanswered_queue 에는 넣지 않는다(시스템 오류 ≠ 무근거).
+
+    relay_meta(M-28a 릴레이 경유 시에만 전달) = {"enqueued_at", "leased_at"} epoch 초.
+    trace.relay 로만 남기고 API 응답(§3 4필드)에는 노출하지 않는다 — 측정 #4 재료.
+    """
     t0 = time.perf_counter()
     trace_id = uuid.uuid4().hex
 
+    # retrieve = embed(ollama HTTP) + pgvector 조회(DB). 어느 쪽 실패든 500 을 내지 않고
+    # §3 스키마로 내려보낸다. 시스템 오류는 "무근거"가 아니므로 unanswered_queue 에 넣지 않는다.
     t_ret = time.perf_counter()
-    chunks = retrieve(question, k=TOP_K)
+    retrieve_error: str | None = None
+    chunks: list[Chunk] = []
+    try:
+        chunks = retrieve(question, k=TOP_K)
+    except Exception as exc:  # noqa: BLE001 — 검색 단계 장애 격리
+        retrieve_error = f"retrieve_failed[{type(exc).__name__}]"
+        log.error("ask: retrieve 실패 — %s: %s", type(exc).__name__, exc)
     retrieve_ms = int((time.perf_counter() - t_ret) * 1000)
 
     sources = [c.as_source() for c in chunks]
@@ -152,12 +185,15 @@ def run_ask(question: str, lang: str, worker_id: int | None = None) -> Answer:
             "top_score": chunks[0].score if chunks else None,
             "chunk_ids": [c.id for c in chunks],
             "ms": retrieve_ms,
+            "error": retrieve_error,
         },
     }
 
     answer_text = ""
     grounded = False
-    if chunks:
+    if retrieve_error is not None:
+        trace["route"] = {"tier": None, "model": None, "ms": 0, "error": retrieve_error}
+    elif chunks:
         t_llm = time.perf_counter()
         # M-17 티어 정책: 사업장 지식 = 로컬 고정 / M-30: timeout_s=None → LLM_TIMEOUT_LOCAL_S
         result = complete(build_prompt(question, lang, chunks), "local", timeout_s=None)
@@ -185,6 +221,13 @@ def run_ask(question: str, lang: str, worker_id: int | None = None) -> Answer:
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
     trace["latency_ms"] = latency_ms
+    if relay_meta:
+        # 측정 #4: 릴레이 왕복(적재→배포→회신)을 core 처리시간과 분리 계측
+        trace["relay"] = {
+            "enqueued_at": _iso(relay_meta.get("enqueued_at")),
+            "leased_at": _iso(relay_meta.get("leased_at")),
+            "responded_at": _iso(time.time()),
+        }
 
     qid = _persist(
         worker_id=worker_id,
@@ -195,6 +238,8 @@ def run_ask(question: str, lang: str, worker_id: int | None = None) -> Answer:
         sources=sources,
         trace=trace,
         latency_ms=latency_ms,
+        # M-05 는 "무근거 질문"의 이관 경로 — 시스템 오류는 대상이 아니다(측정 #2 오염 방지)
+        enqueue_unanswered=not grounded and retrieve_error is None,
     )
     if qid is not None:
         trace["question_id"] = qid
