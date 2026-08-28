@@ -7,6 +7,7 @@
 - M-05 / BLUEPRINT §4-1: grounded=false → 답변 차단 + unanswered_queue insert(status='open')
 - M-09: questions.trace 에 classify → retrieve(hit·score) → route.tier → verify 기록
 - M-17·M-30: /ask 는 tier="local", timeout_s=None 으로 어댑터를 호출한다
+- 엔드포인트 테스트는 API_ROLE=core 경로 (edge 는 릴레이 경유 — tests/test_relay.py)
 
 실데이터 E2E(마이그레이션 적용·chunks 적재·ollama 모델)는 보류 — 여기서는 DB·ollama 를 스텁으로 대체.
 """
@@ -411,6 +412,7 @@ def test_run_ask_survives_db_failure(monkeypatch):
 # ── POST /api/v1/ask — §3 응답 스키마 ─────────────────────
 
 def test_ask_endpoint_response_schema(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     store = _store()
     monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
     monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
@@ -428,6 +430,7 @@ def test_ask_endpoint_response_schema(monkeypatch):
 
 
 def test_ask_endpoint_gated_response(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     store = _store()
     monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
     monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [])
@@ -441,12 +444,14 @@ def test_ask_endpoint_gated_response(monkeypatch):
     assert body["verify"]["gated"] is True
 
 
-def test_ask_endpoint_rejects_empty_question():
+def test_ask_endpoint_rejects_empty_question(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     r = client.post("/api/v1/ask", json={"question": "", "lang": "vi"})
     assert r.status_code == 422
 
 
 def test_ask_endpoint_lang_defaults_to_vi(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
     store = _store()
     monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
     monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
