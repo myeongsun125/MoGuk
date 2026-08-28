@@ -1,14 +1,88 @@
-"""/reports — 위험 보고 (M-08). 202 즉시 → jobs 큐. [새봄]"""
+"""/reports — 위험 보고 (M-08·M-08b). 202 즉시 → jobs 큐. [새봄]
 
-from fastapi import APIRouter
+M-08b ①: 접수는 LLM 비의존 결정론 경로 — 원문 무조건 적재 + 202 + submitted.
+로컬 LLM(ollama)이 정지해 있어도 신고가 소실되지 않는다. 요약·severity 는
+workers/job_runner.py 가 비동기로 채운다.
+
+M-08b ④ 계약:
+  요청 {original_text, lang, source?='text'} → 응답 202 {id, status, created_at}
+  - source 집합은 001 CHECK('voice'|'text')가 정본. 'voice' 는 audio 없이 성립하지 않아
+    현재 501(V5 STT 도입 시 해제).
+  - 테넌트·reporter 는 인증 컨텍스트에서 서버가 도출한다. 요청 본문에 오면 **400 거부**
+    (무시 아님 — 위조 방지, M-04 정합). 허용 필드 화이트리스트 밖은 전부 거부.
+
+역할 분기 (M-28·M-22):
+- API_ROLE=edge: 릴레이 큐에 적재 → core 회신 대기 → 원 응답 완결. edge 는 DB 자격이 없다.
+- API_ROLE=core: 저장소 직접 호출. core 폴러도 같은 함수를 쓰며 HTTP 재귀는 없다.
+"""
+
+import asyncio
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from app.services import risk_reports
+from app.services.relay import queue
+from app.services.system_service import role
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+PATH = "/api/v1/reports"
+
+# M-08b ④ 허용 필드 화이트리스트 — 이 밖의 키(tenant/tenant_slug/worker_id/reporter 등)는 400
+ALLOWED_FIELDS = frozenset({"original_text", "lang", "source"})
+
+
+class ReportRequest(BaseModel):
+    original_text: str = Field(min_length=1)
+    lang: str | None = None
+    source: Literal["voice", "text"] = "text"  # 001 CHECK 집합이 정본
+
+
+def _reject_unknown_fields(raw: object) -> None:
+    if not isinstance(raw, dict):
+        return
+    unknown = sorted(set(raw) - ALLOWED_FIELDS)
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "forbidden_fields",
+                "message": (
+                    "테넌트·보고자 식별자는 서버가 인증 컨텍스트에서 도출합니다 — "
+                    "요청 본문 수신 금지 (M-08b ④)"
+                ),
+                "fields": unknown,
+                "allowed": sorted(ALLOWED_FIELDS),
+            },
+        )
+
 
 @router.post("", status_code=202)
-def create_report() -> dict:
-    # {text} | multipart(audio) → 202 {report_id}
-    raise NotImplementedError("[새봄] POST /reports")
+async def create_report(body: ReportRequest, request: Request) -> JSONResponse:
+    _reject_unknown_fields(await request.json())
+
+    if body.source == risk_reports.SOURCE_VOICE:
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "error": "voice_intake_not_available",
+                "message": "음성 접수는 STT(V5) 도입 후 해제됩니다 — audio 없는 voice 접수는 성립하지 않습니다.",
+            },
+        )
+
+    if role() == "edge":
+        item = queue.enqueue("POST", PATH, body.model_dump())
+        relayed = await queue.wait_for_response(item)
+        return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
+
+    # 원문 적재 + 요약 잡 enqueue + report_submitted 이벤트를 한 트랜잭션으로. LLM 호출 0.
+    result = await asyncio.to_thread(
+        risk_reports.submit_text_report, body.original_text, body.lang, body.source
+    )
+    return JSONResponse(status_code=202, content=result)
 
 
 @router.get("/{report_id}")

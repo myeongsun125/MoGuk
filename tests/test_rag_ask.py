@@ -4,7 +4,8 @@
 - skeleton-v3 §3: POST /ask {question, lang} → {answer, sources[], verify:{score,passed,gated}, trace_id}
 - skeleton-v3 §4 동결: retrieve(query, k=4, meta_filter=None) / embed(texts) -> 1024차원
 - M-02a: 임베딩 런타임 = ollama /api/embed 단일, 모델 EMBED_MODEL(기본 bge-m3)
-- M-05 / BLUEPRINT §4-1: grounded=false → 답변 차단 + unanswered_queue insert(status='open')
+- M-05 / BLUEPRINT §4-1: grounded=false → 답변 차단
+- M-05a: unanswered_queue 적재는 검색 0건·NO_ANSWER 2종만 — retrieve 예외·local_failed 제외
 - M-09: questions.trace 에 classify → retrieve(hit·score) → route.tier → verify 기록
 - M-17·M-30: /ask 는 tier="local", timeout_s=None 으로 어댑터를 호출한다
 - 엔드포인트 테스트는 API_ROLE=core 경로 (edge 는 릴레이 경유 — tests/test_relay.py)
@@ -388,6 +389,8 @@ def test_run_ask_adapter_error_blocks(monkeypatch):
     q_params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
     trace = json.loads(q_params["trace"])
     assert trace["route"]["error"] == "local_failed[qwen3:8b:timeout]"
+    # M-05a: local_failed 는 시스템 오류 — unanswered_queue 미적재
+    assert not any("unanswered_queue" in c[0] for c in store["calls"])
 
 
 def test_run_ask_survives_db_failure(monkeypatch):
@@ -591,3 +594,56 @@ def test_ask_endpoint_body_never_exposes_relay(monkeypatch):
 
     assert set(body) == {"answer", "sources", "verify", "trace_id"}
     assert "relay" not in body and "trace" not in body
+
+
+# ── M-05a: unanswered_queue 적재 기준 ─────────────────────
+
+def test_run_ask_local_failed_not_enqueued(monkeypatch):
+    """M-05a: LLM 생성 실패(local_failed)는 시스템 오류 — gated 응답이되 queue 미적재."""
+    store = _store(question_id=71)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch, text="", error="local_failed[qwen3:8b:timeout,qwen3:4b:timeout]")
+
+    result = graph.run_ask("프레스 점검?", "vi")
+
+    assert result.answer == ""
+    assert result.sources == []
+    assert result.verify == {"score": 0.0, "passed": False, "gated": True}
+
+    sqls = [c[0] for c in store["calls"]]
+    assert any("INSERT INTO questions" in s for s in sqls)
+    assert not any("unanswered_queue" in s for s in sqls)
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    assert params["grounded"] is False
+    assert params["answer"] is None
+    trace = json.loads(params["trace"])
+    assert trace["route"]["error"].startswith("local_failed[")
+
+
+def test_run_ask_enqueue_only_for_two_reasons(monkeypatch):
+    """적재 대상 2종(검색 0건·NO_ANSWER)만 적재, 나머지 3종은 미적재."""
+    cases = [
+        ("no_chunks", lambda q, k=4: [], None, None, True),
+        ("no_answer", lambda q, k=4: [_chunk(1)], "NO_ANSWER", None, True),
+        ("local_failed", lambda q, k=4: [_chunk(1)], "", "local_failed[x]", False),
+        ("retrieve_error", None, None, None, False),
+    ]
+    for name, retr, text, err, expect_enqueue in cases:
+        store = _store()
+        monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+        if retr is None:
+            monkeypatch.setattr(
+                graph, "retrieve", lambda q, k=4: (_ for _ in ()).throw(httpx.ConnectError("x"))
+            )
+            monkeypatch.setattr(graph, "complete", lambda *a, **k: pytest.fail("호출되면 안 됨"))
+        else:
+            monkeypatch.setattr(graph, "retrieve", retr)
+            if text is not None:
+                _patch_llm(monkeypatch, text=text, error=err)
+
+        graph.run_ask("q", "vi")
+
+        enqueued = any("unanswered_queue" in c[0] for c in store["calls"])
+        assert enqueued is expect_enqueue, f"{name}: 적재={enqueued}, 기대={expect_enqueue}"

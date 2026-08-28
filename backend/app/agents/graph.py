@@ -116,8 +116,8 @@ def _persist(
 ) -> int | None:
     """questions 기록 + 무근거면 unanswered_queue 이관(M-05). 실패해도 응답은 막지 않는다.
 
-    시스템 오류(retrieve/embed/DB)는 무근거가 아니므로 enqueue_unanswered=False 로 들어온다
-    — 측정 #2(근거 인용률) 오염 방지.
+    시스템 오류(retrieve/embed/DB 예외·LLM 생성 실패 local_failed)는 무근거가 아니므로
+    enqueue_unanswered=False 로 들어온다 (M-05a — 측정 #2 근거 인용률 오염 방지).
     """
     try:
         with tenancy.connect() as conn:
@@ -154,8 +154,8 @@ def run_ask(
 ) -> Answer:
     """POST /ask 본문. 근거 강제 → 무근거 차단(M-05) → qa_logs 기록(M-09).
 
-    retrieve(embed HTTP·DB) 단계 예외는 격리한다 — 500 대신 §3 스키마로 gated 응답을 내고,
-    unanswered_queue 에는 넣지 않는다(시스템 오류 ≠ 무근거).
+    retrieve(embed HTTP·DB) 단계 예외는 격리한다 — 500 대신 §3 스키마로 gated 응답을 낸다.
+    unanswered_queue 적재는 검색 0건·NO_ANSWER 2종만(M-05a) — retrieve 예외·local_failed 는 제외.
 
     relay_meta(M-28a 릴레이 경유 시에만 전달) = {"enqueued_at", "leased_at"} epoch 초.
     trace.relay 로만 남기고 API 응답(§3 4필드)에는 노출하지 않는다 — 측정 #4 재료.
@@ -191,6 +191,9 @@ def run_ask(
 
     answer_text = ""
     grounded = False
+    # M-05a: unanswered_queue 적재 대상은 "관리자 답변이 필요한 무근거" 2종뿐 —
+    # 검색 0건(no_chunks)·NO_ANSWER. 시스템 오류(retrieve 예외·local_failed)는 미적재.
+    unanswered_reason: str | None = None
     if retrieve_error is not None:
         trace["route"] = {"tier": None, "model": None, "ms": 0, "error": retrieve_error}
     elif chunks:
@@ -204,11 +207,16 @@ def run_ask(
             "ms": llm_ms,
             "error": result.error,
         }
-        if result.error is None and not is_no_answer(result.text):
+        if result.error is not None:
+            pass  # local_failed — 생성 실패는 시스템 오류, 미적재 (M-05a)
+        elif is_no_answer(result.text):
+            unanswered_reason = "no_answer"
+        else:
             answer_text = result.text.strip()
             grounded = True
     else:
         trace["route"] = {"tier": None, "model": None, "ms": 0, "error": "no_chunks"}
+        unanswered_reason = "no_chunks"
 
     if not grounded:
         sources = []
@@ -238,8 +246,8 @@ def run_ask(
         sources=sources,
         trace=trace,
         latency_ms=latency_ms,
-        # M-05 는 "무근거 질문"의 이관 경로 — 시스템 오류는 대상이 아니다(측정 #2 오염 방지)
-        enqueue_unanswered=not grounded and retrieve_error is None,
+        # M-05a: 적재 = 검색 0건·NO_ANSWER 2종만. retrieve 예외·local_failed 는 제외
+        enqueue_unanswered=unanswered_reason is not None,
     )
     if qid is not None:
         trace["question_id"] = qid

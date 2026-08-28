@@ -143,18 +143,31 @@ CREATE TABLE notifications (                        -- M-06 알림함(쪽지)
   title text NOT NULL, body text NOT NULL,
   read_at timestamptz, created_at timestamptz DEFAULT now());
 
-CREATE TABLE risk_reports (                         -- M-08
+CREATE TABLE risk_reports (                         -- M-08, M-08b, M-08c
   id serial PRIMARY KEY, worker_id int REFERENCES workers(id),
   source text NOT NULL CHECK (source IN ('voice','text')),
-  audio_ref text, original_text text, stt_confidence numeric,
+  audio_ref text, original_text text, lang text, stt_confidence numeric,
   ko_summary text, severity text CHECK (severity IN ('high','medium','low')),
   status text NOT NULL DEFAULT 'submitted'
     CHECK (status IN ('submitted','acknowledged','resolved')),
   processing_state text NOT NULL DEFAULT 'queued'
     CHECK (processing_state IN ('queued','running','done','failed')),
+  reporter_confirmed boolean NOT NULL DEFAULT false,              -- M-08c 보고자 확인 루프
   acked_by int, acked_at timestamptz,
   resolved_by int, resolved_at timestamptz, resolution_note text,
-  created_at timestamptz DEFAULT now(), processed_at timestamptz);
+  created_at timestamptz DEFAULT now(), processed_at timestamptz,
+  -- M-08b ①: 텍스트 접수는 원문 무조건 적재. voice/STT(V5) 경로는 NULL 허용 유지
+  CONSTRAINT risk_reports_text_requires_original
+    CHECK (source <> 'text' OR original_text IS NOT NULL));
+
+CREATE TABLE risk_report_events (                   -- M-08a 이력·감사 (append-only)
+  id serial PRIMARY KEY,
+  report_id int NOT NULL REFERENCES risk_reports(id),   -- ON DELETE 미지정: 감사 이력 보존
+  actor text,                                       -- 'system'|'worker:<id>'|'admin:<id>'
+  action text NOT NULL,                             -- 'report_submitted'|'summary_done'|'summary_failed'|...
+  from_state text, to_state text, detail text,
+  created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX risk_report_events_report_idx ON risk_report_events(report_id, id);
 
 CREATE TABLE jobs (                                 -- M-18 비동기 큐 (Redis 없음)
   id serial PRIMARY KEY, kind text NOT NULL,        -- 'stt_summarize'|'ingest_answer'|...
@@ -200,7 +213,7 @@ GET  /learn/cards?module=
 POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}
 POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id}
 POST /ask/voice            multipart(audio≤60s, lang)      → 동일 | 폴백 안내 응답
-POST /reports              {text}|multipart(audio)         → 202 {report_id}
+POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501
 GET  /reports/{id}                                          → 상태 조회(접수 확인 화면)
 POST /chat                 {message}                        → {reply}          # 로컬 티어 고정
 GET  /notifications        / POST /notifications/{id}/read
@@ -332,5 +345,9 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-03a | M-03a 로컬 주력 모델 조건부 개정 예약 (2026-08-27, 명선 확정)<br>결정: 로컬 LLM 실행 환경은 g4dn.xlarge(GPU) 전환, M-03(qwen3:8b 주력) 유지. G 쿼터 승인이 8/28 15:00까지 없으면 V4 1차 데모는 t3.xlarge + OLLAMA_MODEL=qwen3:4b + LLM_NUM_PREDICT=100 + t3 unlimited 모드로 운영(env만, 코드·M-03 무변경, 승인 즉시 8b 복귀). V5 프리즈(8/29 18:00) 시점에도 GPU 없으면 M-03a(qwen3:4b 주력) 정식 개정. τ·오류 검출률·발표 수치 측정은 하드웨어 확정 후에만 수행.<br>R6: t3.xlarge CPU 8b 2.4 tok/s(think ON 실측), 25s 예산에 60토큰으로 /ask 불성립. 신규 계정 G 쿼터 0. 영향: BG(전환), MS(실측 일정). | 예약 (2026-08-27, 명선 — 8/29 18:00 조건부 정식 개정) |
 | M-31 | M-31 PR 리뷰 서명·머지 규칙 (2026-08-27, 명선 확정)<br>결정: ① "영향: <트랙>" 표기는 PR 본문 필수. 미표기 PR은 판정 대기로 잡지 않는다. ② 영향 트랙원 서명 = GitHub Approve 리뷰(Files changed → Submit review → Approve). 코멘트 [XX✓]만으로는 서명 불성립. ③ 머지 = 총괄 Master(명선). 작성자·리뷰어 머지 금지. ④ 브랜치 보호: main에 Approve 1건 이상 필수, 새 커밋 시 기존 승인 무효(dismiss stale).<br>R6 사유: §3-5 서명 형식([SB✓] 코멘트)이 GitHub 리뷰 상태와 분리돼 CC·브랜치 보호가 서명 여부를 판정할 수 없었음(PR #9, 08/27). 서명 수단을 하나로 통일해 R4 회복 + 기계 강제 가능.<br>영향: 전 트랙. 기존 [SB✓] 코멘트 서명(#9)은 Approve 재제출로 전환.<br>④는 플랜 제약으로 미발효, §3-2 절차가 강제 수단(R6 부기 08-28) | 확정 (2026-08-27, 명선) |
 | M-10b | verify.gate_reason 필드 신설("grounding"\|"threshold"\|null) — gated 사유 구분. 구현은 V4-1(τ 게이트)과 함께, §3 계약 비파괴 확장. R6: #14에서 gated가 무근거만 의미, τ 게이트 추가 시 사유 구분 없으면 계약 재수정 필요. 영향: SB(구현)·JH(프론트 소비 선택) | 확정 (2026-08-28, 명선) |
-| M-04a | 테넌트 스키마 마이그레이션(db/migrations/*_tenant_template.sql) 적용 주체 = MS(파이프라인 트랙). 실행 환경·psql 절차 = BG 제공. 백엔드·어댑터는 스키마 소비만. R6: 계약 미명시로 SB 확인 요청(08-28), M-04 스키마 소유와 정합. 영향: MS·BG | 확정 (2026-08-28, 명선) |
+| M-04a | 테넌트 스키마 마이그레이션(db/migrations/*_tenant_template.sql) 적용 주체 = MS(파이프라인 트랙). 실행 환경·psql 절차 = BG 제공. 백엔드·어댑터는 스키마 소비만. R6: 계약 미명시로 SB 확인 요청(08-28), M-04 스키마 소유와 정합. 영향: MS·BG<br>로컬 dev PG 적용·검증은 본 결정 범위 외 (운영 공유 PG 한정, R6 부기 08-29) | 확정 (2026-08-28, 명선) |
 | M-22a | M-22a /internal 노출 경계 (2026-08-28): edge /internal/* 릴레이 엔드포인트는 localhost·core_net 내부 소스만 허용, 외부 거부(미들웨어). 8000의 /ask·/health는 외부 유지. R6: 릴레이 도입으로 edge에 core 방향 통로 생김 → dev/데모 8000 직접 노출 시 큐 외부 적재 가능, M-22 능력 차단 완성. 영향 SB·BG. | 확정 (2026-08-28, 명선) |
+| M-05a | M-05a unanswered_queue 적재 기준 (2026-08-28, 명선 확정 / BG 발의·SB 상신)<br>결정: unanswered_queue 적재는 "관리자 답변이 필요한 무근거"만 — 검색 0건·NO_ANSWER 2종. 시스템 오류(retrieve 예외·LLM 생성 실패 local_failed)는 미적재, trace.route.error로 구분 집계. 사용자 응답은 동일하게 gated 폴백.<br>R6: M-05 문언 "grounded=false → 이관"이 시스템 오류를 포함하는 것으로 읽힐 수 있어 해석 확정. 관리자 공수 0 원칙·측정 #2(근거 인용률) 오염 방지·retrieve 예외 처리(#17)와 일관. 영향: SB(V3-1 첫 커밋), MS(측정 쿼리 — 보정 불요가 됨). | 확정 (2026-08-28, 명선) |
+| M-08a | risk_report_events 신설 — 이력·감사 로그 (2026-08-29, 명선 확정)<br>결정: ① append-only 테이블 risk_report_events를 §2 계약 목록에 추가(22번째). ② 역할 분담 — M-08 컬럼(status·acked_by/at·resolved_by/at·resolution_note) = 현재 상태 스냅숏(조회 소스), events = 전이·확인·열람 전 이력(감사·lineage 정본). 이력 질의는 events만 정본(스냅숏/이력 소스 분리로 R4 정합). ③ M-08c의 reporter_confirmed/corrected·original_viewed 이벤트는 이 테이블에 기록.<br>R6: M-08c 등재문이 이벤트 기록을 전제하나 수용 테이블이 §2 21테이블 밖(SB 상신 0829). 영향: SB(구현), JH(events[] 소비) | 확정 (2026-08-29, 명선) |
+| M-08b | 위험보고 접수·로컬 실패 처리 (2026-08-28, 명선 확정)<br>결정: ① 접수는 LLM 비의존 결정론 경로 — POST /reports는 원문 무조건 적재 + 202 + submitted(로컬 LLM 정지 시에도 신고 소실 0). ② 요약·severity 생성 실패(재시도 3회 소진 = local_failed)는 원문 보존 + 처리상태 실패 종단값 마킹(컬럼·값 집합은 001 정본) + 관리자 알림. 외부 LLM 폴백 금지(원문 민감성, 로컬 티어 유지). ③ 실패는 감사 이벤트로 기록, 요약 재생성은 V5. ④ §3 계약 동기 개정: 요청 {original_text, lang, source?='text'} → 응답 202 {id, status, created_at}. 테넌트·reporter는 인증 컨텍스트에서 서버 도출 — 요청 본문 수신 금지(위조 방지, M-04 정합). 구 표기 {text}→{report_id} 폐기(001 정본 컬럼명·① status 응답의 R4 귀결), §3 본문 동일 개정.<br>R6: WORKORDER V3-1 "3회 실패 시 보존+알림"의 결정 원장 격상. 채번 정리: 세션 간 충돌로 일시 M-05a로 유통 — M-05a는 unanswered_queue 적재 기준(별건) 확정, 위험보고 계열은 M-08 하위 재채번(08-29). 영향: SB(구현), JH(실패 표시 소비·계약 연동) | 확정 (2026-08-28, 명선) |
+| M-04b | 001 search_path 정정 — public 후순위 포함 (2026-08-29, 명선 확정 / SB 상신)<br>결정: 001 테넌트 템플릿의 SET search_path를 tenant_{slug}, public 순으로 정정. 객체 생성·조회 1순위는 테넌트 스키마 유지, public은 확장 타입(vector 등) 해석 전용 후순위. 크로스 테넌트 참조는 스키마 명시 없인 여전히 미해석(M-04 격리 유지).<br>R6: CREATE EXTENSION vector가 public에 타입 생성하는데 search_path가 public 제외 → fresh 적용 100% 실패(R2급 논리 불가, SB 상신 0829). 최소 정정. 영향: SB(#23), MS(EC2 적용) | 확정 (2026-08-29, 명선) |
