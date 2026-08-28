@@ -6,7 +6,7 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SCHEMA IF NOT EXISTS tenant_{slug};
-SET search_path TO tenant_{slug};
+SET search_path TO tenant_{slug}, public;
 
 CREATE TABLE IF NOT EXISTS tenant_settings (            -- M-01 임계값, 모듈 플래그
   key text PRIMARY KEY, value jsonb NOT NULL
