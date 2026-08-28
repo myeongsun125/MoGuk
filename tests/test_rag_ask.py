@@ -462,3 +462,80 @@ def test_ask_endpoint_lang_defaults_to_vi(monkeypatch):
     assert r.status_code == 200
     params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
     assert params["lang"] == "vi"
+
+
+# ── retrieve/embed 단계 예외 격리 (#14 BG 메모 ②) ─────────
+
+def test_run_ask_embed_failure_is_isolated(monkeypatch):
+    """embed(ollama HTTP) 오류 → 500 아님. gated 응답 + unanswered_queue 미적재."""
+    store = _store(question_id=51)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+
+    def _boom(q, k=4):
+        raise httpx.ConnectError("ollama refused")
+
+    monkeypatch.setattr(graph, "retrieve", _boom)
+    monkeypatch.setattr(graph, "complete", lambda *a, **k: pytest.fail("검색 실패인데 LLM 호출됨"))
+
+    result = graph.run_ask("프레스 점검?", "vi")
+
+    assert result.answer == ""
+    assert result.sources == []
+    assert result.verify == {"score": 0.0, "passed": False, "gated": True}
+    assert result.trace_id
+
+    sqls = [c[0] for c in store["calls"]]
+    assert any("INSERT INTO questions" in s for s in sqls)
+    assert not any("unanswered_queue" in s for s in sqls)  # 시스템 오류 ≠ 무근거
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    assert params["grounded"] is False
+    assert params["answer"] is None
+    trace = json.loads(params["trace"])
+    assert trace["route"]["error"] == "retrieve_failed[ConnectError]"
+    assert trace["retrieve"]["error"] == "retrieve_failed[ConnectError]"
+    assert trace["retrieve"]["hits"] == 0
+
+
+def test_run_ask_db_failure_in_retrieve_is_isolated(monkeypatch):
+    """pgvector 조회 DB 오류 → 200 + gated. qa_logs 기록도 실패하면 로그만 남기고 진행."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _boom_conn(slug=None):
+        raise RuntimeError("db down")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(graph.tenancy, "connect", _boom_conn)
+
+    def _boom(q, k=4):
+        raise RuntimeError("relation \"chunks\" does not exist")
+
+    monkeypatch.setattr(graph, "retrieve", _boom)
+    monkeypatch.setattr(graph, "complete", lambda *a, **k: pytest.fail("검색 실패인데 LLM 호출됨"))
+
+    result = graph.run_ask("프레스 점검?", "vi")
+
+    assert result.answer == ""
+    assert result.sources == []
+    assert result.verify["gated"] is True
+    assert result.verify["passed"] is False
+
+
+def test_ask_endpoint_returns_200_on_retrieve_failure(monkeypatch):
+    """라우터 레벨에서도 500 이 아니라 §3 스키마 200 이어야 한다."""
+    monkeypatch.setenv("API_ROLE", "core")
+    store = _store()
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(
+        graph, "retrieve", lambda q, k=4: (_ for _ in ()).throw(httpx.ReadTimeout("embed timeout"))
+    )
+
+    r = client.post("/api/v1/ask", json={"question": "프레스 점검?", "lang": "vi"})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"answer", "sources", "verify", "trace_id"}
+    assert body["answer"] == "" and body["sources"] == []
+    assert body["verify"] == {"score": 0.0, "passed": False, "gated": True}
+    assert not any("unanswered_queue" in c[0] for c in store["calls"])
