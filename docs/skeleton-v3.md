@@ -209,7 +209,7 @@ GET  /learn/cards?module=
 POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}
 POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id}
 POST /ask/voice            multipart(audio≤60s, lang)      → 동일 | 폴백 안내 응답
-POST /reports              {text}|multipart(audio)         → 202 {report_id}
+POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501
 GET  /reports/{id}                                          → 상태 조회(접수 확인 화면)
 POST /chat                 {message}                        → {reply}          # 로컬 티어 고정
 GET  /notifications        / POST /notifications/{id}/read
