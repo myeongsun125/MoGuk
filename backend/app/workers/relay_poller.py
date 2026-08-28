@@ -32,12 +32,19 @@ def edge_api_url() -> str:
     return (os.getenv("EDGE_API_URL") or "http://edge-api:8000").rstrip("/")
 
 
-def dispatch(method: str, path: str, body: dict) -> tuple[int, object]:
-    """릴레이 item 을 로컬 처리. (status_code, body). 예외는 호출부가 5xx 로 변환한다."""
+def dispatch(
+    method: str, path: str, body: dict, relay_meta: dict | None = None
+) -> tuple[int, object]:
+    """릴레이 item 을 로컬 처리. (status_code, body). 예외는 호출부가 5xx 로 변환한다.
+
+    relay_meta 는 trace.relay 계측용으로만 쓰이고 응답 body 에는 들어가지 않는다.
+    """
     if method == "POST" and path == "/api/v1/ask":
         from app.agents.graph import run_ask
 
-        result = run_ask(body.get("question", ""), body.get("lang", "vi"), worker_id=None)
+        result = run_ask(
+            body.get("question", ""), body.get("lang", "vi"), worker_id=None, relay_meta=relay_meta
+        )
         return 200, {
             "answer": result.answer,
             "sources": result.sources,
@@ -50,8 +57,16 @@ def dispatch(method: str, path: str, body: dict) -> tuple[int, object]:
 async def handle_item(client: httpx.AsyncClient, item: dict) -> None:
     request_id = item.get("request_id", "")
     try:
+        relay_meta = {
+            "enqueued_at": item.get("enqueued_at"),
+            "leased_at": item.get("leased_at"),
+        }
         status_code, body = await asyncio.to_thread(
-            dispatch, item.get("method", ""), item.get("path", ""), item.get("body") or {}
+            dispatch,
+            item.get("method", ""),
+            item.get("path", ""),
+            item.get("body") or {},
+            relay_meta,
         )
     except Exception as exc:  # noqa: BLE001 — 개별 실패가 루프를 끊지 않는다
         log.error("relay poller: 디스패치 실패 request_id=%s %s: %s", request_id, type(exc).__name__, exc)

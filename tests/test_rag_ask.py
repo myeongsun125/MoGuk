@@ -539,3 +539,55 @@ def test_ask_endpoint_returns_200_on_retrieve_failure(monkeypatch):
     assert body["answer"] == "" and body["sources"] == []
     assert body["verify"] == {"score": 0.0, "passed": False, "gated": True}
     assert not any("unanswered_queue" in c[0] for c in store["calls"])
+
+
+# ── trace.relay 계측 (M-28a, 내부 전용) ───────────────────
+
+def test_run_ask_records_relay_timestamps(monkeypatch):
+    """릴레이 경유 시 trace.relay 3필드(ISO8601) 기록 — 응답에는 노출하지 않는다."""
+    store = _store(question_id=61)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch)
+
+    result = graph.run_ask(
+        "q", "vi", relay_meta={"enqueued_at": 1756000000.0, "leased_at": 1756000000.25}
+    )
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    trace = json.loads(params["trace"])
+    assert set(trace["relay"]) == {"enqueued_at", "leased_at", "responded_at"}
+    assert trace["relay"]["enqueued_at"].startswith("2025-")
+    assert trace["relay"]["enqueued_at"].endswith("+00:00")  # ISO8601 UTC
+    assert trace["relay"]["leased_at"] > trace["relay"]["enqueued_at"]
+    assert trace["relay"]["responded_at"] is not None
+
+    # Answer(=API 응답 소스)에는 relay 가 없다
+    assert not hasattr(result, "relay")
+    assert set(result.verify) == {"score", "passed", "gated"}
+
+
+def test_run_ask_direct_path_omits_relay(monkeypatch):
+    """core 직접 경로(비릴레이)는 trace.relay 를 만들지 않는다."""
+    store = _store()
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch)
+
+    graph.run_ask("q", "vi")
+
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    assert "relay" not in json.loads(params["trace"])
+
+
+def test_ask_endpoint_body_never_exposes_relay(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "core")
+    store = _store()
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+    _patch_llm(monkeypatch)
+
+    body = client.post("/api/v1/ask", json={"question": "q", "lang": "vi"}).json()
+
+    assert set(body) == {"answer", "sources", "verify", "trace_id"}
+    assert "relay" not in body and "trace" not in body

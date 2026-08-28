@@ -141,6 +141,8 @@ class RelayItem:
     enqueued_at: float
     state: str = PENDING
     lease_expires_at: float | None = None
+    leased_at: float | None = None      # 측정 #4 릴레이 왕복 계측
+    responded_at: float | None = None   # 측정 #4 릴레이 왕복 계측
     deliver_count: int = 0
     response: dict | None = None  # {"status_code": int, "body": Any}
     event: asyncio.Event = field(default_factory=asyncio.Event)
@@ -153,6 +155,7 @@ class RelayItem:
             "path": self.path,
             "body": self.body,
             "enqueued_at": self.enqueued_at,
+            "leased_at": self.leased_at,
             "deliver_count": self.deliver_count,
         }
 
@@ -241,6 +244,7 @@ class RelayQueue:
                 continue
             item.state = LEASED
             item.lease_expires_at = expires
+            item.leased_at = now
             taken.append(item)
         return taken
 
@@ -268,6 +272,7 @@ class RelayQueue:
             return "duplicate"
         item.state = RESPONDED
         item.lease_expires_at = None
+        item.responded_at = time.time()
         item.response = {"status_code": status_code, "body": body}
         item.event.set()
         return "ok"

@@ -14,6 +14,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from app.agents.retrieve import Chunk, retrieve
 from app.models import Worker
@@ -65,6 +66,13 @@ _INSERT_UNANSWERED = """
 INSERT INTO unanswered_queue (question_id, status) VALUES (%(qid)s, 'open')
 ON CONFLICT (question_id) DO NOTHING
 """
+
+
+def _iso(ts: float | None) -> str | None:
+    """epoch 초 → ISO8601(UTC). None 은 그대로 둔다."""
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
 
 
 def build_context(chunks: list[Chunk]) -> str:
@@ -138,11 +146,19 @@ def _persist(
         return None
 
 
-def run_ask(question: str, lang: str, worker_id: int | None = None) -> Answer:
+def run_ask(
+    question: str,
+    lang: str,
+    worker_id: int | None = None,
+    relay_meta: dict | None = None,
+) -> Answer:
     """POST /ask 본문. 근거 강제 → 무근거 차단(M-05) → qa_logs 기록(M-09).
 
     retrieve(embed HTTP·DB) 단계 예외는 격리한다 — 500 대신 §3 스키마로 gated 응답을 내고,
     unanswered_queue 에는 넣지 않는다(시스템 오류 ≠ 무근거).
+
+    relay_meta(M-28a 릴레이 경유 시에만 전달) = {"enqueued_at", "leased_at"} epoch 초.
+    trace.relay 로만 남기고 API 응답(§3 4필드)에는 노출하지 않는다 — 측정 #4 재료.
     """
     t0 = time.perf_counter()
     trace_id = uuid.uuid4().hex
@@ -205,6 +221,13 @@ def run_ask(question: str, lang: str, worker_id: int | None = None) -> Answer:
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
     trace["latency_ms"] = latency_ms
+    if relay_meta:
+        # 측정 #4: 릴레이 왕복(적재→배포→회신)을 core 처리시간과 분리 계측
+        trace["relay"] = {
+            "enqueued_at": _iso(relay_meta.get("enqueued_at")),
+            "leased_at": _iso(relay_meta.get("leased_at")),
+            "responded_at": _iso(time.time()),
+        }
 
     qid = _persist(
         worker_id=worker_id,

@@ -98,7 +98,10 @@ def test_relay_item_payload_excludes_internals():
     item = q.enqueue("POST", "/api/v1/ask", {"question": "q", "lang": "vi"})
 
     payload = item.as_payload()
-    assert set(payload) == {"request_id", "method", "path", "body", "enqueued_at", "deliver_count"}
+    assert set(payload) == {
+        "request_id", "method", "path", "body", "enqueued_at", "leased_at", "deliver_count",
+    }
+    assert payload["leased_at"] is None  # 아직 미배포
     assert payload["body"] == {"question": "q", "lang": "vi"}
 
 
@@ -330,7 +333,7 @@ def test_poller_dispatch_maps_ask(monkeypatch):
         verify = {"score": 0.0, "passed": True, "gated": False}
         trace_id = "t9"
 
-    def _run_ask(question, lang, worker_id=None):
+    def _run_ask(question, lang, worker_id=None, relay_meta=None):
         seen.update(question=question, lang=lang, worker_id=worker_id)
         return _Res()
 
@@ -352,7 +355,7 @@ def test_poller_dispatch_unknown_path():
 @pytest.mark.asyncio
 async def test_poller_handle_item_posts_respond(monkeypatch):
     monkeypatch.setattr(
-        relay_poller, "dispatch", lambda m, p, b: (200, {"answer": "ok"})
+        relay_poller, "dispatch", lambda m, p, b, meta=None: (200, {"answer": "ok"})
     )
     sent = {}
 
@@ -369,7 +372,7 @@ async def test_poller_handle_item_posts_respond(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_poller_dispatch_failure_responds_500(monkeypatch):
-    def _boom(m, p, b):
+    def _boom(m, p, b, meta=None):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(relay_poller, "dispatch", _boom)
@@ -505,3 +508,75 @@ async def test_business_paths_unaffected_by_guard(monkeypatch):
     assert health.status_code == 200
     assert ask.status_code == 504  # 릴레이 보류 초과 — 403 이 아니다
 
+
+# ── A-2: trace.relay 계측 (내부 전용) ─────────────────────
+
+@pytest.mark.asyncio
+async def test_relay_item_records_leased_and_responded_timestamps():
+    q = _q()
+    item = q.enqueue("POST", "/api/v1/ask", {"question": "q"})
+    assert item.leased_at is None and item.responded_at is None
+
+    batch = await q.poll_pending(hold=1)
+    assert batch[0].leased_at is not None
+    assert item.leased_at >= item.enqueued_at
+
+    q.respond(item.request_id, 200, {"answer": "ok"})
+    assert item.responded_at is not None and item.responded_at >= item.leased_at
+
+    payload = item.as_payload()
+    assert payload["leased_at"] == item.leased_at
+
+
+def test_poller_passes_relay_meta_to_run_ask(monkeypatch):
+    seen = {}
+
+    class _Res:
+        answer = "ok"
+        sources = []
+        verify = {"score": 0.0, "passed": True, "gated": False}
+        trace_id = "t"
+
+    def _run_ask(question, lang, worker_id=None, relay_meta=None):
+        seen["relay_meta"] = relay_meta
+        return _Res()
+
+    monkeypatch.setattr("app.agents.graph.run_ask", _run_ask)
+
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/ask", {"question": "q"}, {"enqueued_at": 1.0, "leased_at": 2.0}
+    )
+
+    assert status == 200
+    assert seen["relay_meta"] == {"enqueued_at": 1.0, "leased_at": 2.0}
+    # 응답 body 는 §3 4필드만 — relay 계측은 들어가지 않는다
+    assert set(body) == {"answer", "sources", "verify", "trace_id"}
+
+
+@pytest.mark.asyncio
+async def test_poller_handle_item_forwards_timestamps(monkeypatch):
+    seen = {}
+
+    def _dispatch(method, path, body, relay_meta=None):
+        seen["relay_meta"] = relay_meta
+        return 200, {"answer": "ok"}
+
+    monkeypatch.setattr(relay_poller, "dispatch", _dispatch)
+
+    class _Client:
+        async def post(self, url, json=None, timeout=None):
+            return httpx.Response(200, request=httpx.Request("POST", url))
+
+    await relay_poller.handle_item(
+        _Client(),
+        {
+            "request_id": "rid",
+            "method": "POST",
+            "path": "/api/v1/ask",
+            "body": {},
+            "enqueued_at": 100.0,
+            "leased_at": 101.5,
+        },
+    )
+
+    assert seen["relay_meta"] == {"enqueued_at": 100.0, "leased_at": 101.5}
