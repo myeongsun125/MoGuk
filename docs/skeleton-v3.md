@@ -156,6 +156,15 @@ CREATE TABLE risk_reports (                         -- M-08
   resolved_by int, resolved_at timestamptz, resolution_note text,
   created_at timestamptz DEFAULT now(), processed_at timestamptz);
 
+CREATE TABLE risk_report_events (                   -- M-08a 이력·감사 (append-only)
+  id serial PRIMARY KEY,
+  report_id int NOT NULL REFERENCES risk_reports(id),   -- ON DELETE 미지정: 감사 이력 보존
+  actor text,                                       -- 'system'|'worker:<id>'|'admin:<id>'
+  action text NOT NULL,                             -- 'report_submitted'|'summary_done'|'summary_failed'|...
+  from_state text, to_state text, detail text,
+  created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX risk_report_events_report_idx ON risk_report_events(report_id, id);
+
 CREATE TABLE jobs (                                 -- M-18 비동기 큐 (Redis 없음)
   id serial PRIMARY KEY, kind text NOT NULL,        -- 'stt_summarize'|'ingest_answer'|...
   payload jsonb NOT NULL,
