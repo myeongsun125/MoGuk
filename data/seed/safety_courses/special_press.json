@@ -1,0 +1,27 @@
+{
+  "course_type": "special",
+  "title": "동력 프레스기계 특별안전보건교육",
+  "required_minutes": 960,
+  "legal_basis": "산업안전보건법 시행규칙 별표4 라. 특별교육 — 16시간 이상(최초 작업에 종사하기 전 4시간 이상 실시하고, 12시간은 3개월 이내에서 분할하여 실시 가능). 교육내용 = 별표5 제1호 라목 제11호(동력에 의하여 작동되는 프레스기계를 5대 이상 보유한 사업장에서 해당 기계로 하는 작업)",
+  "src": ["LAW-KOSH-ENF 별표4 라. 특별교육", "LAW-KOSH-ENF 별표5 제1호 라목 제11호", "LAW-KOSH-ENF 제26조①"],
+  "content_doc_refs": [
+    "data/seed/manuals/press_manual.md",
+    "data/seed/manuals/press_manual.md#4-안전-수칙",
+    "data/seed/manuals/press_manual.md#6-비상-정지",
+    "data/sources/text/LAW-KOSH-ENF.md",
+    "data/sources/text/KOSHA-PRESS.md",
+    "data/seed/kosha/README.md"
+  ],
+  "quiz_set_refs": ["data/seed/quiz/quiz_safety_1.json"],
+  "note": "별표5 제1호 라목 제11호의 교육내용 5항목을 단원으로 대응. 분할 실시 규칙(최초 4시간 + 3개월 내 12시간)은 legal_basis 참조. 시연·교육용 초안",
+  "curriculum": [
+    {"unit": "프레스의 특성과 위험성에 관한 사항", "minutes": 180, "doc_ref": "press_manual.md §1, §2", "category": "process", "src": "LAW-KOSH-ENF 별표5 제1호 라목 제11호; NCS-COMMON p.34"},
+    {"unit": "방호장치 종류와 취급에 관한 사항", "minutes": 240, "doc_ref": "press_manual.md §1.3, §4.2", "category": "safety", "src": "LAW-KOSH-ENF 별표5 제1호 라목 제11호; KOSHA-PRESS p.2; LAW-KOSH-RULE 제103조"},
+    {"unit": "안전작업방법에 관한 사항", "minutes": 240, "doc_ref": "press_manual.md §3.1, §3.2, §3.4, §3.5", "category": "instruction", "src": "LAW-KOSH-ENF 별표5 제1호 라목 제11호; NCS-COMMON p.34; NCS-COMMON p.35; KOSHA-PRESS-4 6.2.2"},
+    {"unit": "프레스 안전기준에 관한 사항", "minutes": 180, "doc_ref": "press_manual.md §4.1, §4.3, §4.4", "category": "safety", "src": "LAW-KOSH-ENF 별표5 제1호 라목 제11호; LAW-KOSH-RULE 제103조; LAW-KOSH-RULE 제104조; LAW-KOSH-RULE 제92조"},
+    {"unit": "그 밖에 안전·보건관리에 필요한 사항", "minutes": 120, "doc_ref": "press_manual.md §4.5, §5, §6", "category": "safety", "src": "LAW-KOSH-ENF 별표5 제1호 라목 제11호; KOSHA-PRESS-4 6.1.2; NCS-COMMON p.35"}
+  ],
+  "draft": true,
+  "review_note": "07 재생성 초안(2026-08-29). 교육시간·내용은 법령 별표 원문 기준, 단원 분배(분)는 시연용 가상 배분",
+  "redistribution_trigger": "raw/ 재배포 검토 트리거: 레포 공개 전환 / raw 포함 외부 제출 / 상업화. 해당 시 미표시\n2건(M-96·M-138)과 PRESS-3 페이지 추출본 우선 재검토."
+}
