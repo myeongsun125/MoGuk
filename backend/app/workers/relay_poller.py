@@ -35,17 +35,24 @@ def edge_api_url() -> str:
 
 
 def dispatch(
-    method: str, path: str, body: dict, relay_meta: dict | None = None
+    method: str,
+    path: str,
+    body: dict,
+    relay_meta: dict | None = None,
+    identity: dict | None = None,
 ) -> tuple[int, object]:
     """릴레이 item 을 로컬 처리. (status_code, body). 예외는 호출부가 5xx 로 변환한다.
 
     relay_meta 는 trace.relay 계측용으로만 쓰이고 응답 body 에는 들어가지 않는다.
+    identity(M-28b ②) = edge 가 검증해 넘긴 {wid, tenant} — 서비스 함수의 worker_id 로 소비.
     """
+    worker_id = (identity or {}).get("wid")
     if method == "POST" and path == "/api/v1/ask":
         from app.agents.graph import run_ask
 
         result = run_ask(
-            body.get("question", ""), body.get("lang", "vi"), worker_id=None, relay_meta=relay_meta
+            body.get("question", ""), body.get("lang", "vi"),
+            worker_id=worker_id, relay_meta=relay_meta
         )
         return 200, {
             "answer": result.answer,
@@ -61,6 +68,7 @@ def dispatch(
             body.get("original_text", ""),
             lang=body.get("lang"),
             source=body.get("source", "text"),
+            worker_id=worker_id,
         )
     if method == "POST" and path in ("/api/v1/auth/activate", "/api/v1/auth/login"):
         # M-15: 신원·DB 는 core 소유. 라우터 재호출 없이 서비스 함수를 직접 부른다.
@@ -91,6 +99,7 @@ async def handle_item(client: httpx.AsyncClient, item: dict) -> None:
             item.get("path", ""),
             item.get("body") or {},
             relay_meta,
+            item.get("identity"),      # M-28b ②
         )
     except Exception as exc:  # noqa: BLE001 — 개별 실패가 루프를 끊지 않는다
         log.error("relay poller: 디스패치 실패 request_id=%s %s: %s", request_id, type(exc).__name__, exc)

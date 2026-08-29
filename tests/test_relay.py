@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import json
 import uuid
 
 import httpx
@@ -99,9 +100,11 @@ def test_relay_item_payload_excludes_internals():
 
     payload = item.as_payload()
     assert set(payload) == {
-        "request_id", "method", "path", "body", "enqueued_at", "leased_at", "deliver_count",
+        "request_id", "method", "path", "body", "enqueued_at", "leased_at",
+        "deliver_count", "identity",
     }
-    assert payload["leased_at"] is None  # 아직 미배포
+    assert payload["leased_at"] is None   # 아직 미배포
+    assert payload["identity"] is None    # M-28b ④: 미인증 경로
     assert payload["body"] == {"question": "q", "lang": "vi"}
 
 
@@ -356,7 +359,8 @@ def test_poller_dispatch_unknown_path():
 @pytest.mark.asyncio
 async def test_poller_handle_item_posts_respond(monkeypatch):
     monkeypatch.setattr(
-        relay_poller, "dispatch", lambda m, p, b, meta=None: (200, {"answer": "ok"})
+        relay_poller, "dispatch",
+        lambda m, p, b, meta=None, ident=None: (200, {"answer": "ok"})
     )
     sent = {}
 
@@ -373,7 +377,7 @@ async def test_poller_handle_item_posts_respond(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_poller_dispatch_failure_responds_500(monkeypatch):
-    def _boom(m, p, b, meta=None):
+    def _boom(m, p, b, meta=None, ident=None):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(relay_poller, "dispatch", _boom)
@@ -558,8 +562,9 @@ def test_poller_passes_relay_meta_to_run_ask(monkeypatch):
 async def test_poller_handle_item_forwards_timestamps(monkeypatch):
     seen = {}
 
-    def _dispatch(method, path, body, relay_meta=None):
+    def _dispatch(method, path, body, relay_meta=None, identity=None):
         seen["relay_meta"] = relay_meta
+        seen["identity"] = identity
         return 200, {"answer": "ok"}
 
     monkeypatch.setattr(relay_poller, "dispatch", _dispatch)
@@ -581,3 +586,120 @@ async def test_poller_handle_item_forwards_timestamps(monkeypatch):
     )
 
     assert seen["relay_meta"] == {"enqueued_at": 100.0, "leased_at": 101.5}
+
+
+# ── M-28b: 인증 컨텍스트 릴레이 전파 ─────────────────────
+
+def test_relay_identity_defaults_to_none():
+    """M-28b ④: 미인증 경로는 identity=None 으로 기록된다."""
+    q = _q()
+    item = q.enqueue("POST", "/api/v1/ask", {"question": "q"})
+    assert item.identity is None
+    assert item.as_payload()["identity"] is None
+
+
+def test_relay_identity_carried_in_payload():
+    """M-28b ①③: enqueue 로 받은 identity 가 as_payload 에 그대로 실린다."""
+    q = _q()
+    item = q.enqueue("POST", "/api/v1/ask", {"question": "q"}, {"wid": 7, "tenant": "axis_demo"})
+    assert item.identity == {"wid": 7, "tenant": "axis_demo"}
+    assert item.as_payload()["identity"] == {"wid": 7, "tenant": "axis_demo"}
+
+
+@pytest.mark.asyncio
+async def test_poller_forwards_identity_to_dispatch(monkeypatch):
+    """M-28b ②: core 가 item.identity 를 dispatch 로 넘긴다."""
+    seen = {}
+
+    def _dispatch(method, path, body, relay_meta=None, identity=None):
+        seen["identity"] = identity
+        return 200, {"ok": True}
+
+    monkeypatch.setattr(relay_poller, "dispatch", _dispatch)
+
+    class _Client:
+        async def post(self, url, json=None, timeout=None):
+            return httpx.Response(200, request=httpx.Request("POST", url))
+
+    await relay_poller.handle_item(
+        _Client(),
+        {"request_id": "r", "method": "POST", "path": "/api/v1/ask", "body": {},
+         "identity": {"wid": 12, "tenant": "axis_demo"}},
+    )
+
+    assert seen["identity"] == {"wid": 12, "tenant": "axis_demo"}
+
+
+def test_dispatch_consumes_identity_as_worker_id(monkeypatch):
+    """M-28b ②: identity.wid 가 서비스 함수의 worker_id 로 소비된다(하드코딩 None 제거)."""
+    seen = {}
+
+    class _Res:
+        answer = "ok"; sources = []; verify = {}; trace_id = "t"
+
+    def _run_ask(question, lang, worker_id=None, relay_meta=None):
+        seen["worker_id"] = worker_id
+        return _Res()
+
+    monkeypatch.setattr("app.agents.graph.run_ask", _run_ask)
+
+    relay_poller.dispatch("POST", "/api/v1/ask", {"question": "q"}, None, {"wid": 33})
+    assert seen["worker_id"] == 33
+
+    relay_poller.dispatch("POST", "/api/v1/ask", {"question": "q"}, None, None)
+    assert seen["worker_id"] is None      # 미인증 경로
+
+
+@pytest.mark.asyncio
+async def test_edge_extracts_only_wid_and_tenant(monkeypatch):
+    """M-28b ①: 원 JWT·Authorization 헤더는 릴레이 경계를 넘지 않는다."""
+    from app.services import auth as auth_service
+
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-0123456789abcdef0123456789")
+    monkeypatch.setenv("RELAY_HOLD_S", "2")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "3")
+    relay.queue.reset()
+
+    token = auth_service.issue_token_pair(41, "axis_demo")["jwt"]
+    app = build_app("edge")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://edge"
+    ) as c:
+        posted = asyncio.create_task(
+            c.post("/api/v1/ask", json={"question": "q", "lang": "vi"},
+                   headers={"Authorization": f"Bearer {token}"})
+        )
+        items = (await c.get("/internal/relay/pending")).json()["items"]
+        assert len(items) == 1
+        ident = items[0]["identity"]
+        assert ident == {"wid": 41, "tenant": "axis_demo"}     # wid·tenant 만
+        assert token not in json.dumps(items[0])               # 원 JWT 미통과
+        assert "authorization" not in json.dumps(items[0]).lower()
+        assert "identity" not in items[0]["body"]              # body 혼입 금지
+
+        await c.post(f"/internal/relay/{items[0]['request_id']}/respond",
+                     json={"status_code": 200, "body": {"answer": ""}})
+        await posted
+    relay.queue.reset()
+
+
+@pytest.mark.asyncio
+async def test_edge_unauthenticated_identity_is_none(monkeypatch):
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-0123456789abcdef0123456789")
+    monkeypatch.setenv("RELAY_HOLD_S", "2")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "3")
+    relay.queue.reset()
+
+    app = build_app("edge")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://edge"
+    ) as c:
+        posted = asyncio.create_task(c.post("/api/v1/ask", json={"question": "q"}))
+        items = (await c.get("/internal/relay/pending")).json()["items"]
+        assert items[0]["identity"] is None
+        await c.post(f"/internal/relay/{items[0]['request_id']}/respond",
+                     json={"status_code": 200, "body": {}})
+        await posted
+    relay.queue.reset()

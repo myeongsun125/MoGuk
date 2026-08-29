@@ -19,10 +19,11 @@ M-08b ④ 계약:
 import asyncio
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.routers.auth import optional_identity
 from app.services import risk_reports
 from app.services.relay import queue
 from app.services.system_service import role
@@ -61,7 +62,11 @@ def _reject_unknown_fields(raw: object) -> None:
 
 
 @router.post("", status_code=202)
-async def create_report(body: ReportRequest, request: Request) -> JSONResponse:
+async def create_report(
+    body: ReportRequest,
+    request: Request,
+    identity: dict | None = Depends(optional_identity),
+) -> JSONResponse:
     _reject_unknown_fields(await request.json())
 
     if body.source == risk_reports.SOURCE_VOICE:
@@ -74,13 +79,14 @@ async def create_report(body: ReportRequest, request: Request) -> JSONResponse:
         )
 
     if role() == "edge":
-        item = queue.enqueue("POST", PATH, body.model_dump())
+        item = queue.enqueue("POST", PATH, body.model_dump(), identity)
         relayed = await queue.wait_for_response(item)
         return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
 
     # 원문 적재 + 요약 잡 enqueue + report_submitted 이벤트를 한 트랜잭션으로. LLM 호출 0.
     result = await asyncio.to_thread(
-        risk_reports.submit_text_report, body.original_text, body.lang, body.source
+        risk_reports.submit_text_report,
+        body.original_text, body.lang, body.source, (identity or {}).get("wid"),
     )
     return JSONResponse(status_code=202, content=result)
 
