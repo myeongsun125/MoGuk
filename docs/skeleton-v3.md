@@ -209,6 +209,9 @@ CREATE TABLE access_logs (                          -- M-07 감사 로그
 ```
 POST /auth/activate        {token, pin}                    → {jwt, refresh}
 POST /auth/login           {emp_no, pin}                   → {jwt, refresh}
+POST /auth/refresh         {refresh}                       → {jwt, refresh}   # 회전 = 새 쌍 발급. 구 refresh 무효화는 미결(M-15a)
+GET  /auth/me              (Authorization: Bearer <jwt>)   → {worker_id, tenant, typ}   # 보호 엔드포인트 대표 — 토큰 클레임만 반환(DB 미접근)
+# /auth/* 실패는 전부 401 + 동일 메시지 — 계정·토큰 존재 여부를 응답으로 구분하지 않는다
 GET  /learn/cards?module=
 POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}
 POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id}
@@ -351,3 +354,4 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-08a | risk_report_events 신설 — 이력·감사 로그 (2026-08-29, 명선 확정)<br>결정: ① append-only 테이블 risk_report_events를 §2 계약 목록에 추가(22번째). ② 역할 분담 — M-08 컬럼(status·acked_by/at·resolved_by/at·resolution_note) = 현재 상태 스냅숏(조회 소스), events = 전이·확인·열람 전 이력(감사·lineage 정본). 이력 질의는 events만 정본(스냅숏/이력 소스 분리로 R4 정합). ③ M-08c의 reporter_confirmed/corrected·original_viewed 이벤트는 이 테이블에 기록.<br>R6: M-08c 등재문이 이벤트 기록을 전제하나 수용 테이블이 §2 21테이블 밖(SB 상신 0829). 영향: SB(구현), JH(events[] 소비) | 확정 (2026-08-29, 명선) |
 | M-08b | 위험보고 접수·로컬 실패 처리 (2026-08-28, 명선 확정)<br>결정: ① 접수는 LLM 비의존 결정론 경로 — POST /reports는 원문 무조건 적재 + 202 + submitted(로컬 LLM 정지 시에도 신고 소실 0). ② 요약·severity 생성 실패(재시도 3회 소진 = local_failed)는 원문 보존 + 처리상태 실패 종단값 마킹(컬럼·값 집합은 001 정본) + 관리자 알림. 외부 LLM 폴백 금지(원문 민감성, 로컬 티어 유지). ③ 실패는 감사 이벤트로 기록, 요약 재생성은 V5. ④ §3 계약 동기 개정: 요청 {original_text, lang, source?='text'} → 응답 202 {id, status, created_at}. 테넌트·reporter는 인증 컨텍스트에서 서버 도출 — 요청 본문 수신 금지(위조 방지, M-04 정합). 구 표기 {text}→{report_id} 폐기(001 정본 컬럼명·① status 응답의 R4 귀결), §3 본문 동일 개정.<br>R6: WORKORDER V3-1 "3회 실패 시 보존+알림"의 결정 원장 격상. 채번 정리: 세션 간 충돌로 일시 M-05a로 유통 — M-05a는 unanswered_queue 적재 기준(별건) 확정, 위험보고 계열은 M-08 하위 재채번(08-29). 영향: SB(구현), JH(실패 표시 소비·계약 연동) | 확정 (2026-08-28, 명선) |
 | M-04b | 001 search_path 정정 — public 후순위 포함 (2026-08-29, 명선 확정 / SB 상신)<br>결정: 001 테넌트 템플릿의 SET search_path를 tenant_{slug}, public 순으로 정정. 객체 생성·조회 1순위는 테넌트 스키마 유지, public은 확장 타입(vector 등) 해석 전용 후순위. 크로스 테넌트 참조는 스키마 명시 없인 여전히 미해석(M-04 격리 유지).<br>R6: CREATE EXTENSION vector가 public에 타입 생성하는데 search_path가 public 제외 → fresh 적용 100% 실패(R2급 논리 불가, SB 상신 0829). 최소 정정. 영향: SB(#23), MS(EC2 적용) | 확정 (2026-08-29, 명선) |
+| M-15a | 리프레시 토큰 무효화 저장소 (미결, 2026-08-29 SB 상신)<br>후보: refresh_tokens 테이블 신설 또는 workers.token_version 컬럼(001 DDL 변경 수반). 미결 사유: V5 동결 전 마감 우선, 폐쇄 데모 환경에서 리스크 수용. 명시 리스크: 탈취된 리프레시 토큰이 만료(14일)까지 유효 — 서버측 무효화 수단 부재. 본선 이후 판정. 영향: SB, MS(적용) | 미결 (2026-08-29) |
