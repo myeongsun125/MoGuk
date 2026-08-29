@@ -7,9 +7,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_ROOT = path.resolve(__dirname, "..");
 const ASSETS_DIR = path.resolve(FRONTEND_ROOT, "..", "docs", "assets");
-const MOCK_PNG = path.join(ASSETS_DIR, "v4-ask-mock-390.png");
-const GATED_PNG = path.join(ASSETS_DIR, "v4-ask-gated-390.png");
-const VIDEO_OUT = path.join(ASSETS_DIR, "v4-rehearsal.webm");
+
+// OUT_SUFFIX=<name> npm run rehearse — 탐색/실패 예상 실행이 canonical v4-* 산출물을
+// 덮어쓰지 않도록 파일명을 분리한다. 생략하면 기존과 동일한 v4-* 이름 그대로.
+const OUT_SUFFIX = process.env.OUT_SUFFIX ? `-${process.env.OUT_SUFFIX}` : "";
+const MOCK_PNG = path.join(ASSETS_DIR, `v4-ask-mock-390${OUT_SUFFIX}.png`);
+const GATED_PNG = path.join(ASSETS_DIR, `v4-ask-gated-390${OUT_SUFFIX}.png`);
+const VIDEO_OUT = path.join(ASSETS_DIR, `v4-rehearsal${OUT_SUFFIX}.webm`);
 const PORT = 5184;
 const VIEWPORT = { width: 390, height: 844 };
 
@@ -43,6 +47,7 @@ async function main() {
 
   const { baseUrl, server } = await resolveBaseUrl();
   console.log(`BASE_URL = ${baseUrl}`);
+  console.log(`OUT_SUFFIX = ${OUT_SUFFIX || "(none — canonical v4-* 파일명)"}`);
 
   const browser = await chromium.launch();
   const context = await browser.newContext({

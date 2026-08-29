@@ -9,3 +9,7 @@
   실연동(SB V2-2) cutover 시 이 두 파일만 교체.
 - 개발: `npm i && npm run dev` (dev 서버가 `/api/v1` → localhost:8000 (compose 노출 포트, prod는 Caddy→edge-api) 프록시)
 - 빌드: `npm run build` / 스크린샷: `npm run shot` → `docs/assets/v2-1-ask-390.png`
+- V4 리허설: `npm run rehearse` → `docs/assets/v4-*` (mock 로컬 서버 자동 기동).
+  배포본 대상 재검증은 `BASE_URL=<url> npm run rehearse` — 실패 예상/탐색 실행이 canonical
+  `v4-*` 산출물을 덮어쓰지 않도록 `OUT_SUFFIX=<name>`으로 파일명 분리 가능
+  (예: `OUT_SUFFIX=ec2-1st BASE_URL=<url> npm run rehearse` → `v4-rehearsal-ec2-1st.webm`).
