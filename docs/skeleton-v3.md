@@ -211,9 +211,9 @@ POST /auth/activate        {token, pin}                    → {jwt, refresh}
 POST /auth/login           {emp_no, pin}                   → {jwt, refresh}
 GET  /learn/cards?module=
 POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}
-POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id}
+POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id} | edge 보류 상한 30s 초과 시 504 (M-28a)
 POST /ask/voice            multipart(audio≤60s, lang)      → 동일 | 폴백 안내 응답
-POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501
+POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501 | edge 보류 상한 30s 초과 시 504 (M-28a)
 GET  /reports/{id}                                          → 상태 조회(접수 확인 화면)
 POST /chat                 {message}                        → {reply}          # 로컬 티어 고정
 GET  /notifications        / POST /notifications/{id}/read
