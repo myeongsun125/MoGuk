@@ -4,3 +4,5 @@
 *.jpeg binary
 *.pdf binary
 *.mjs text
+# 근거 원문 EOL 변환 제외 (M-29 원문 무결성)
+data/sources/raw/** -text
