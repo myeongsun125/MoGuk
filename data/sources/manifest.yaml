@@ -1,0 +1,224 @@
+# data/sources/manifest.yaml — M-29 근거 자료 SSOT. 여기 없는 ID는 어디서도 쓸 수 없다.
+# status: pending | fetched | collected | hold(라이선스 미확인) | fetch_failed | excluded(제외 확정 — 사유 note 필수)
+# lang 표기: manifest 'id'(인도네시아어) ↔ 시드 산출물 필드 접두사 '_in' (D5, 2026-08-29 확정)
+sources:
+  - id: LAW-KOSH-RULE
+    title: 산업안전보건기준에 관한 규칙
+    publisher: 고용노동부
+    url: https://www.law.go.kr
+    license: 법령(저작권 비대상)
+    lang: ko
+    target: [프레스 등의 방호장치, 금형조정작업의 위험 방지, 정비·청소·급유 시 운전정지, 공작기계(선반) 관련 조문]
+    file: data/sources/raw/LAW-KOSH-RULE.xml
+    retrieved_at: 2026-08-27T08:40:17Z
+    status: fetched
+    note: "MST=273603 공포 20250901 현행. 조문 853건. target 대응 — 프레스 방호장치=제103조(프레스 등의 위험 방지), 금형조정=제104조(금형조정작업의 위험 방지), 운전정지=제92조(정비 등의 작업 시의 운전정지 등)·제91조(고장난 기계의 정비 등), 선반=제87조제6항(원동기ㆍ회전축 등의 위험 방지, 돌출 회전 가공물 덮개ㆍ울)·제102조(탑승의 금지, 수직선반 테이블). 선반 전용 조문은 없음"
+  - id: LAW-KOSH-ENF
+    title: 산업안전보건법 시행규칙 — 안전보건교육 별표(교육시간·교육내용, 프레스 특별교육 항목)
+    publisher: 고용노동부
+    url: https://www.law.go.kr
+    license: 법령(저작권 비대상)
+    lang: ko
+    target: [특별교육 대상 작업 중 프레스 항목, 교육시간]
+    file: data/sources/raw/LAW-KOSH-ENF.xml
+    retrieved_at: 2026-08-27T08:40:17Z
+    status: fetched
+    note: "MST=288431 공포 20260728 현행. 조문 278건. target 대응 — 제26조(교육시간 및 교육내용 등) + 별표4(안전보건교육 교육과정별 교육시간)·별표5(안전보건교육 교육대상별 교육내용). 프레스 특별교육 대상작업=별표5 제1호 라목 제11호(동력 프레스기계 5대 이상 보유 사업장). 별표4·5 모두 별표내용 텍스트 확보(첨부 의존 아님)"
+  - id: KOSHA-LATHE
+    title: "선반 방호조치에 관한 기술지침 (KOSHA GUIDE M-96-2012, 2012-06-20 공표)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 미표시 — KOSHA 공표 기술지침, 출처 표시 인용"
+    lang: ko
+    target: [선반 방호·안전작업]
+    file: data/sources/raw/KOSHA-LATHE__선반방호조치-기술지침.pdf
+    retrieved_at: 2026-08-29T09:20:54Z
+    status: fetched
+    note: "포털 기술지원규정 검색어 선반. 관련 법규 규칙 제2편 제1장 제2절(공작기계). 포털 게시 확인 2026-08-29. 공공누리 미표시 — 출처 표시 인용. URL 보완 예정"
+  - id: KOSHA-LATHE-2
+    title: "[안전기준] 공작기계 (2024-12-24)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: ko
+    target: [공작기계(선반) 안전기준]
+    file: data/sources/raw/KOSHA-LATHE-2__안전기준-공작기계.pdf
+    retrieved_at: 2026-08-29T09:32:03Z
+    status: fetched
+    note: "규칙 제87조 계열 해설. 발간번호 2024-교육혁신실-840. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: KOSHA-LATHE-3
+    title: 키메세지(10호_선반 가공작업) (2025-06-20)
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 2유형"
+    lang: ko
+    target: [선반 가공작업 수칙 요점]
+    file: data/sources/raw/KOSHA-LATHE-3__키메시지-선반가공작업.pdf
+    retrieved_at: 2026-08-29T09:32:26Z
+    status: fetched
+    note: "ko 단일. 발간번호 2025-교육혁신실-324. 공공누리 2유형: 출처 표시 + 상업적 이용 금지. URL 보완 예정"
+  - id: KOSHA-LATHE-4
+    title: "[안전기준] 원동기·회전축 위험방지 등 (2024-12-24)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: ko
+    target: [제87조 계열 해설]
+    file: data/sources/raw/KOSHA-LATHE-4__안전기준-원동기회전축.pdf
+    retrieved_at: 2026-08-29T09:32:47Z
+    status: fetched
+    note: "발간번호 2024-교육혁신실-837. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: KOSHA-PRESS
+    title: "[안전기준] 프레스 및 전단기 (2024-12-24)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: ko
+    target: [프레스 방호장치(§103), 금형조정(§104)]
+    file: data/sources/raw/KOSHA-PRESS__안전기준-프레스전단기.pdf
+    retrieved_at: 2026-08-29T09:33:05Z
+    status: fetched
+    note: "발간번호 2024-교육혁신실-841. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: KOSHA-PRESS-2
+    title: "[실무길잡이 교안] 금속가공기계제조업(프레스제조) (2026-06-30)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: ko
+    target: [프레스 작업 위험요인·수칙]
+    file: data/sources/raw/KOSHA-PRESS-2__교안-프레스제조업.pptx
+    retrieved_at: 2026-08-29T09:34:05Z
+    status: fetched
+    note: "pptx 43MB. 반입 시 원본 확장자 .ppt → 실포맷(PowerPoint 2007+/OOXML)에 맞춰 .pptx로 교정. 발간번호 2026-교육총괄실-440. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: KOSHA-PRESS-3
+    title: 사고다발 위험설비 Key Message(프레스) (2024-산업안전보건인증원-452)
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: [vi, id]
+    target: [프레스 금형조정·교체 수칙 요점(vi·id)]
+    file:
+      vi: data/sources/raw/KOSHA-PRESS-3_vi__키메시지-프레스.jpg
+      id: data/sources/raw/KOSHA-PRESS-3_id__키메시지-프레스.jpg
+    retrieved_at: 2026-08-29T10:34:57Z
+    status: fetched
+    note: "세트=vi·id 완결. 다국어 배포 세트(영/필리핀·중·인니·태·베트남·캄보디아·미얀마·네팔) — 페이지 언어 표기 기준. vi·id 포함 공식 확인. ko판 부재 확인(2026-08-29 명선). 용도: phrases 원문 인용·문구 대조. ko 대조쌍 없음 → glossary 페어링 근거 불사용. 발간번호 2024-산업안전보건인증원-452. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: KOSHA-PRESS-4
+    title: "프레스 금형작업의 안전에 관한 기술지침 (KOSHA GUIDE M-138-2012, 2012-06-20 공표)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 미표시 — KOSHA 공표 기술지침, 출처 표시 인용"
+    lang: ko
+    target: [금형 교체·조정 절차]
+    file: data/sources/raw/KOSHA-PRESS-4__프레스금형작업-기술지침.pdf
+    retrieved_at: 2026-08-29T09:40:30Z
+    status: fetched
+    note: "관련 법규 규칙 제103조 명기, §104 영역(금형 설치·해체·안전블록·LOTO) 포함. 포털 게시 확인 2026-08-29. 공공누리 미표시 — 출처 표시 인용. URL 보완 예정"
+  - id: KOSHA-COMMON-1
+    title: "[안전기준] 방호장치의 해제금지 등 (2024-12-24)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: ko
+    target: [방호장치 해제금지, 정비 시 운전정지(§91·92)]
+    file: data/sources/raw/KOSHA-COMMON-1__안전기준-방호장치해제금지.pdf
+    retrieved_at: 2026-08-29T09:34:50Z
+    status: fetched
+    note: "발간번호 2024-교육혁신실-838. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: KOSHA-COMMON-2
+    title: 12대 핵심 안전수칙 (2025-안전문화홍보실-1038)
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 2유형"
+    lang: ko
+    target: [공통 핵심 수칙]
+    file: data/sources/raw/KOSHA-COMMON-2__12대핵심안전수칙.pdf
+    retrieved_at: 2026-08-29T09:36:13Z
+    status: fetched
+    note: "발간번호 2025-안전문화홍보실-1038. 공공누리 2유형: 출처 표시 + 상업적 이용 금지. URL 보완 예정"
+  - id: KOSHA-COMMON-3
+    title: 키메시지(7호_끼임) (2026-04-24)
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 2유형"
+    lang: ko
+    target: [끼임 방지 공통 수칙]
+    file: data/sources/raw/KOSHA-COMMON-3__키메시지-끼임.pdf
+    retrieved_at: 2026-08-29T10:36:05Z
+    status: fetched
+    note: "발간번호 2026-교육총괄실-315. 공공누리 2유형: 출처 표시 + 상업적 이용 금지. URL 보완 예정"
+  - id: KOSHA-CASE-1
+    title: "[중대재해] 유압프레스 금형 수정작업 중 끼임 (2025-12-18)"
+    publisher: 안전보건공단
+    url: null
+    license: "공공누리 4유형"
+    lang: ko
+    role: case
+    target: [사례]
+    file: data/sources/raw/KOSHA-CASE-1__중대재해-유압프레스금형끼임.pdf
+    retrieved_at: 2026-08-29T09:36:42Z
+    status: fetched
+    note: "role: case — 07 매뉴얼 근거 아님, V6+ 교육콘텐츠용 (D10). 발간번호 2025-교육혁신실-2115. 공공누리 4유형: 출처 표시 + 상업적 이용 금지 + 변경 금지 — 원문 무변형 발췌만. URL 보완 예정"
+  - id: NCS-LATHE
+    title: 안전규정준수(선반가공) 1502010112_16v1
+    publisher: 교육부·한국직업능력연구원
+    url: null
+    license: NCS 이용조건(출처 명시·교육적 목적, 제3자 저작물 제외)
+    lang: ko
+    target: [선반 안전수칙]
+    file: data/sources/raw/NCS-LATHE__학습모듈-안전규정준수.pdf
+    retrieved_at: 2026-08-29T09:50:47Z
+    status: fetched
+    note: "텍스트만 사용, 도표·사진·삽화·도면 발췌 금지. URL 보완 예정"
+  - id: NCS-LATHE-2
+    title: 기본 작업(선반가공) 1502010104_16v4
+    publisher: 교육부·한국직업능력연구원
+    url: null
+    license: NCS 이용조건(출처 명시·교육적 목적, 제3자 저작물 제외)
+    lang: ko
+    target: [선반 표준 작업 절차]
+    file: data/sources/raw/NCS-LATHE-2__학습모듈-기본작업.pdf
+    retrieved_at: 2026-08-29T09:51:33Z
+    status: fetched
+    note: "텍스트만 사용, 도표·사진·삽화·도면 발췌 금지. URL 보완 예정"
+  - id: NCS-COMMON
+    title: 안전규정 준수·대책수립 1502010608_14v2
+    publisher: 교육부·한국직업능력연구원
+    url: null
+    license: NCS 이용조건(출처 명시·교육적 목적, 제3자 저작물 제외)
+    lang: ko
+    target: [기계가공 공통 안전규정]
+    file: data/sources/raw/NCS-COMMON__학습모듈-안전규정준수대책수립.pdf
+    retrieved_at: 2026-08-29T10:08:30Z
+    status: fetched
+    note: "텍스트만 사용, 도표·사진·삽화·도면 발췌 금지. URL 보완 예정"
+  - id: NCS-PRESS
+    title: null            # NCS 학습모듈 프레스가공 — 작업 절차 단원
+    publisher: 교육부·한국직업능력연구원
+    url: null
+    license: "해당없음(자료 부재 — excluded)"
+    lang: ko
+    file: null
+    retrieved_at: null
+    status: excluded
+    note: "NCS 학습모듈 프레스 작업 세분류 부재 — 모듈명(안전규정 전수 17건·프레스 150건·판금·소성) 및 분류번호 15020 대역 전수(150201 절삭/150202 특수가공/150203 금형) 양축 확인, 2026-08-29 명선"
+  - id: KOSHA-ML-01        # 16개국어 자료 — ko/vi/id 3파일 한 세트, ML-02·03 동일 형식으로 추가
+    title: null
+    publisher: 안전보건공단
+    url: null
+    license: 미확인
+    lang: [ko, vi, id]
+    file: {ko: null, vi: null, id: null}
+    retrieved_at: null
+    status: pending
+    note: "미확보 — 07은 M-29 폴백(vi·id 번역 draft:true)으로 진행. 프레스 도메인 문구 번역 근거는 KOSHA-PRESS-3(vi·id)로 부분 충족, 선반 도메인은 폴백 유지 (D9, 2026-08-29 명선)"
+  - id: EPS-GUIDE
+    title: null            # 고용허가제 취업교육 교재 또는 다국어 안전 가이드 1건
+    publisher: 한국산업인력공단
+    url: null
+    license: 미확인
+    lang: [ko, vi, id]
+    file: {ko: null, vi: null, id: null}
+    retrieved_at: null
+    status: pending
+    note: "미확보 — 후속 보강 (D9, 2026-08-29 명선)"
