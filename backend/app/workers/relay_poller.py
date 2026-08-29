@@ -6,7 +6,9 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
 디스패치는 라우터를 HTTP 로 다시 부르지 않고(재귀 금지) 처리 함수를 직접 호출한다.
 대상: POST /api/v1/ask(run_ask) · POST /api/v1/reports(submit_text_report, M-08b 배선)
      · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선)
-     · POST /api/v1/reports/{id}/confirm(risk_reports.confirm, M-08c 배선).
+     · POST /api/v1/reports/{id}/confirm(risk_reports.confirm, M-08c 배선)
+     · GET /api/v1/reports/{id} · GET /api/v1/admin/reports?status= · GET /api/v1/admin/reports/{id}
+     · POST /api/v1/admin/reports/{id}/ack|resolve  (M-28c ① — method 축 추가).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -19,6 +21,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -35,6 +39,59 @@ def edge_api_url() -> str:
     return (os.getenv("EDGE_API_URL") or "http://edge-api:8000").rstrip("/")
 
 
+def _path_id(route: str, idx: int, segments: int | None = None) -> int | None:
+    """경로 세그먼트에서 정수 id 추출. 형식 위반이면 None(호출부가 404).
+
+    segments 를 주면 세그먼트 수까지 일치해야 한다 — `/reports/{id}/confirm` 같은
+    하위 경로가 `/reports/{id}` 로 오인되는 것을 막는다.
+    """
+    parts = route.split("/")
+    if segments is not None and len(parts) != segments:
+        return None
+    try:
+        return int(parts[idx])
+    except (IndexError, ValueError):
+        return None
+
+
+def _dispatch_get(route: str, query: dict) -> tuple[int, object]:
+    """M-28c ①: §3 공개면 GET 조회 디스패치. edge 는 DB 자격이 없어 여기로 넘어온다.
+
+    미등록 경로는 기존과 동일하게 404 로 떨어진다.
+    """
+    from app.services.risk_reports import (
+        ReportNotFound,
+        get_report_detail,
+        get_report_public,
+        list_reports,
+    )
+
+    if route.startswith("/api/v1/reports/"):
+        report_id = _path_id(route, 4, segments=5)
+        if report_id is None:
+            return 404, {"detail": f"relay: 잘못된 report_id 경로 {route}"}
+        try:
+            return 200, get_report_public(report_id)
+        except ReportNotFound:
+            return 404, {"detail": "report not found"}
+
+    if route == "/api/v1/admin/reports":
+        # ?status= 는 쿼리스트링으로 전달된다(M-28c ①). 미지정이면 전체.
+        status = (query.get("status") or [None])[0]
+        return 200, list_reports(status)
+
+    if route.startswith("/api/v1/admin/reports/"):
+        report_id = _path_id(route, 5, segments=6)
+        if report_id is None:
+            return 404, {"detail": f"relay: 잘못된 report_id 경로 {route}"}
+        try:
+            return 200, get_report_detail(report_id)
+        except ReportNotFound:
+            return 404, {"detail": "report not found"}
+
+    return 404, {"detail": f"relay: 디스패치 대상 아님 GET {route}"}
+
+
 def dispatch(
     method: str,
     path: str,
@@ -48,6 +105,15 @@ def dispatch(
     identity(M-28b ②) = edge 가 검증해 넘긴 {wid, tenant} — 서비스 함수의 worker_id 로 소비.
     """
     worker_id = (identity or {}).get("wid")
+
+    # M-28c ①: method 축 — GET 조회(§3 공개면 계약분)도 릴레이로 디스패치한다.
+    # 쿼리스트링은 path 에 실려 오므로 여기서 분리한다(relay.py 무접촉 — 시그니처 변경 없음).
+    split = urlsplit(path)
+    route, query = split.path, parse_qs(split.query)
+
+    if method == "GET":
+        return _dispatch_get(route, query)
+
     if method == "POST" and path == "/api/v1/ask":
         from app.agents.graph import run_ask
 
@@ -98,6 +164,29 @@ def dispatch(
             # 사유를 응답으로 구분하지 않는다(계정·토큰 존재 여부 비노출)
             return 401, {"detail": auth_service.AUTH_FAILED_MESSAGE}
         return 200, result
+    if method == "POST" and route.startswith("/api/v1/admin/reports/") and route.endswith(
+        ("/ack", "/resolve")
+    ):
+        # M-28c ①: §3 관리자 블록 등재 전이도 공개면 계약분 — 동일 처리.
+        # actor 는 core 가 결정한다 — risk_reports.ADMIN_ACTOR_UNAUTHENTICATED 단일 주입 지점(M-15b).
+        from app.services.risk_reports import (
+            ReportNotFound,
+            TransitionError,
+            acknowledge,
+            resolve,
+        )
+
+        report_id = _path_id(route, 5, segments=7)
+        if report_id is None:
+            return 404, {"detail": f"relay: 잘못된 report_id 경로 {route}"}
+        try:
+            if route.endswith("/ack"):
+                return 200, acknowledge(report_id)
+            return 200, resolve(report_id, body.get("note"))
+        except ReportNotFound:
+            return 404, {"detail": "report not found"}
+        except TransitionError as exc:
+            return 422, {"detail": str(exc)}
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
 
 
