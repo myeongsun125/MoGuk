@@ -217,7 +217,7 @@ POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, l
 POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id} | edge 보류 상한 30s 초과 시 504 (M-28a)
 POST /ask/voice            multipart(audio≤60s, lang)      → 동일 | 폴백 안내 응답
 POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501 | edge 보류 상한 30s 초과 시 504 (M-28a)
-GET  /reports/{id}                                          → 상태 조회(접수 확인 화면)
+GET  /reports/{id}                                          → {id, status, processing_state, reporter_confirmed, created_at}   # 5필드 한정 — events[]·original_text 미포함. 본인 조회는 original_viewed 감사 비대상(총괄 확정)
 POST /reports/{id}/confirm {result:'confirmed'|'corrected', corrected_text?} → {id, result, reporter_confirmed} | corrected → {id, result, requeued_job_id, reporter_confirmed:false} | 요약 실패건 → {id, result:'local_failed', original_text, message}   # M-08c 비차단(접수·관리자 노출을 막지 않음). actor='worker:<wid>' — M-28b identity 소비. 신원 필드 본문 수신 금지(400)
 POST /chat                 {message}                        → {reply}          # 로컬 티어 고정
 GET  /notifications        / POST /notifications/{id}/read
