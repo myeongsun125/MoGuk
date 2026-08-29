@@ -8,11 +8,12 @@ mock 은 V2-2 에서 제거됨 — backend/app/fixtures/ask.json 은 프론트 f
 
 import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.agents.graph import run_ask
+from app.routers.auth import optional_identity
 from app.services.relay import queue
 from app.services.system_service import role
 
@@ -36,14 +37,18 @@ def _payload(result) -> dict:
 
 
 @router.post("")
-async def ask(body: AskRequest) -> JSONResponse:
+async def ask(
+    body: AskRequest, identity: dict | None = Depends(optional_identity)
+) -> JSONResponse:
     if role() == "edge":
-        item = queue.enqueue("POST", PATH, body.model_dump())
+        item = queue.enqueue("POST", PATH, body.model_dump(), identity)
         relayed = await queue.wait_for_response(item)
         return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
 
-    # 인증(V3-2) 전이라 worker_id 는 미상 — questions.worker_id NULL 로 기록된다.
-    result = await asyncio.to_thread(run_ask, body.question, body.lang, None)
+    # M-28b ②: identity 가 있으면 worker_id 로 소비, 없으면 None(미인증 경로 ④)
+    result = await asyncio.to_thread(
+        run_ask, body.question, body.lang, (identity or {}).get("wid")
+    )
     return JSONResponse(status_code=200, content=_payload(result))
 
 

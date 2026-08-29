@@ -5,7 +5,8 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
 
 디스패치는 라우터를 HTTP 로 다시 부르지 않고(재귀 금지) 처리 함수를 직접 호출한다.
 대상: POST /api/v1/ask(run_ask) · POST /api/v1/reports(submit_text_report, M-08b 배선)
-     · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선).
+     · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선)
+     · POST /api/v1/reports/{id}/confirm(risk_reports.confirm, M-08c 배선).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -35,17 +36,24 @@ def edge_api_url() -> str:
 
 
 def dispatch(
-    method: str, path: str, body: dict, relay_meta: dict | None = None
+    method: str,
+    path: str,
+    body: dict,
+    relay_meta: dict | None = None,
+    identity: dict | None = None,
 ) -> tuple[int, object]:
     """릴레이 item 을 로컬 처리. (status_code, body). 예외는 호출부가 5xx 로 변환한다.
 
     relay_meta 는 trace.relay 계측용으로만 쓰이고 응답 body 에는 들어가지 않는다.
+    identity(M-28b ②) = edge 가 검증해 넘긴 {wid, tenant} — 서비스 함수의 worker_id 로 소비.
     """
+    worker_id = (identity or {}).get("wid")
     if method == "POST" and path == "/api/v1/ask":
         from app.agents.graph import run_ask
 
         result = run_ask(
-            body.get("question", ""), body.get("lang", "vi"), worker_id=None, relay_meta=relay_meta
+            body.get("question", ""), body.get("lang", "vi"),
+            worker_id=worker_id, relay_meta=relay_meta
         )
         return 200, {
             "answer": result.answer,
@@ -61,7 +69,22 @@ def dispatch(
             body.get("original_text", ""),
             lang=body.get("lang"),
             source=body.get("source", "text"),
+            worker_id=worker_id,
         )
+    if method == "POST" and path.startswith("/api/v1/reports/") and path.endswith("/confirm"):
+        # M-08c 확인 루프 — actor 는 identity.wid 에서 도출(M-28b ②)
+        from app.services.risk_reports import ReportNotFound, confirm
+
+        try:
+            report_id = int(path.split("/")[4])
+        except (IndexError, ValueError):
+            return 404, {"detail": f"relay: 잘못된 report_id 경로 {path}"}
+        try:
+            return 200, confirm(
+                report_id, body.get("result", ""), body.get("corrected_text"), worker_id
+            )
+        except ReportNotFound:
+            return 404, {"detail": "report not found"}
     if method == "POST" and path in ("/api/v1/auth/activate", "/api/v1/auth/login"):
         # M-15: 신원·DB 는 core 소유. 라우터 재호출 없이 서비스 함수를 직접 부른다.
         from app.services import auth as auth_service
@@ -91,6 +114,7 @@ async def handle_item(client: httpx.AsyncClient, item: dict) -> None:
             item.get("path", ""),
             item.get("body") or {},
             relay_meta,
+            item.get("identity"),      # M-28b ②
         )
     except Exception as exc:  # noqa: BLE001 — 개별 실패가 루프를 끊지 않는다
         log.error("relay poller: 디스패치 실패 request_id=%s %s: %s", request_id, type(exc).__name__, exc)

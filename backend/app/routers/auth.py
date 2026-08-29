@@ -52,10 +52,38 @@ class RefreshRequest(BaseModel):
     refresh: str = Field(min_length=1)
 
 
-async def _relay_or_local(path: str, body: dict, fn, *args):
-    """edge 는 릴레이 큐로, core 는 로컬 호출. 실패는 동일 401 로 수렴."""
+def require_worker(authorization: str | None = Header(default=None)) -> dict:
+    """보호 엔드포인트 의존성 — Bearer access 토큰 검증. 부재·위조·만료 전부 401."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise _UNAUTHORIZED
+    try:
+        return auth_service.decode_token(authorization.split(" ", 1)[1].strip())
+    except auth_service.AuthError:
+        raise _UNAUTHORIZED from None
+
+
+def optional_identity(authorization: str | None = Header(default=None)) -> dict | None:
+    """M-28b ①: 릴레이로 넘길 신원 — claims 의 wid·tenant 만. 미인증이면 None(④).
+
+    원 JWT·Authorization 헤더는 릴레이 경계를 넘지 않는다. 보호 전환 시 이 함수를
+    require_worker 로 바꾸면 미인증 None 경로가 자연 해소된다.
+    """
+    if not authorization:
+        return None
+    try:
+        claims = require_worker(authorization)
+    except HTTPException:
+        return None
+    return {"wid": claims["wid"], "tenant": claims.get("tenant")}
+
+
+async def _relay_or_local(path: str, body: dict, fn, *args, identity: dict | None = None):
+    """edge 는 릴레이 큐로, core 는 로컬 호출. 실패는 동일 401 로 수렴.
+
+    identity 는 M-28b 배선 일원화용 — activate/login 은 토큰 발급 전이라 실질 None 이다.
+    """
     if role() == "edge":
-        item = queue.enqueue("POST", path, body)
+        item = queue.enqueue("POST", path, body, identity)
         relayed = await queue.wait_for_response(item)
         return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
     try:
@@ -66,16 +94,22 @@ async def _relay_or_local(path: str, body: dict, fn, *args):
 
 
 @router.post("/activate")
-async def activate(body: ActivateRequest) -> JSONResponse:
+async def activate(
+    body: ActivateRequest, identity: dict | None = Depends(optional_identity)
+) -> JSONResponse:
     return await _relay_or_local(
-        ACTIVATE_PATH, body.model_dump(), auth_service.activate, body.token, body.pin
+        ACTIVATE_PATH, body.model_dump(), auth_service.activate, body.token, body.pin,
+        identity=identity,
     )
 
 
 @router.post("/login")
-async def login(body: LoginRequest) -> JSONResponse:
+async def login(
+    body: LoginRequest, identity: dict | None = Depends(optional_identity)
+) -> JSONResponse:
     return await _relay_or_local(
-        LOGIN_PATH, body.model_dump(), auth_service.login, body.emp_no, body.pin
+        LOGIN_PATH, body.model_dump(), auth_service.login, body.emp_no, body.pin,
+        identity=identity,
     )
 
 
@@ -84,16 +118,6 @@ def refresh(body: RefreshRequest) -> dict:
     """리프레시 회전 — 새 {jwt, refresh} 쌍. §3 미등재(계약 확장 후보)."""
     try:
         return auth_service.rotate(body.refresh)
-    except auth_service.AuthError:
-        raise _UNAUTHORIZED from None
-
-
-def require_worker(authorization: str | None = Header(default=None)) -> dict:
-    """보호 엔드포인트 의존성 — Bearer access 토큰 검증. 부재·위조·만료 전부 401."""
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise _UNAUTHORIZED
-    try:
-        return auth_service.decode_token(authorization.split(" ", 1)[1].strip())
     except auth_service.AuthError:
         raise _UNAUTHORIZED from None
 

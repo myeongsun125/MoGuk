@@ -23,6 +23,10 @@ log = logging.getLogger(__name__)
 
 # 001 정본 값 집합
 STATUS_SUBMITTED = "submitted"
+STATUS_ACKNOWLEDGED = "acknowledged"
+STATUS_RESOLVED = "resolved"
+# M-08 단방향 상태머신 — 스킵·역행 없음
+NEXT_STATUS = {STATUS_SUBMITTED: STATUS_ACKNOWLEDGED, STATUS_ACKNOWLEDGED: STATUS_RESOLVED}
 STATE_QUEUED = "queued"
 STATE_RUNNING = "running"
 STATE_DONE = "done"
@@ -37,6 +41,43 @@ MAX_ATTEMPTS = 3                 # WORKORDER V3-1 "3회 실패 시 보존+알림
 EV_SUBMITTED = "report_submitted"
 EV_SUMMARY_DONE = "summary_done"
 EV_SUMMARY_FAILED = "summary_failed"
+EV_ACKNOWLEDGED = "report_acknowledged"
+EV_RESOLVED = "report_resolved"
+EV_ORIGINAL_VIEWED = "original_viewed"
+EV_REPORTER_CONFIRMED = "reporter_confirmed"
+EV_REPORTER_CORRECTED = "reporter_corrected"
+
+# M-15b(미결): 관리자 인증 부재 — 전이·원문 열람 행위자 임시값.
+# **주입 지점은 이 상수 1곳뿐이다.** 관리자 인증 도입 시 여기만 교체한다.
+# 'system' 은 워커·자동 처리 규약이라 사용하지 않는다.
+ADMIN_ACTOR_UNAUTHENTICATED = "admin:unauthenticated"
+
+
+def worker_actor(worker_id: int | None) -> str:
+    """M-28b identity 소비 — 근로자 행위자 표기(001 actor 주석 규약)."""
+    return f"worker:{worker_id}" if worker_id is not None else "worker:unauthenticated"
+
+
+# M-08b ④: 서버가 도출하는 신원·상태 필드는 요청 본문으로 받지 않는다(무시 아님 — 400).
+IDENTITY_FIELDS = frozenset(
+    {"worker_id", "admin_id", "reporter", "reporter_id", "actor",
+     "tenant", "tenant_slug", "acked_by", "resolved_by", "status", "id"}
+)
+
+
+def identity_fields_in(body: object) -> list[str]:
+    """본문에 섞인 금지 필드 목록(정렬). 없으면 빈 리스트."""
+    if not isinstance(body, dict):
+        return []
+    return sorted(set(body) & IDENTITY_FIELDS)
+
+
+class TransitionError(Exception):
+    """M-08 단방향 위반(스킵·역행) 또는 대상 없음 — 라우터가 422/404 로 변환."""
+
+
+class ReportNotFound(Exception):
+    """대상 보고 없음 — 404."""
 
 _INSERT_REPORT = """
 INSERT INTO risk_reports (worker_id, source, original_text, lang, status, processing_state)
@@ -69,6 +110,52 @@ WHERE id = %(id)s
 
 _UPDATE_STATE = """
 UPDATE risk_reports SET processing_state = %(state)s WHERE id = %(id)s
+"""
+
+# M-15b 판정 1: 스냅숏은 시각·비고만 갱신. acked_by·resolved_by(integer)는 NULL 유지 —
+# 행위자는 risk_report_events.actor 단독 기록.
+_SELECT_STATUS_FOR_UPDATE = "SELECT status FROM risk_reports WHERE id = %(id)s FOR UPDATE"
+
+_ACK = """
+UPDATE risk_reports SET status = %(to_state)s, acked_at = now() WHERE id = %(id)s
+"""
+
+_RESOLVE = """
+UPDATE risk_reports
+SET status = %(to_state)s, resolved_at = now(), resolution_note = %(note)s
+WHERE id = %(id)s
+"""
+
+_LIST_REPORTS = """
+SELECT id, ko_summary, severity, status, processing_state, reporter_confirmed, created_at
+FROM risk_reports
+WHERE (%(status)s::text IS NULL OR status = %(status)s)
+ORDER BY id DESC
+"""
+
+_SELECT_DETAIL = """
+SELECT id, source, original_text, lang, ko_summary, severity, status, processing_state,
+       reporter_confirmed, acked_by, acked_at, resolved_by, resolved_at, resolution_note,
+       created_at, processed_at
+FROM risk_reports WHERE id = %(id)s
+"""
+
+_SELECT_PUBLIC = """
+SELECT id, status, processing_state, reporter_confirmed, created_at
+FROM risk_reports WHERE id = %(id)s
+"""
+
+_SELECT_EVENTS = """
+SELECT id, actor, action, from_state, to_state, detail, created_at
+FROM risk_report_events WHERE report_id = %(id)s ORDER BY id
+"""
+
+_SELECT_CONFIRM_TARGET = """
+SELECT processing_state, original_text FROM risk_reports WHERE id = %(id)s FOR UPDATE
+"""
+
+_SET_REPORTER_CONFIRMED = """
+UPDATE risk_reports SET reporter_confirmed = true WHERE id = %(id)s
 """
 
 
@@ -199,3 +286,180 @@ def mark_summary_failed(cur, report_id: int, reason: str) -> None:
 
 def mark_running(cur, report_id: int) -> None:
     cur.execute(_UPDATE_STATE, {"id": report_id, "state": STATE_RUNNING})
+
+
+# ── M-08 전이 (관리자) ────────────────────────────────────
+
+_DETAIL_KEYS = (
+    "id", "source", "original_text", "lang", "ko_summary", "severity", "status",
+    "processing_state", "reporter_confirmed", "acked_by", "acked_at", "resolved_by",
+    "resolved_at", "resolution_note", "created_at", "processed_at",
+)
+_EVENT_KEYS = ("id", "actor", "action", "from_state", "to_state", "detail", "created_at")
+_LIST_KEYS = (
+    "id", "ko_summary", "severity", "status", "processing_state", "reporter_confirmed",
+    "created_at",
+)
+_PUBLIC_KEYS = ("id", "status", "processing_state", "reporter_confirmed", "created_at")
+
+
+def _row(keys, row) -> dict:
+    out = dict(zip(keys, row))
+    for k in ("created_at", "acked_at", "resolved_at", "processed_at"):
+        if k in out:
+            out[k] = _iso(out[k])
+    return out
+
+
+def _transition(report_id: int, expected_from: str, sql: str, action: str, params: dict) -> dict:
+    """단방향 전이 1회. 스냅숏(시각·비고) 갱신 + events 1행 (M-08a 양쪽 기록).
+
+    acked_by·resolved_by 는 건드리지 않는다 — 001 정본 integer, 행위자는 events.actor 단독(M-15b).
+    """
+    to_state = NEXT_STATUS[expected_from]
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_STATUS_FOR_UPDATE, {"id": report_id})
+            row = cur.fetchone()
+            if row is None:
+                raise ReportNotFound(f"report_id={report_id}")
+            current = row[0]
+            if current != expected_from:
+                raise TransitionError(f"{current} → {to_state} 불가 (단방향: {expected_from} 에서만)")
+
+            cur.execute(sql, {"id": report_id, "to_state": to_state, **params})
+            record_event(
+                cur,
+                report_id,
+                action,
+                actor=ADMIN_ACTOR_UNAUTHENTICATED,
+                from_state=current,
+                to_state=to_state,
+                detail=params.get("note"),
+            )
+        conn.commit()
+    log.info("reports: 전이 report_id=%s %s → %s", report_id, expected_from, to_state)
+    return {"id": report_id, "status": to_state}
+
+
+def acknowledge(report_id: int) -> dict:
+    """submitted → acknowledged."""
+    return _transition(report_id, STATUS_SUBMITTED, _ACK, EV_ACKNOWLEDGED, {})
+
+
+def resolve(report_id: int, note: str | None = None) -> dict:
+    """acknowledged → resolved. 정정은 새 보고 + 원 보고 참조 — 역행 경로는 두지 않는다."""
+    return _transition(report_id, STATUS_ACKNOWLEDGED, _RESOLVE, EV_RESOLVED, {"note": note})
+
+
+# ── 조회 ──────────────────────────────────────────────────
+
+def list_reports(status: str | None = None) -> list[dict]:
+    """관리자 목록 — original_text 미포함(M-08b 기재 필드)."""
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_LIST_REPORTS, {"status": status})
+            rows = cur.fetchall()
+    return [_row(_LIST_KEYS, r) for r in rows]
+
+
+def get_report_detail(report_id: int) -> dict:
+    """관리자 상세 + events[]. original_text 를 실어 보내므로 original_viewed 이벤트를 남긴다.
+
+    acked_by·resolved_by 는 인증 도입 전까지 null 로 나간다(additive — 판정 3).
+    """
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_DETAIL, {"id": report_id})
+            row = cur.fetchone()
+            if row is None:
+                raise ReportNotFound(f"report_id={report_id}")
+            detail = _row(_DETAIL_KEYS, row)
+
+            # 원문 열람 감사 (M-08a) — events append 만, 컬럼 무변경
+            record_event(
+                cur,
+                report_id,
+                EV_ORIGINAL_VIEWED,
+                actor=ADMIN_ACTOR_UNAUTHENTICATED,
+                detail="admin detail view",
+            )
+            cur.execute(_SELECT_EVENTS, {"id": report_id})
+            detail["events"] = [_row(_EVENT_KEYS, r) for r in cur.fetchall()]
+        conn.commit()
+    return detail
+
+
+def get_report_public(report_id: int) -> dict:
+    """근로자 상태 조회 — 5필드 한정. events[]·original_text 미포함, 감사 비대상(총괄 확정)."""
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_PUBLIC, {"id": report_id})
+            row = cur.fetchone()
+    if row is None:
+        raise ReportNotFound(f"report_id={report_id}")
+    return _row(_PUBLIC_KEYS, row)
+
+
+# ── M-08c 보고자 확인 루프 (비차단) ───────────────────────
+
+RESULT_CONFIRMED = "confirmed"
+RESULT_CORRECTED = "corrected"
+
+
+def confirm(
+    report_id: int,
+    result: str,
+    corrected_text: str | None = None,
+    worker_id: int | None = None,
+) -> dict:
+    """요약 확인/정정. 접수·관리자 노출을 막지 않는다(M-08c ①).
+
+    local_failed 건은 확인 대상이 아니라 원문 에코 + 접수 안내만 돌려준다(M-08c ③).
+    """
+    actor = worker_actor(worker_id)
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_CONFIRM_TARGET, {"id": report_id})
+            row = cur.fetchone()
+            if row is None:
+                raise ReportNotFound(f"report_id={report_id}")
+            processing_state, original_text = row
+
+            if processing_state == STATE_FAILED:
+                # M-08c ③ — 상태 변경·이벤트 없이 안내만
+                return {
+                    "id": report_id,
+                    "result": "local_failed",
+                    "original_text": original_text,
+                    "message": "요약 생성에 실패했습니다. 신고는 정상 접수되었으며 관리자가 원문을 직접 확인합니다.",
+                }
+
+            if result == RESULT_CONFIRMED:
+                cur.execute(_SET_REPORTER_CONFIRMED, {"id": report_id})
+                record_event(cur, report_id, EV_REPORTER_CONFIRMED, actor=actor)
+                out = {"id": report_id, "result": RESULT_CONFIRMED, "reporter_confirmed": True}
+            else:
+                record_event(
+                    cur, report_id, EV_REPORTER_CORRECTED, actor=actor, detail=corrected_text
+                )
+                cur.execute(
+                    _INSERT_JOB,
+                    {
+                        "kind": JOB_KIND_SUMMARIZE,
+                        "payload": json.dumps(
+                            {"report_id": report_id, "reason": EV_REPORTER_CORRECTED},
+                            ensure_ascii=False,
+                        ),
+                    },
+                )
+                job_id = cur.fetchone()[0]
+                out = {
+                    "id": report_id,
+                    "result": RESULT_CORRECTED,
+                    "requeued_job_id": job_id,
+                    "reporter_confirmed": False,
+                }
+        conn.commit()
+    log.info("reports: 확인 루프 report_id=%s result=%s actor=%s", report_id, result, actor)
+    return out

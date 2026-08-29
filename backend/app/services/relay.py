@@ -16,6 +16,10 @@ edge 는 큐에 쌓고 기다릴 뿐이다. edge 는 DB 자격증명이 없으�
 - RELAY_REDELIVER_MAX=1  리스 만료 시 재배포 허용 횟수 (초과 → failed → 504)
 
 hold(20s) 는 보류(30s)·리스(60s) 와 독립이다 (M-28a 원문).
+
+M-28b 인증 컨텍스트 전파: item 최상위 identity(dict|None) = edge 검증 후의 {wid, tenant} 만.
+원 JWT·Authorization 헤더는 릴레이 경계 미통과, body 혼입 금지(M-08b ④ 정합).
+M-28a 파라미터 5종·큐 메커니즘·/internal 3종은 무접촉 — pending 응답에 필드 1개 additive 확장뿐.
 """
 
 from __future__ import annotations
@@ -139,6 +143,9 @@ class RelayItem:
     path: str
     body: dict
     enqueued_at: float
+    # M-28b ①: edge 가 require_worker 검증 후 claims 에서 뽑은 {wid, tenant} 만.
+    # 원 JWT·Authorization 헤더는 릴레이 경계를 넘지 않는다. 미인증 경로는 None(④).
+    identity: dict | None = None
     state: str = PENDING
     lease_expires_at: float | None = None
     leased_at: float | None = None      # 측정 #4 릴레이 왕복 계측
@@ -157,6 +164,7 @@ class RelayItem:
             "enqueued_at": self.enqueued_at,
             "leased_at": self.leased_at,
             "deliver_count": self.deliver_count,
+            "identity": self.identity,   # M-28b ③: additive 확장 1필드
         }
 
 
@@ -179,13 +187,16 @@ class RelayQueue:
         self._items: dict[str, RelayItem] = {}
 
     # -- 내부 함수 (외부 엔드포인트 아님 — WORKORDER §5) --
-    def enqueue(self, method: str, path: str, body: dict) -> RelayItem:
+    def enqueue(
+        self, method: str, path: str, body: dict, identity: dict | None = None
+    ) -> RelayItem:
         item = RelayItem(
             request_id=str(uuid.uuid4()),  # UUIDv4, edge 발급 (M-28a)
             method=method,
             path=path,
             body=body,
             enqueued_at=time.time(),
+            identity=identity,             # M-28b ①
         )
         self._items[item.request_id] = item
         log.info("relay: enqueue %s %s request_id=%s", method, path, item.request_id)

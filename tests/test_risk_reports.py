@@ -512,3 +512,296 @@ def test_dispatch_passes_source_through(monkeypatch):
     assert status == 202
     assert set(body) == {"id", "status", "created_at"}
     assert _params_for(store, "INSERT INTO risk_reports")[0]["source"] == "text"
+
+
+# ═══ PR-2: M-08 상태머신·조회·M-08c 확인 루프 ═══════════
+
+ADMIN_ACTOR = "admin:unauthenticated"
+
+
+def _t_store(status="submitted", **kw):
+    """전이용 스텁 — SELECT status FOR UPDATE 가 현재 상태를 돌려준다."""
+    return _store(rows=[("SELECT status FROM risk_reports", (status,))], **kw)
+
+
+# ── 전이: 정상 ────────────────────────────────────────────
+
+def test_ack_updates_snapshot_and_event(monkeypatch):
+    store = _t_store("submitted")
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    out = risk_reports.acknowledge(5)
+
+    assert out == {"id": 5, "status": "acknowledged"}
+    sqls = _sqls(store)
+    # 스냅숏: 시각만 갱신 — acked_by 는 건드리지 않는다(M-15b 판정 1)
+    ack_sql = [s for s in sqls if "acked_at = now()" in s][0]
+    assert "acked_by" not in ack_sql
+    # 이벤트에 행위자 단독 기록
+    ev = _params_for(store, "INSERT INTO risk_report_events")[-1]
+    assert ev["actor"] == ADMIN_ACTOR
+    assert ev["action"] == "report_acknowledged"
+    assert (ev["from_state"], ev["to_state"]) == ("submitted", "acknowledged")
+    assert store["commits"] == 1
+
+
+def test_resolve_updates_note_and_event(monkeypatch):
+    store = _t_store("acknowledged")
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    out = risk_reports.resolve(5, "현장 확인 후 조치 완료")
+
+    assert out == {"id": 5, "status": "resolved"}
+    res_sql = [s for s in _sqls(store) if "resolved_at = now()" in s][0]
+    assert "resolution_note" in res_sql and "resolved_by" not in res_sql
+    assert _params_for(store, "resolved_at = now()")[0]["note"] == "현장 확인 후 조치 완료"
+    ev = _params_for(store, "INSERT INTO risk_report_events")[-1]
+    assert ev["actor"] == ADMIN_ACTOR
+    assert (ev["from_state"], ev["to_state"]) == ("acknowledged", "resolved")
+    assert ev["detail"] == "현장 확인 후 조치 완료"
+
+
+def test_transition_never_writes_acked_by_or_resolved_by(monkeypatch):
+    """M-15b 판정 1: acked_by·resolved_by 는 NULL 유지 — 어떤 UPDATE 도 이 컬럼을 쓰지 않는다."""
+    cases = (("submitted", risk_reports.acknowledge), ("acknowledged", risk_reports.resolve))
+    for status, fn in cases:
+        store = _t_store(status)
+        monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+        fn(5)
+        for sql in _sqls(store):
+            if sql.strip().upper().startswith("UPDATE"):
+                assert "acked_by" not in sql and "resolved_by" not in sql, sql
+
+
+# ── 전이: 스킵·역행 422 ───────────────────────────────────
+
+@pytest.mark.parametrize(
+    "current,fn",
+    [("submitted", risk_reports.resolve),
+     ("resolved", risk_reports.acknowledge),
+     ("acknowledged", risk_reports.acknowledge),
+     ("resolved", risk_reports.resolve)],
+)
+def test_transition_rejects_skip_and_reverse(monkeypatch, current, fn):
+    store = _t_store(current)
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    with pytest.raises(risk_reports.TransitionError):
+        fn(5)
+    assert not any(s.strip().upper().startswith("UPDATE") for s in _sqls(store))
+    assert not any("INSERT INTO risk_report_events" in s for s in _sqls(store))
+
+
+def test_transition_missing_report(monkeypatch):
+    store = _store(rows=[("SELECT status FROM risk_reports", None)])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    with pytest.raises(risk_reports.ReportNotFound):
+        risk_reports.acknowledge(999)
+
+
+def test_admin_transition_endpoints_200(monkeypatch):
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(_t_store("submitted")))
+    r1 = client.post("/api/v1/admin/reports/5/ack")
+    assert r1.status_code == 200 and r1.json() == {"id": 5, "status": "acknowledged"}
+
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(_t_store("acknowledged")))
+    r2 = client.post("/api/v1/admin/reports/5/resolve", json={"note": "완료"})
+    assert r2.status_code == 200 and r2.json() == {"id": 5, "status": "resolved"}
+
+
+def test_admin_transition_endpoints_422_on_skip(monkeypatch):
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(_t_store("resolved")))
+    assert client.post("/api/v1/admin/reports/5/ack").status_code == 422
+
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(_t_store("submitted")))
+    assert client.post("/api/v1/admin/reports/5/resolve", json={"note": "n"}).status_code == 422
+
+
+# ── actor 주입 지점 1개 ───────────────────────────────────
+
+def test_admin_actor_single_injection_point():
+    """admin:unauthenticated 리터럴은 상수 정의 1곳에만 존재한다(M-15b)."""
+    import subprocess
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    out = subprocess.run(
+        ["git", "grep", "-n", "admin:unauthenticated", "--", "backend"],
+        cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
+    ).stdout.strip().splitlines()
+    assert len(out) == 1, out
+    assert out[0].startswith("backend/app/services/risk_reports.py:")
+    assert "ADMIN_ACTOR_UNAUTHENTICATED" in out[0]
+
+
+def test_system_actor_not_used_for_transitions(monkeypatch):
+    """system 은 워커·자동 처리 규약 — 전이에 쓰지 않는다."""
+    store = _t_store("submitted")
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    risk_reports.acknowledge(5)
+    assert _params_for(store, "INSERT INTO risk_report_events")[-1]["actor"] != "system"
+
+
+# ── 조회 ──────────────────────────────────────────────────
+
+class ListCursor(FakeCursor):
+    def fetchall(self):
+        return self.store.get("many", [])
+
+
+def _with_many(store, many):
+    store["many"] = many
+    return store
+
+
+def test_admin_list_excludes_original_text(monkeypatch):
+    store = _with_many(_store(), [(1, "요약", "high", "submitted", "done", False, CREATED_AT)])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(FakeConn, "cursor", lambda self: ListCursor(self.store))
+
+    rows = risk_reports.list_reports("submitted")
+
+    assert rows == [{
+        "id": 1, "ko_summary": "요약", "severity": "high", "status": "submitted",
+        "processing_state": "done", "reporter_confirmed": False, "created_at": CREATED_AT_ISO,
+    }]
+    assert "original_text" not in rows[0]
+    assert _params_for(store, "FROM risk_reports")[0]["status"] == "submitted"
+
+
+def test_admin_detail_records_original_viewed(monkeypatch):
+    detail_row = (1, "text", "원문", "vi", "요약", "high", "acknowledged", "done",
+                  False, None, None, None, None, None, CREATED_AT, None)
+    store = _with_many(
+        _store(rows=[("SELECT id, source, original_text", detail_row)]),
+        [(9, ADMIN_ACTOR, "original_viewed", None, None, "admin detail view", CREATED_AT)],
+    )
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(FakeConn, "cursor", lambda self: ListCursor(self.store))
+
+    detail = risk_reports.get_report_detail(1)
+
+    assert detail["original_text"] == "원문"
+    assert detail["acked_by"] is None and detail["resolved_by"] is None   # 판정 3: null 노출
+    assert detail["events"][0]["action"] == "original_viewed"
+    ev = _params_for(store, "INSERT INTO risk_report_events")[-1]
+    assert ev["action"] == "original_viewed" and ev["actor"] == ADMIN_ACTOR
+    assert not any(s.strip().upper().startswith("UPDATE") for s in _sqls(store))
+
+
+def test_worker_get_report_is_five_fields_and_not_audited(monkeypatch):
+    store = _store(rows=[
+        ("SELECT id, status, processing_state", (1, "submitted", "queued", False, CREATED_AT)),
+    ])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    r = client.get("/api/v1/reports/1")
+
+    assert r.status_code == 200
+    assert set(r.json()) == {"id", "status", "processing_state", "reporter_confirmed", "created_at"}
+    assert "events" not in r.json() and "original_text" not in r.json()
+    assert not any("INSERT INTO risk_report_events" in s for s in _sqls(store))
+
+
+def test_worker_get_report_404(monkeypatch):
+    store = _store(rows=[("SELECT id, status, processing_state", None)])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    assert client.get("/api/v1/reports/999").status_code == 404
+
+
+# ── M-08c 확인 루프 ───────────────────────────────────────
+
+def _confirm_store(processing_state="done", original_text="원문"):
+    return _store(rows=[
+        ("SELECT processing_state, original_text", (processing_state, original_text)),
+        ("INSERT INTO jobs", (77,)),
+    ])
+
+
+def test_confirm_confirmed_sets_snapshot_and_event(monkeypatch):
+    store = _confirm_store()
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    out = risk_reports.confirm(1, "confirmed", worker_id=41)
+
+    assert out == {"id": 1, "result": "confirmed", "reporter_confirmed": True}
+    assert any("SET reporter_confirmed = true" in s for s in _sqls(store))
+    ev = _params_for(store, "INSERT INTO risk_report_events")[-1]
+    assert ev["action"] == "reporter_confirmed" and ev["actor"] == "worker:41"
+
+
+def test_confirm_corrected_records_event_and_requeues(monkeypatch):
+    store = _confirm_store()
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    out = risk_reports.confirm(1, "corrected", "정정된 요약", worker_id=41)
+
+    assert out["result"] == "corrected" and out["requeued_job_id"] == 77
+    ev = _params_for(store, "INSERT INTO risk_report_events")[-1]
+    assert ev["action"] == "reporter_corrected" and ev["detail"] == "정정된 요약"
+    job = _params_for(store, "INSERT INTO jobs")[0]
+    assert json.loads(job["payload"]) == {"report_id": 1, "reason": "reporter_corrected"}
+    assert not any("SET reporter_confirmed" in s for s in _sqls(store))
+
+
+def test_confirm_on_local_failed_echoes_original_only(monkeypatch):
+    """M-08c ③ — 상태 변경·이벤트 없이 원문 에코 + 접수 안내."""
+    store = _confirm_store(processing_state="failed")
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    out = risk_reports.confirm(1, "confirmed", worker_id=41)
+
+    assert out["result"] == "local_failed" and out["original_text"] == "원문"
+    assert "접수" in out["message"]
+    assert not any("INSERT INTO risk_report_events" in s for s in _sqls(store))
+    assert not any(s.strip().upper().startswith("UPDATE") for s in _sqls(store))
+
+
+def test_confirm_endpoint_unauthenticated_actor(monkeypatch):
+    store = _confirm_store()
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/reports/1/confirm", json={"result": "confirmed"})
+
+    assert r.status_code == 200
+    assert _params_for(store, "INSERT INTO risk_report_events")[-1]["actor"] == "worker:unauthenticated"
+
+
+def test_confirm_dispatch_consumes_identity(monkeypatch):
+    from app.workers import relay_poller
+
+    store = _confirm_store()
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/reports/1/confirm", {"result": "confirmed"}, None, {"wid": 41}
+    )
+
+    assert status == 200 and body["result"] == "confirmed"
+    assert _params_for(store, "INSERT INTO risk_report_events")[-1]["actor"] == "worker:41"
+
+
+def test_confirm_rejects_unknown_result():
+    assert client.post("/api/v1/reports/1/confirm", json={"result": "maybe"}).status_code == 422
+
+
+# ── 신원 본문 400 (M-08b ④ — 전이·confirm 전부) ──────────
+
+@pytest.mark.parametrize(
+    "field", ["worker_id", "admin_id", "actor", "acked_by", "resolved_by", "status"]
+)
+def test_identity_fields_rejected_on_transition_and_confirm(field, monkeypatch):
+    def _boom(*a, **k):
+        pytest.fail("거부돼야 하는데 저장소 호출됨")
+
+    monkeypatch.setattr(risk_reports.tenancy, "connect", _boom)
+    cases = (
+        ("/api/v1/admin/reports/5/ack", {field: 1}),
+        ("/api/v1/admin/reports/5/resolve", {"note": "n", field: 1}),
+        ("/api/v1/reports/1/confirm", {"result": "confirmed", field: 1}),
+    )
+    for path, body in cases:
+        r = client.post(path, json=body)
+        assert r.status_code == 400, (path, r.status_code)
+        assert r.json()["detail"]["error"] == "forbidden_fields"
+        assert field in r.json()["detail"]["fields"]
