@@ -84,6 +84,7 @@ services:
       EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
       TENANT_SLUG: ${TENANT_SLUG:-axis_demo}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RELAY_HOLD_S: ${RELAY_HOLD_S:-20}
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,6 +124,11 @@ services:
       EDGE_S3_ACCESS_KEY_ID: ${EDGE_S3_ACCESS_KEY_ID:-}
       EDGE_S3_SECRET_ACCESS_KEY: ${EDGE_S3_SECRET_ACCESS_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RELAY_HOLD_S: ${RELAY_HOLD_S:-20}
+      RELAY_BATCH_MAX: ${RELAY_BATCH_MAX:-10}
+      RELAY_EDGE_WAIT_S: ${RELAY_EDGE_WAIT_S:-30}
+      RELAY_LEASE_S: ${RELAY_LEASE_S:-60}
+      RELAY_REDELIVER_MAX: ${RELAY_REDELIVER_MAX:-1}
     ports:
       - "8000:8000"   # dev 직접 호출용 (curl localhost:8000/health). prod 는 caddy 경유만
     networks: [edge_net]

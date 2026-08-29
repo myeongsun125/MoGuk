@@ -20,7 +20,7 @@
 - 기준: 보안성 + 독창성
 - 후보(미확정, ① 하위): "미디어 버퍼는 탈취돼도 읽을 수 없다" — edge는 쓰기만, 읽기·목록·삭제는 core만 (M-22/M-25)
   - 한 줄: 버퍼를 올린 쪽(edge)은 다시 읽을 수 없다 — 쓰기와 읽기·목록·삭제 권한을 IAM 정책 수준에서 분리.
-  - 시연: PR #9 첨부 캡처(https://github.com/user-attachments/assets/1260fc29-92f7-4d37-9732-0b2913581e74) — ① edge PUT OK + lifecycle rule-id·SSE AES256 ② edge GET AccessDenied(정책 부재 사유 명시) ③ core LIST+GET ④ core DELETE 후 KeyCount 없음
+  - 시연: PR #9 첨부 캡처(docs/assets/s3-dod-masked.png — 마스킹본: 계정ID·ARN·IP·ETag 가림, AccessDenied 사유·rule-id 원문 유지) — ① edge PUT OK + lifecycle rule-id·SSE AES256 ② edge GET AccessDenied(정책 부재 사유 명시) ③ core LIST+GET ④ core DELETE 후 KeyCount 없음
   - 보강 예정: edge list-objects-v2 거부 캡처 1장(병갑 요청 중)
   - 발표용 마스킹 필수: AWS 계정ID, 버킷명, IAM user ARN, EC2 IP, ETag/체크섬 값 → 병갑이 마스킹본 재제출, 원본 캡처는 리포에 넣지 않음
   - 어필 문장(1안): "관리자도 근로자도 아닌 서버조차 — 버퍼를 올린 쪽은 다시 읽을 수 없습니다"

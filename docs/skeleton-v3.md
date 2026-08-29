@@ -237,7 +237,7 @@ GET  /health
 ## internal (edge, 외부 차단 — M-22a)
 ```
 GET  /internal/relay/pending          — core 폴러가 대기 요청 리스 획득 (long-poll hold 20s, batch ≤10, 리스 60s·재배포 1회 — M-28a)
-POST /internal/relay/{request_id}/respond — core가 처리 결과 반환 (request_id UUIDv4 멱등, edge 보류 30s 초과 시 504)
+POST /internal/relay/{request_id}/respond — core가 처리 결과 반환 (request_id UUIDv4 멱등 — 보류 상한·504 동작은 REHEARSAL 참조)
 ```
 주: localhost·core_net 내부 소스만 허용, 외부 거부(미들웨어, M-22a). 요청·응답 상세 스키마는 구현(#17) 소유.
 
