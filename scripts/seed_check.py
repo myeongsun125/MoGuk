@@ -127,8 +127,13 @@ def vi_numbers(s: str) -> list[float]:
     return sorted(out)
 
 
+# D13-A 확정 사양: negation 판정용 언어별 부정어 사전.
+# vi 사전 = không / đừng / chẳng / chưa (2026-08-29 확정)
+VI_NEG_LEXICON = ("không", "đừng", "chẳng", "chưa")
+
+
 def vi_neg(s: str) -> int:
-    return len(re.findall(r"\b(không|đừng|chớ|cấm)\b", s, flags=re.I))
+    return len(re.findall(r"\b(" + "|".join(VI_NEG_LEXICON) + r")\b", s, flags=re.I))
 
 
 def ko_neg(s: str) -> int:
@@ -382,8 +387,18 @@ def main() -> int:
             ok = bool(swapped) and na == nb and ga == gb
             why = "" if ok else ("용어 미치환" if not swapped else f"수치/부정 동반 변경(num {na}->{nb}, neg {ga}->{gb})")
         elif t == "negation":
-            ok = ga != gb and na == nb
-            why = "" if ok else (f"부정어 수 동일({ga}->{gb}) — 삽입/제거 아님(반의어·양태 치환)" if na == nb else f"수치 동반 변경 {na}->{nb}")
+            # D13-A: 원문 대비 오염문 부정어 개수 변화 ±1 = PASS, 0 = FAIL.
+            # 반의어·양태 치환(개수 불변)과 다중 부정 조작(|delta|>=2)을 함께 배제한다.
+            delta = gb - ga
+            ok = abs(delta) == 1 and na == nb
+            if ok:
+                why = ""
+            elif na != nb:
+                why = f"수치 동반 변경 {na}->{nb}"
+            elif delta == 0:
+                why = f"부정어 수 동일({ga}->{gb}) — 삽입/제거 아님(반의어·양태 치환)"
+            else:
+                why = f"부정어 {abs(delta)}개 동시 변경({ga}->{gb}) — 단일 삽입/제거만 허용"
         else:  # number
             ok = na != nb and strip_numbers(a) == strip_numbers(b)
             why = "" if ok else ("숫자 미변경" if na == nb else "숫자 외 텍스트도 변경")
