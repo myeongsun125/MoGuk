@@ -59,7 +59,7 @@ services:
     environment:
       API_ROLE: core
       DATABASE_URL: postgresql://${POSTGRES_USER:-moguk}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (.env)}@postgres:5432/${POSTGRES_DB:-moguk}
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
       OLLAMA_FALLBACK_MODEL: ${OLLAMA_FALLBACK_MODEL:-qwen3:4b}
       STT_URL: http://stt:8000
