@@ -5,7 +5,8 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
 
 디스패치는 라우터를 HTTP 로 다시 부르지 않고(재귀 금지) 처리 함수를 직접 호출한다.
 대상: POST /api/v1/ask(run_ask) · POST /api/v1/reports(submit_text_report, M-08b 배선)
-     · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선).
+     · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선)
+     · POST /api/v1/reports/{id}/confirm(risk_reports.confirm, M-08c 배선).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -70,6 +71,20 @@ def dispatch(
             source=body.get("source", "text"),
             worker_id=worker_id,
         )
+    if method == "POST" and path.startswith("/api/v1/reports/") and path.endswith("/confirm"):
+        # M-08c 확인 루프 — actor 는 identity.wid 에서 도출(M-28b ②)
+        from app.services.risk_reports import ReportNotFound, confirm
+
+        try:
+            report_id = int(path.split("/")[4])
+        except (IndexError, ValueError):
+            return 404, {"detail": f"relay: 잘못된 report_id 경로 {path}"}
+        try:
+            return 200, confirm(
+                report_id, body.get("result", ""), body.get("corrected_text"), worker_id
+            )
+        except ReportNotFound:
+            return 404, {"detail": "report not found"}
     if method == "POST" and path in ("/api/v1/auth/activate", "/api/v1/auth/login"):
         # M-15: 신원·DB 는 core 소유. 라우터 재호출 없이 서비스 함수를 직접 부른다.
         from app.services import auth as auth_service
