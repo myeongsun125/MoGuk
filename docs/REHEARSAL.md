@@ -9,6 +9,7 @@
 
 ## 배포·전환
 - [ ] blue-green 전환 시 릴레이 인메모리 큐 in-flight 유실 — 전환 전 큐 드레인 확인 (V7, M-28a)
+- [ ] 본선 당일 SSH 계획: 핫스팟 IP 사전 등록 vs 한시 개방·폐회 즉시 원복 — 9/1 리허설에서 결정 (SG 22 화이트리스트 원칙 유지)
 
 ## 측정 (V6)
 - [ ] trace.relay{enqueued_at, leased_at, responded_at}로 릴레이 오버헤드/LLM 시간 분리 — 내부 계측 전용, API 응답 미노출
