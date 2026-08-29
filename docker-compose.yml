@@ -85,6 +85,9 @@ services:
       TENANT_SLUG: ${TENANT_SLUG:-axis_demo}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       RELAY_HOLD_S: ${RELAY_HOLD_S:-20}
+      HEARTBEAT_INTERVAL_S: ${HEARTBEAT_INTERVAL_S:-30}
+      JWT_ACCESS_TTL_S: ${JWT_ACCESS_TTL_S:-1800}
+      JWT_REFRESH_TTL_S: ${JWT_REFRESH_TTL_S:-1209600}
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,6 +132,8 @@ services:
       RELAY_EDGE_WAIT_S: ${RELAY_EDGE_WAIT_S:-30}
       RELAY_LEASE_S: ${RELAY_LEASE_S:-60}
       RELAY_REDELIVER_MAX: ${RELAY_REDELIVER_MAX:-1}
+      JWT_ACCESS_TTL_S: ${JWT_ACCESS_TTL_S:-1800}
+      JWT_REFRESH_TTL_S: ${JWT_REFRESH_TTL_S:-1209600}
     ports:
       - "8000:8000"   # dev 직접 호출용 (curl localhost:8000/health). prod 는 caddy 경유만
     networks: [edge_net]
