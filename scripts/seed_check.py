@@ -34,6 +34,9 @@ P = {
     "exp_readme": ROOT / "experiments/README.md",
 }
 
+# 시드 산출물이 있어야만 수행 가능한 검사 섹션 (부재 시 SKIP 행으로 대체)
+SEED_SECTIONS = ("수량·구조", "draft 플래그", "용어 일관성", "안전 비중", "오염셋 무결성", "vi 구조 대조(보조)")
+
 ROWS: list[dict] = []
 
 
@@ -178,20 +181,8 @@ def paren_variants(t: str) -> list[str]:
     if m:
         v += [m.group(1).strip(), m.group(2).strip()]
     return v
-
-
-# =====================================================================
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default="main", help="시크릿 검사용 diff 기준 브랜치")
-    ap.add_argument("--json", help="결과를 JSON으로도 저장")
-    args = ap.parse_args()
-
-    missing = [k for k, p in P.items() if not p.exists()]
-    if missing:
-        print("필수 파일 누락:", ", ".join(str(P[k].relative_to(ROOT)) for k in missing))
-        return 2
-
+# 시드 산출물에 의존하는 검사 묶음. 입력이 하나라도 없으면 호출하지 않는다(SKIP).
+def seed_checks() -> None:
     gl = load_json("glossary")
     ql = load_json("quiz_learning")
     qs = load_json("quiz_safety")
@@ -426,9 +417,33 @@ def main() -> int:
     row(S, "ko↔vi 부정 극성 일치", "PASS" if not neg_mis else "WARN",
         f"{len(pairs)}쌍 검사" + ("" if not neg_mis else "; 불일치: " + "; ".join(neg_mis)))
 
+
+
+
+# =====================================================================
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", default="main", help="시크릿 검사용 diff 기준 브랜치")
+    ap.add_argument("--json", help="결과를 JSON으로도 저장")
+    args = ap.parse_args()
+
+    missing = [k for k, p in P.items() if not p.exists()]
+
+    if missing:
+        rel = [P[k].relative_to(ROOT).as_posix() for k in missing]
+        print("입력 부재 — 시드 의존 검사 SKIP")
+        print("  누락:", ", ".join(rel))
+        print("  사유: 06 시드 폐기(M-29) 후 07 재생성 전 구간. 파일 복원 시 자동 재개.")
+        print("")
+        for sec in SEED_SECTIONS:
+            row(sec, "시드 의존 검사", "SKIP", f"입력 부재 {len(rel)}건: " + ", ".join(rel))
+    else:
+        seed_checks()
+
     # ---------------- [금지어] ----------------
     S = "금지어"
     scan_keys = ("glossary", "quiz_learning", "quiz_safety", "phrases", "special", "lathe", "press", "kosha", "sentences", "corrupted", "exp_readme")
+    scan_keys = tuple(k for k in scan_keys if P[k].exists())
     brand_hits, name_hits, team_hits = [], [], []
     for k in scan_keys:
         f = P[k]
