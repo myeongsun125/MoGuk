@@ -1,13 +1,24 @@
 # experiments — 예선 정량 실험 [명선+새봄]
 
-| 파일 | 측정 | 비고 |
+> **현재 상태: 테스트셋 부재.**
+> 06 시드와 `testset/` 산출물은 M-29(시드 데이터 근거 기준)에 따라 **전량 폐기**되었다.
+> 데이터뿐 아니라 **스키마를 포함해 07에서 재생성**한다.
+> 파일명·필드 구성은 07 산출 시점에 확정되므로, 재생성 전까지 이 문서에 고정하지 않는다.
+> 아래 측정은 테스트셋 재생성 이후에 실행할 수 있다.
+
+| 측정 | 스크립트 | 상태 |
 |---|---|---|
-| `testset/sentences_30.json` | 기준 문장 30 | `{id, ko, answer_vi, terms[], source, intent, draft}` · 안전 지시문 19/30 |
-| `testset/corrupted_30.json` | 오염 문장 30 | `{id, base_id, type, corrupted_vi, note}` · 유형 `term_swap \| negation \| number` × 10 |
-| `mistranslation_eval.py` | 측정 #1 용어 오역률 | |
-| `gate_eval.py` | 측정 #3 게이트 검출률 → τ 확정 (M-10a, 8/29) | |
+| 측정 #1 — 용어 오역률 (glossary 주입 전/후) | `mistranslation_eval.py` | 스텁 — 입력 대기 |
+| 측정 #3 — 백트랜슬레이션 게이트 검출률 → τ 확정 (M-10a) | `gate_eval.py` | 스텁 — 입력 대기 |
 
 검증된 로직만 `backend/app/agents/`로 이식한다.
 
-> 두 파일의 `answer_vi`·`corrupted_vi`는 **전부 초안(draft)** 이다. 원어민 검수 전 시연 문구로 확정하지 않는다.
-> 문장은 `data/seed/manuals/`의 두 매뉴얼에서 파생되며, `terms[]`는 `data/seed/glossary/glossary_50.json`의 `term_ko`를 참조한다.
+## 07 재생성 시 확정 사항
+
+- 모든 문장은 `data/sources/`의 근거 문서에서 파생하며 근거 ID를 갖는다. 근거 없는 안전 서술을 만들지 않는다(M-29).
+- 오염셋의 `negation` 유형은 **원문 대비 오염문의 부정어 개수 변화 절댓값이 1일 때만 유효**하다(D13-A).
+  개수가 같으면 반의어·양태 치환이므로 `negation`이 아니며, 2개 이상 동시 변경도 배제한다.
+  vi 부정어 사전은 `scripts/seed_check.py`의 `VI_NEG_LEXICON`이 단일 출처다.
+- 번역문의 검수 상태는 항목별 플래그로 표기한다. 원어민 검수 전 시연 문구로 확정하지 않는다.
+
+산출물 형식 검증은 `scripts/seed_check.py`가 담당한다.
