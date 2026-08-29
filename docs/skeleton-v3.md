@@ -214,9 +214,9 @@ GET  /auth/me              (Authorization: Bearer <jwt>)   → {worker_id, tenan
 # /auth/* 실패는 전부 401 + 동일 메시지 — 계정·토큰 존재 여부를 응답으로 구분하지 않는다
 GET  /learn/cards?module=
 POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}
-POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id}
+POST /ask                  {question, lang}                → {answer, sources[], verify:{score,passed,gated}, trace_id} | edge 보류 상한 30s 초과 시 504 (M-28a)
 POST /ask/voice            multipart(audio≤60s, lang)      → 동일 | 폴백 안내 응답
-POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501
+POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501 | edge 보류 상한 30s 초과 시 504 (M-28a)
 GET  /reports/{id}                                          → 상태 조회(접수 확인 화면)
 POST /chat                 {message}                        → {reply}          # 로컬 티어 고정
 GET  /notifications        / POST /notifications/{id}/read
@@ -240,7 +240,7 @@ GET  /health
 ## internal (edge, 외부 차단 — M-22a)
 ```
 GET  /internal/relay/pending          — core 폴러가 대기 요청 리스 획득 (long-poll hold 20s, batch ≤10, 리스 60s·재배포 1회 — M-28a)
-POST /internal/relay/{request_id}/respond — core가 처리 결과 반환 (request_id UUIDv4 멱등, edge 보류 30s 초과 시 504)
+POST /internal/relay/{request_id}/respond — core가 처리 결과 반환 (request_id UUIDv4 멱등 — 보류 상한·504 동작은 REHEARSAL 참조)
 ```
 주: localhost·core_net 내부 소스만 허용, 외부 거부(미들웨어, M-22a). 요청·응답 상세 스키마는 구현(#17) 소유.
 
