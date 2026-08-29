@@ -196,7 +196,7 @@ sources:
     title: null            # NCS 학습모듈 프레스가공 — 작업 절차 단원
     publisher: 교육부·한국직업능력연구원
     url: null
-    license: 미확인
+    license: "해당없음(자료 부재 — excluded)"
     lang: ko
     file: null
     retrieved_at: null
