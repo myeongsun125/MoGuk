@@ -5,6 +5,8 @@ data/seed/* 와 experiments/testset/* 를 읽어 수량·구조·draft 플래그
 안전 비중·오염셋 무결성·금지어·시크릿을 표(markdown)로 출력한다. 파일을 수정하지 않는다.
 
 usage:  python scripts/seed_check.py [--base main] [--json out.json]
+
+07 추가(M-29 근거 인용 검사 ①②③⑥⑦)는 src_checks() — 파일 말미 주석 참조. requires: pyyaml
 exit :  0 = FAIL 없음 / 1 = FAIL 있음 / 2 = 필수 파일 누락
 """
 from __future__ import annotations
@@ -139,8 +141,15 @@ def vi_neg(s: str) -> int:
     return len(re.findall(r"\b(" + "|".join(VI_NEG_LEXICON) + r")\b", s, flags=re.I))
 
 
+# ko 사전 (2026-08-29 총괄 확정): 장형 부정(-지 않다/-지 못하다)·금지형(-지 말다/-여서는 안 되다)·
+# 존재 부정(없다)·계사 부정(아니다) 포함. 단형 안/못, 명사 '금지', '모르다' 제외.
+KO_NEG_LEXICON = re.compile(
+    r"(지\s?않|지\s?못|지\s?마|지\s?말|(?:어|아|여|해|워|라|서)서는\s?(?:안|아니)\s?(?:되|됩)"
+    r"|없(?=다|습|어|으|는|이|음|을|고|지)|아니(?=다|ㅂ|에|야|고|며|라|오)|아닙|아닌)")
+
+
 def ko_neg(s: str) -> int:
-    return len(re.findall(r"(마십시오|마세요|않|아닌|아닙|모르|금지)", s))
+    return len(KO_NEG_LEXICON.findall(s))
 
 
 def strip_numbers(s: str) -> str:
@@ -420,6 +429,264 @@ def seed_checks() -> None:
 
 
 
+
+# =====================================================================
+# 07 근거 인용 검사 (M-29) — main판 seed_check 위에 선행분(feat/ms-seed-07) 재적용.
+# 시드가 없어도 실행된다(소스 정합만). 검사 규칙:
+#   ① 안전·절차 문장 [src:] 커버리지 100%  (매뉴얼 줄 + JSON 레코드 ko 문장)
+#   ② 인용 src ID ⊂ manifest (날조 0) ∧ status fetched/collected
+#   ③ 공공누리 4유형 인용 문장 = data/sources/text/<ID>.md 원문 부분문자열(공백 제거 후 대조, 무변형)
+#   ⑥ role: case 소스 인용 0 (매뉴얼·quiz·testset = FAIL, 그 외 WARN)
+#   ⑦ draft:true 필드 집계
+# 인용 표기: 매뉴얼 `[src: ID 위치]`(`;` 구분), 「…」/“…” 안이 있으면 그 안만 ③ 대조. JSON 은 `src` 필드(+`quote`).
+import unicodedata
+
+import yaml
+
+SRC_MANIFEST = ROOT / "data/sources/manifest.yaml"
+SRC_TEXT_DIR = ROOT / "data/sources/text"
+SRC_ID_RE = re.compile(r"[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*")
+SRC_MARK_RE = re.compile(r"\[src:\s*([^\]]*)\]")
+SRC_FRONT_RE = re.compile(r"^---\n.*?\n---\n", re.S)
+SRC_QUOTE_RE = re.compile(r"「([^」]+)」|“([^”]+)”")
+SRC_KO_KEYS = ("ko", "q_ko", "text_ko", "term_ko")
+SRC_KEYS = ("src", "source_ref", "src_ids")
+SRC_IMPER = re.compile(r"(십시오|하세요|해야|하여야|할 것|하도록)")
+SRC_PROHIB = re.compile(r"(마십시오|마세요|않습니다|않는다|금지|안 됩니다|안 된다|아니 된다)")
+SRC_SENT_END = re.compile(r"(다\.|십시오\.?|세요\.?|것\.?)$")
+
+
+def src_squash(s: str) -> str:
+    return re.sub(r"\s+", "", unicodedata.normalize("NFC", s))
+
+
+def src_parse_ids(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [i for v in value for i in src_parse_ids(v)]
+    out = []
+    for seg in re.split(r"[;,/]", str(value)):
+        m = SRC_ID_RE.search(seg.strip())
+        if m:
+            out.append(m.group(0))
+    return out
+
+
+def src_strip_md(line: str) -> str:
+    s = re.sub(r"^\s*(?:[-*+]|\d+[.)]|>)\s+", "", line)
+    return re.sub(r"\*\*|__|`", "", s).strip()
+
+
+def src_is_safety_or_procedure(ko: str, chapter_cat: str | None = None) -> bool:
+    if SRC_PROHIB.search(ko) or (SRC_IMPER.search(ko) and SAFETY_KW.search(ko)):
+        return True
+    return chapter_cat in ("safety", "instruction") and bool(SRC_SENT_END.search(ko.strip()))
+
+
+def src_parse_manual(md: str) -> tuple[dict, list[dict]]:
+    m = SRC_FRONT_RE.match(md)
+    fm = yaml.safe_load(m.group(0).strip("-\n")) if m else {}
+    cat_map = {}
+    for c in (fm or {}).get("category_map", []) or []:
+        mm = re.match(r"\s*(\d+)", str(c.get("section", "")))
+        if mm:
+            cat_map[mm.group(1)] = c.get("category")
+    lines, cur_cat, in_code = [], None, False
+    body = md[m.end():] if m else md
+    offset = md[:m.end()].count("\n") if m else 0
+    for i, line in enumerate(body.splitlines(), offset + 1):
+        if line.strip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code or not line.strip() or line.lstrip().startswith(("<!--", "|", "---")):
+            continue
+        h = re.match(r"^##\s+(\d+)\.", line)
+        if h:
+            cur_cat = cat_map.get(h.group(1))
+        if line.lstrip().startswith("#"):
+            continue
+        lines.append({"line_no": i, "text": src_strip_md(line), "chapter_cat": cur_cat})
+    return fm or {}, lines
+
+
+def src_walk_records(obj, path="$") -> list[tuple[str, dict]]:
+    out = []
+    if isinstance(obj, dict):
+        if any(k in obj for k in SRC_KO_KEYS) or "draft" in obj or any(k in obj for k in SRC_KEYS):
+            out.append((path, obj))
+        for k, v in obj.items():
+            if k.startswith("_") and k != "_meta":
+                continue
+            out += src_walk_records(v, f"{path}.{k}")
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            out += src_walk_records(v, f"{path}[{i}]")
+    return out
+
+
+def src_rec_ko(rec: dict) -> str | None:
+    for k in SRC_KO_KEYS:
+        if isinstance(rec.get(k), str):
+            return rec[k]
+    return None
+
+
+def src_rec_ids(rec: dict) -> list[str]:
+    ids = []
+    for k in SRC_KEYS:
+        ids += src_parse_ids(rec.get(k))
+    for m in SRC_MARK_RE.finditer(src_rec_ko(rec) or ""):
+        ids += src_parse_ids(m.group(1))
+    return ids
+
+
+def src_checks() -> None:
+    S = "근거 소스 정합"
+    if not SRC_MANIFEST.exists():
+        row(S, "manifest", "FAIL", f"{SRC_MANIFEST.relative_to(ROOT).as_posix()} 없음")
+        return
+    manifest = {s["id"]: s for s in yaml.safe_load(SRC_MANIFEST.read_text(encoding="utf-8")).get("sources", [])}
+    texts: dict[str, dict] = {}
+    if SRC_TEXT_DIR.exists():
+        for f in sorted(SRC_TEXT_DIR.glob("*.md")):
+            raw = f.read_text(encoding="utf-8")
+            m = SRC_FRONT_RE.match(raw)
+            fm = (yaml.safe_load(m.group(0).strip("-\n")) if m else {}) or {}
+            body = re.sub(r"<!--.*?-->", "", raw[m.end():] if m else raw)
+            texts[f.stem] = {"fm": fm, "squash": src_squash(body)}
+    fetched = {i for i, s in manifest.items() if s.get("status") in ("fetched", "collected")}
+    type4 = {i for i, s in manifest.items() if "4유형" in str(s.get("license", ""))}
+    case_ids = {i for i, s in manifest.items() if s.get("role") == "case"}
+    row(S, "manifest 항목", "INFO", f"{len(manifest)}건 — fetched {len(fetched)}, 4유형 {len(type4)}, role:case {sorted(case_ids)}")
+    bad = [k for k, t in texts.items() if t["fm"].get("id") != k or k not in manifest]
+    row(S, "text/ 파일 id = 파일명 ∧ manifest 존재", "PASS" if not bad else "FAIL", f"{len(texts)}건" + ("" if not bad else f"; 불일치 {bad}"))
+    role_bad = [k for k, t in texts.items() if (t["fm"].get("role") or None) != (manifest.get(k, {}).get("role") or None)]
+    row(S, "text/ front matter role = manifest role", "PASS" if not role_bad else "FAIL", "일치" if not role_bad else str(role_bad))
+    row(S, "4유형 fetched 소스 중 text/ 부재(③ 수동 대조 대상)", "INFO", str(sorted(i for i in type4 & fetched if i not in texts)))
+
+    # ---- 시드 수집 (있는 것만) ----
+    manual_keys = [k for k in ("lathe", "press") if P[k].exists()]
+    json_keys = [k for k in ("glossary", "quiz_learning", "quiz_safety", "phrases", "special", "sentences", "corrupted") if P[k].exists()]
+    if not manual_keys and not json_keys:
+        row("① [src:] 커버리지", "시드 부재", "SKIP", "07 산출물 없음 — ①②③⑥⑦ 건너뜀")
+        return
+    manual_lines: dict[str, list[dict]] = {}
+    for k in manual_keys:
+        _, lines = src_parse_manual(P[k].read_text(encoding="utf-8"))
+        manual_lines[P[k].name] = lines
+    records: dict[str, list[tuple[str, dict]]] = {}
+    for k in json_keys:
+        records[P[k].relative_to(ROOT).as_posix()] = src_walk_records(load_json(k))
+
+    # ---- ① 커버리지 ----
+    S = "① [src:] 커버리지"
+    need = have = 0
+    miss = []
+    for name, lines in manual_lines.items():
+        for l in lines:
+            if src_is_safety_or_procedure(l["text"], l["chapter_cat"]):
+                need += 1
+                if SRC_MARK_RE.search(l["text"]):
+                    have += 1
+                else:
+                    miss.append(f"{name}:{l['line_no']} {l['text'][:40]}")
+    for rel, recs in records.items():
+        for path, rec in recs:
+            ko = src_rec_ko(rec)
+            if ko and src_is_safety_or_procedure(ko):
+                need += 1
+                if src_rec_ids(rec):
+                    have += 1
+                else:
+                    miss.append(f"{rel}{path[1:]} {ko[:40]}")
+    row(S, "안전·절차 문장 src 커버리지 = 100%", "PASS" if not miss else "FAIL",
+        f"{have}/{need}" + ("" if not miss else "; 누락: " + "; ".join(miss[:30]) + (" …" if len(miss) > 30 else "")))
+    total_lines = sum(len(v) for v in manual_lines.values())
+    marked = sum(1 for v in manual_lines.values() for l in v if SRC_MARK_RE.search(l["text"]))
+    row(S, "매뉴얼 전체 문장 중 [src:] 부착 비율(참고)", "INFO", f"{marked}/{total_lines}" + (f" ({100 * marked // total_lines}%)" if total_lines else ""))
+
+    # ---- 인용 수집 ----
+    cites: list[dict] = []
+    for name, lines in manual_lines.items():
+        for l in lines:
+            ms = list(SRC_MARK_RE.finditer(l["text"]))
+            if not ms:
+                continue
+            ids = [i for m in ms for i in src_parse_ids(m.group(1))]
+            plain = SRC_MARK_RE.sub("", l["text"]).strip()
+            spans = [next(g for g in q.groups() if g) for q in SRC_QUOTE_RE.finditer(plain)] or [plain]
+            cites.append({"where": f"{name}:{l['line_no']}", "ids": ids, "texts": spans, "kind": "manual"})
+    for rel, recs in records.items():
+        kind = "quiz" if "/quiz/" in rel else "testset" if "testset" in rel else "json"
+        for path, rec in recs:
+            ids = src_rec_ids(rec)
+            if not ids:
+                continue
+            t = rec.get("quote") if isinstance(rec.get("quote"), str) else SRC_MARK_RE.sub("", src_rec_ko(rec) or "").strip()
+            cites.append({"where": f"{rel}{path[1:]}", "ids": ids, "texts": [t] if t else [], "kind": kind})
+    dist: dict[str, int] = {}
+    for c in cites:
+        for i in c["ids"]:
+            dist[i] = dist.get(i, 0) + 1
+    row(S, "소스별 인용 분포", "INFO", ", ".join(f"{k} {v}" for k, v in sorted(dist.items())) or "인용 0")
+
+    # ---- ② manifest 존재 ----
+    S = "② src ID ⊂ manifest"
+    unknown = sorted({f"{c['where']}→{i}" for c in cites for i in c["ids"] if i not in manifest})
+    not_fetched = sorted({f"{c['where']}→{i}" for c in cites for i in c["ids"] if i in manifest and i not in fetched})
+    row(S, "인용 ID 전부 manifest 존재(날조 0)", "PASS" if not unknown else "FAIL",
+        f"인용 {len(cites)}건, ID {len(dist)}종" + ("" if not unknown else "; 미존재: " + "; ".join(unknown[:20])))
+    row(S, "인용 ID status ∈ {fetched, collected}", "PASS" if not not_fetched else "FAIL", "전 건" if not not_fetched else "; ".join(not_fetched[:20]))
+
+    # ---- ③ 4유형 무변형 ----
+    S = "③ 4유형 무변형(text/ 부분문자열)"
+    ok4, bad4, manual4, other_bad, ok_other = 0, [], [], [], 0
+    for c in cites:
+        for i in c["ids"]:
+            if i not in manifest:
+                continue
+            for t in c["texts"]:
+                if len(src_squash(t)) < 6:
+                    continue
+                if i not in texts:
+                    if i in type4:
+                        manual4.append(f"{c['where']}→{i}")
+                    continue
+                hit = src_squash(t) in texts[i]["squash"]
+                if i in type4:
+                    if hit:
+                        ok4 += 1
+                    else:
+                        bad4.append(f"{c['where']}→{i} '{t[:30]}…'")
+                elif hit:
+                    ok_other += 1
+                else:
+                    other_bad.append(f"{c['where']}→{i} '{t[:30]}…'")
+    row(S, "4유형 인용 문장 = 원문 부분문자열(공백 제거 비교)", "PASS" if not bad4 else "FAIL",
+        f"일치 {ok4}" + ("" if not bad4 else "; 불일치: " + "; ".join(bad4[:20])))
+    row(S, "4유형 인용 중 text/ 부재(수동 대조 필요)", "INFO" if not manual4 else "WARN", "없음" if not manual4 else "; ".join(manual4[:20]))
+    row(S, "4유형 외 소스 인용 문장 원문 대조(참고 — 재구성 허용)", "INFO",
+        f"원문 일치 {ok_other} / 재구성 {len(other_bad)}")
+
+    # ---- ⑥ role: case ----
+    S = "⑥ role:case 인용 금지"
+    hard = [f"{c['where']}→{i}" for c in cites for i in c["ids"] if i in case_ids and c["kind"] in ("manual", "quiz", "testset")]
+    soft = [f"{c['where']}→{i}" for c in cites for i in c["ids"] if i in case_ids and c["kind"] not in ("manual", "quiz", "testset")]
+    row(S, "매뉴얼·quiz·testset 의 case 소스 인용 = 0", "PASS" if not hard else "FAIL", "0" if not hard else "; ".join(hard))
+    row(S, "그 외 파일의 case 소스 인용", "INFO" if not soft else "WARN", "0" if not soft else "; ".join(soft))
+
+    # ---- ⑦ draft 집계 ----
+    S = "⑦ draft 집계"
+    tot_true = 0
+    for rel, recs in records.items():
+        t = sum(1 for _, r in recs if r.get("draft") is True)
+        f = sum(1 for _, r in recs if r.get("draft") is False)
+        n = sum(1 for _, r in recs if "draft" not in r)
+        tot_true += t
+        row(S, f"{rel} draft", "INFO", f"레코드 {len(recs)}: true {t} / false {f} / 없음 {n}")
+    row(S, "draft:true 필드 총계(JSON 레코드)", "INFO", str(tot_true))
+
 # =====================================================================
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -439,6 +706,8 @@ def main() -> int:
             row(sec, "시드 의존 검사", "SKIP", f"입력 부재 {len(rel)}건: " + ", ".join(rel))
     else:
         seed_checks()
+
+    src_checks()   # 07 근거 인용 검사 (①②③⑥⑦) — 시드 부재 시 소스 정합만 수행
 
     # ---------------- [금지어] ----------------
     S = "금지어"
