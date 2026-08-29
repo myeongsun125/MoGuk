@@ -4,7 +4,8 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
 루프 = GET edge/internal/relay/pending (long-poll) → 로컬 디스패치 → POST .../respond.
 
 디스패치는 라우터를 HTTP 로 다시 부르지 않고(재귀 금지) 처리 함수를 직접 호출한다.
-대상: POST /api/v1/ask(run_ask) · POST /api/v1/reports(submit_text_report, M-08b 배선).
+대상: POST /api/v1/ask(run_ask) · POST /api/v1/reports(submit_text_report, M-08b 배선)
+     · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -61,6 +62,19 @@ def dispatch(
             lang=body.get("lang"),
             source=body.get("source", "text"),
         )
+    if method == "POST" and path in ("/api/v1/auth/activate", "/api/v1/auth/login"):
+        # M-15: 신원·DB 는 core 소유. 라우터 재호출 없이 서비스 함수를 직접 부른다.
+        from app.services import auth as auth_service
+
+        try:
+            if path.endswith("/activate"):
+                result = auth_service.activate(body.get("token", ""), body.get("pin", ""))
+            else:
+                result = auth_service.login(body.get("emp_no", ""), body.get("pin", ""))
+        except auth_service.AuthError:
+            # 사유를 응답으로 구분하지 않는다(계정·토큰 존재 여부 비노출)
+            return 401, {"detail": auth_service.AUTH_FAILED_MESSAGE}
+        return 200, result
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
 
 
