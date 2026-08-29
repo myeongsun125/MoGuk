@@ -63,7 +63,7 @@ SB V3-1(위험보고 API) ──→ JH V3-2(위험보고 관리 화면) · MS V3
 ### MS 명선 (pipeline/ · experiments/ · data/ · db/migrations/) — 권장: Fable 5 높음(설계·판정) / Sonnet(감수)
 | 구간 | 작업 | 확인 방법 (완료 판정) |
 |---|---|---|
-| V2-1 (26오전) | 시드 초안 감수·확정 + KOSHA 발췌 수집. draft:true 항목 검수 후 유지(원어민 검수 전) 단 오류 수정 | `ls data/seed/manuals data/seed/glossary experiments/testset` 전 파일 존재 + glossary 50건 `python -c "import json;print(len(json.load(open('data/seed/glossary/glossary_50.json'))))"` = 50 |
+| V2-1 (26오전) | M-29 근거 자료 수집·manifest 확정 + 06 시드 폐기. 07 근거 기반 재생성은 후속 구간 | manifest 20항목(fetched 17/excluded 1/pending 2) + raw 18파일 존재 + text/ 변환 산출 존재 `python -c "import yaml;d=yaml.safe_load(open('data/sources/manifest.yaml',encoding='utf-8'));print(len(d['sources']))"` = 20 |
 | V2-2 (26오후) | 인제스천 실행(분류→마스킹→청킹 500–800/오버랩100→bge-m3→적재) + 새봄 페어 | `docker compose exec postgres psql -U <u> -d <db> -c "SET search_path TO tenant_axis_demo; SELECT count(*) FROM documents; SELECT count(*) FROM chunks; SELECT count(*) FROM glossary;"` → 각각 >0, >0, =50 |
 | V3-1 (27) | glossary_candidates 에셋 + 퀴즈 시드 적재 + generate_quiz 1회 실행→draft 상태 확인 | Dagster UI 자산 그래프 스크린샷 + `SELECT count(*) FROM quiz_sets WHERE status='draft'` ≥1, `WHERE status='approved'` ≥2 |
 | V4-1 (28) | 데모 대본(질문 5+실패 대체) + V4 검증 주재(코어 6스텝) | docs/WORKLOG/V4_demo_script.md 커밋 + [GATE|V4] 판정 엔트리 기록 |
@@ -78,7 +78,7 @@ SB V3-1(위험보고 API) ──→ JH V3-2(위험보고 관리 화면) · MS V3
 | V2-2 (26) | RAG /ask: retrieve(top-k=4, meta_filter)→근거 강제 프롬프트→sources·trace·latency 기록. grounded=false→unanswered_queue insert | `curl --data-binary @q_vi.json .../api/v1/ask` → sources 길이≥1 + trace_id 존재. 무근거 질문 1건 → `SELECT count(*) FROM unanswered_queue WHERE status='open'` ≥1 |
 | V3-1 (27) | 위험보고: POST /reports 202 즉시 + jobs 워커(SKIP LOCKED, STT→요약+severity 로컬 티어, 3회 실패 시 보존+알림). **수신 구조 = S3 단기 버퍼 → core outbound pull(M-25). 텍스트 보고·/ask 등 실시간 요청은 M-28 릴레이 — 파라미터는 §5 합의 후** | 텍스트 보고 → 202 + 5초 내 `SELECT ko_summary, severity, status FROM risk_reports ORDER BY id DESC LIMIT 1` → 요약 not null, status='submitted' |
 | V3-2 (27) | 인증(초대 토큰→PIN 해시→JWT/리프레시) + 하트비트 스케줄러(core→edge) | activate→login→JWT로 보호 엔드포인트 200, 무토큰 401. edge /health core_relay=ok(age_s < 60) |
-| V4-1 (28) | 게이트 C+A: verify_backtranslation(bge-m3 코사인, τ 가값 0.80)·is_high_risk(OR)·안전만 차단+전체 배지 | corrupted_30 중 negation 1건 질의 → 응답 gated=true("관리자 확인 필요") + 일반 질의 → verify.score 배지 존재 |
+| V4-1 (28) | 게이트 C+A: verify_backtranslation(bge-m3 코사인, τ 가값 0.80)·is_high_risk(OR)·안전만 차단+전체 배지 | 07 재생성 testset 기준 오염셋 negation 1건 질의 → 응답 gated=true("관리자 확인 필요") + 일반 질의 → verify.score 배지 존재 |
 | V5-1 (29) | 상담챗(학습상태 주입, 로컬 고정) + crypto seal/open + 퀴즈 생성 파이프 연결 | /chat 응답 + `SELECT count(*) FROM conversations` ≥2 + `pytest -k crypto` 왕복 green + trace route.tier='local' 확인 |
 | V6~V7 (30–31) | 측정 지원 #2·#4·#5 (정의 = BLUEPRINT §5) + 안정화 + 리허설 | #2: `SELECT count(*) FROM questions WHERE grounded=false AND answer IS NOT NULL` = 0 쿼리 결과 캡처 · #5: 외부 차단 후 10요청 성공률 로그 |
 
