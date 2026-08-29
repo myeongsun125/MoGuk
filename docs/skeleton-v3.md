@@ -36,8 +36,7 @@ axis-platform/
 │   ├── assets/{documents_raw,chunks_index,glossary_candidates,quiz_bank,manager_report}.py
 │   └── definitions.py
 ├── experiments/                  # [명선+새봄]
-│   ├── testset/sentences_30.json           # {ko, answer_vi, terms[]}
-│   ├── testset/corrupted_30.json           # 유형: term_swap|negation|number ×10
+│   ├── testset/                            # M-29 폐기 — 07 재생성(스키마도 07 기준)
 │   ├── mistranslation_eval.py              # 측정 #1
 │   └── gate_eval.py                        # 측정 #3 → τ 확정
 ├── data/seed/{manuals,kosha,glossary,phrases,quiz,safety_courses}/
