@@ -16,7 +16,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.services import dashboard as dashboard_service, risk_reports
+from app.services import admin_events, approval, dashboard as dashboard_service, risk_reports
 from app.services.relay import queue
 from app.services.system_service import role
 
@@ -24,6 +24,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # M-28c ① 릴레이 경로 — §3 관리자 블록 등재분.
 DASHBOARD_PATH = "/api/v1/admin/dashboard"
+GLOSSARY_PATH = "/api/v1/admin/glossary"
+UNANSWERED_PATH = "/api/v1/admin/unanswered"
+GLOSSARY_APPROVE_PATH = "/api/v1/admin/glossary/{term_id}/approve"
+GLOSSARY_REJECT_PATH = "/api/v1/admin/glossary/{term_id}/reject"
+EVENTS_PATH = "/api/v1/admin/events"
 LIST_PATH = "/api/v1/admin/reports"
 DETAIL_PATH = "/api/v1/admin/reports/{report_id}"
 ACK_PATH = "/api/v1/admin/reports/{report_id}/ack"
@@ -89,23 +94,71 @@ def upload_document() -> dict:
 
 
 @router.get("/glossary")
-def list_glossary(status: str = "draft") -> list:
-    raise NotImplementedError("[새봄] GET /admin/glossary?status=")
+async def list_glossary(status: str | None = approval.GLOSSARY_DEFAULT_STATUS) -> JSONResponse:
+    """용어 후보 목록 — 기본 필터 draft. 읽기 전용(전이는 approve/reject 소관)."""
+    if role() == "edge":
+        path = GLOSSARY_PATH + (f"?status={quote(status)}" if status else "")
+        return await _relay(path, "GET", {})
+    result = await asyncio.to_thread(approval.list_glossary, status)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/glossary/{term_id}/approve")
-def approve_glossary(term_id: int) -> dict:
-    raise NotImplementedError("[새봄] POST /admin/glossary/{id}/approve")
+async def approve_glossary(term_id: int, request: Request) -> JSONResponse:
+    """draft → approved. 전이마다 admin_events 1행(M-08d)."""
+    _reject_identity_fields(await _json_body(request))
+    if role() == "edge":
+        return await _relay(GLOSSARY_APPROVE_PATH.format(term_id=term_id), "POST", {})
+    try:
+        result = await asyncio.to_thread(approval.approve_glossary, term_id)
+    except approval.TermNotFound:
+        raise HTTPException(status_code=404, detail="glossary term not found") from None
+    except approval.TransitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/glossary/{term_id}/reject")
-def reject_glossary(term_id: int) -> dict:
-    raise NotImplementedError("[새봄] POST /admin/glossary/{id}/reject")
+async def reject_glossary(term_id: int, request: Request) -> JSONResponse:
+    """{note?} — draft → rejected. 사유는 admin_events.detail 에 보존(glossary.note 무접촉)."""
+    body = await _json_body(request)
+    _reject_identity_fields(body)
+    note = (body or {}).get("note")
+    if role() == "edge":
+        return await _relay(GLOSSARY_REJECT_PATH.format(term_id=term_id), "POST", {"note": note})
+    try:
+        result = await asyncio.to_thread(approval.reject_glossary, term_id, note)
+    except approval.TermNotFound:
+        raise HTTPException(status_code=404, detail="glossary term not found") from None
+    except approval.TransitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return JSONResponse(status_code=200, content=result)
+
+
+@router.get("/events")
+async def list_events(
+    date: str | None = None,
+    target_type: str | None = None,
+    limit: int = admin_events.LIMIT_DEFAULT,
+    offset: int = 0,
+) -> JSONResponse:
+    """감사 로그(M-08d ③) — 날짜(Asia/Seoul 일자)·target_type 필터, id desc. 읽기 전용."""
+    if role() == "edge":
+        q = {"date": date, "target_type": target_type, "limit": limit, "offset": offset}
+        query = "&".join(f"{k}={quote(str(v))}" for k, v in q.items() if v not in (None, ""))
+        return await _relay(EVENTS_PATH + (f"?{query}" if query else ""), "GET", {})
+    result = await asyncio.to_thread(admin_events.list_events, date, target_type, limit, offset)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.get("/unanswered")
-def list_unanswered() -> list:
-    raise NotImplementedError("[새봄] GET /admin/unanswered")
+async def list_unanswered(status: str | None = approval.UNANSWERED_DEFAULT_STATUS) -> JSONResponse:
+    """무근거 질의 대기 목록(M-05·M-05a 2종 한정) — 기본 필터 open."""
+    if role() == "edge":
+        path = UNANSWERED_PATH + (f"?status={quote(status)}" if status else "")
+        return await _relay(path, "GET", {})
+    result = await asyncio.to_thread(approval.list_unanswered, status)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/unanswered/{question_id}/answer")

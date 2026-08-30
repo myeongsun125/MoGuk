@@ -155,6 +155,16 @@ CREATE TABLE IF NOT EXISTS access_logs (                          -- M-07 감사
   target_type text NOT NULL, target_id int NOT NULL,
   created_at timestamptz DEFAULT now());
 
+CREATE TABLE IF NOT EXISTS admin_events (                         -- M-08d 관리자 전이 감사 (append-only)
+  id serial PRIMARY KEY,
+  actor text,                                       -- 'admin:<id>'|'admin:unauthenticated'(M-15b)
+  target_type text NOT NULL,                        -- 'glossary'|'unanswered'|…
+  target_id int NOT NULL,
+  action text NOT NULL,                             -- 'glossary_approved'|'glossary_rejected'|…
+  from_state text, to_state text, detail text,
+  created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS admin_events_target_idx ON admin_events(target_type, target_id, id);
+
 -- tenant_settings 시드 (§2 주석의 seed 값)
 INSERT INTO tenant_settings(key, value) VALUES
   ('threshold_pass', '90'),

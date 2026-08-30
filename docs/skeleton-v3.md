@@ -200,6 +200,12 @@ CREATE TABLE access_logs (                          -- M-07 감사 로그
   action text NOT NULL,        -- 'view_conversation_full'|'view_report_original'|...
   target_type text NOT NULL, target_id int NOT NULL,
   created_at timestamptz DEFAULT now());
+
+CREATE TABLE admin_events (                         -- M-08d 관리자 전이 감사 (append-only, 24번째)
+  id serial PRIMARY KEY, actor text,
+  target_type text NOT NULL, target_id int NOT NULL,
+  action text NOT NULL, from_state text, to_state text, detail text,
+  created_at timestamptz NOT NULL DEFAULT now());
 ```
 
 ## 3. API 계약 (edge, /api/v1, JSON snake_case)
@@ -228,10 +234,13 @@ POST /auth/admin/login     {email, pw}
 GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,acknowledged,resolved}, unanswered_open, citation_rate:{answered,with_sources,rate}, reports_today_hourly[{hour,count}], generated_at, timezone}   # KPI 4종+추이. citation_rate 분모=답변 방출(gated 제외)·분자=sources 존재. 추이=오늘(Asia/Seoul) 시간대별, 00시~현재 zero-fill. 학습 KPI(avg_comprehension·completion_rate·per_worker·per_module)는 V5
 POST /admin/workers/invite {name, emp_no, lang}            → {invite_url}
 POST /admin/documents      multipart                        → 202 (ingest job)
-GET  /admin/glossary?status=draft / POST /admin/glossary/{id}/approve|reject
-GET  /admin/unanswered     / POST /admin/unanswered/{id}/answer {text}   # → ingest_answer job → M-05 편입
+GET  /admin/glossary?status=draft → [{id, term_ko, term_vi, term_in, note, status, source_question_id, approved_by, approved_at}]   # 001 정본 필드 전사. status CHECK('draft','approved','rejected'), 기본 필터 draft(?status= 빈 값 = 전체). glossary 에 created_at 컬럼 없음 — 정렬 id
+POST /admin/glossary/{id}/approve → {id, status:'approved'} / reject {note?} → {id, status:'rejected'}   # draft 에서만(그 외 422·대상 없음 404). 전이마다 admin_events 1행(M-08d). approved_by 는 integer FK 라 NULL 유지(M-15b), approve 만 approved_at 갱신. reject 사유는 admin_events.detail 에 보존 — glossary.note(용어 설명) 무접촉. 신원 필드 본문 수신 금지(400)
+GET  /admin/unanswered?status=open → [{id, question_id, status, question, lang, question_created_at, admin_answer, answered_at}]   # unanswered_queue ⋈ questions. status CHECK('open','answered'), 기본 필터 open. 적재 대상은 M-05a 2종(no_chunks·no_answer)뿐 — 시스템 오류 미적재
+POST /admin/unanswered/{id}/answer {text}   # → ingest_answer job → documents(origin='admin_answer') 편입 (M-05)
 GET  /admin/reports?status= / POST /admin/reports/{id}/ack|resolve {note?}
 GET  /admin/reports/{id}   → 상세 {id, source, original_text, lang, ko_summary, severity, status, processing_state, reporter_confirmed, acked_by, acked_at, resolved_by, resolved_at, resolution_note, created_at, processed_at} + events[{id, actor, action, from_state, to_state, detail, created_at}]   # acked_by·resolved_by 는 관리자 인증 도입 전까지 null(M-15b, additive). 원문 반출 → original_viewed 이벤트 기록(M-08a)
+GET  /admin/events?date=&target_type=&limit=&offset= → [{id, actor, target_type, target_id, action, from_state, to_state, detail, created_at}]   # M-08d ③ 감사 로그. date=Asia/Seoul 일자, 정렬 id desc(최신 우선), limit 기본 50·최대 200, offset 기본 0. 읽기 전용
 GET  /admin/conversations/risk                              # 요약만
 GET  /admin/conversations/{id}/full                         # 원문 — access_logs 기록
 GET  /admin/safety/ledger?course_id&period                  → PDF|HTML
@@ -363,3 +372,4 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-28c | edge 조회·전이 경로 릴레이 경유 규약 (2026-08-30, 명선 확정 / SB 상신)<br>결정: ① edge role의 §3 공개면 계약분(edge 무자격 경로 — 조회·전이)은 M-28a 릴레이로 core에 디스패치 — 디스패처에 method 축 추가(POST 한정 해제). ② 라우터 edge 분기 신설 — edge 직접 DB 접근 없음 유지(M-22 정합, DATABASE_URL 부재 설계 그대로). ③ M-28a 파라미터 5종·큐 메커니즘·/internal 3종 무접촉.<br>R6: #27 유입 결함 — edge 무자격 경로 5종(GET 조회 3종 + POST 전이 ack/resolve 2종)이 edge에서 500(단위 테스트 API_ROLE=core 고정으로 미검출, SB 실측 0830). JH cutover·V3-2 소비 차단급. /admin/* 스텁(NotImplementedError)은 범위 외. 영향: SB(구현), JH(소비 해제), BG(릴레이 계약 인지) | 확정 (2026-08-30, 명선 확정) |
 | M-29a | role='case' 소스 검색 원천 제외 (2026-08-30, 명선 확정 / SB 상신)<br>결정: retrieve 검색 SELECT에 meta 필터 — role='case' 청크는 검색 후보에서 원천 배제(답변 생성·sources 노출 양쪽 차단). M-29 "근거 인용 금지"의 검색 계층 이행.<br>R6: 코퍼스 확장(#38)으로 case 3청크 적재 예정 — (b) sources 조립 시 제외안은 답변 내용 스며듦 경로 잔존으로 기각. 영향: SB(구현), MS(적재 정합) | 확정 (2026-08-30, 명선 확정) |
 | M-03b | /ask 응답 언어 = 질의 lang (2026-08-30, 명선 확정)<br>결정: /ask 응답은 질의 lang으로 생성한다(vi 질의 = vi 응답). 구현 = LLM 프롬프트 [출력 언어] 우선 지시(#42). NO_ANSWER 토큰은 번역 면제(게이트 파싱 보호). 품질 미달 시 ko 회귀 금지 — 프롬프트 강화 또는 V4-1 백트랜슬레이션 게이트 연동으로 해소.<br>R6: 언어 지시가 규칙 말미 1회·혼합 서술이라 산발 준수(vi 3질의 중 완전 1·혼재 1·ko 1, SB 실측 0830). 근로자가 못 읽는 답은 답이 아니다(명선 재판정 0830). 영향: SB(구현), MS(대본), JH(표시) | 확정 (2026-08-30, 명선) |
+| M-08d | admin_events 신설 — 관리자 행위 범용 감사 (2026-08-30, 명선 확정 / SB 상신)<br>결정: ① append-only 테이블 admin_events를 §2 계약 목록에 추가(24번째) — actor text·target_type·target_id·action·from_state·to_state·detail·created_at. risk_report_events(M-08a) 규약의 범용판. ② 승인큐 glossary 전이(approve/reject)의 감사 수용처 — 이후 위험보고 외 관리자 전이도 이 테이블. ③ 조회 API GET /admin/events — 날짜·target_type 필터·limit/offset, 읽기 전용, edge 분기 M-28c 패턴, admin IP 제한 뒤 경로, §3 동기 등재. ④ actor는 M-15b 동일('admin:unauthenticated' 고정·교체 단일 지점). UPDATE/DELETE 경로 0. 001 CREATE는 본 PR 위임(001 수정 금지 명시 해제 1건).<br>R6: 승인큐 전이 이벤트 기록 확정(0830)에 수용처 부재 — access_logs는 admin_id integer FK·from/to 축 부재로 M-08a·M-15b 기준 불일치(SB 대조 0830). A안(access_logs 유용)은 actor 미기록으로 감사 일관성 훼손 기각. 영향: SB(구현), MS(EC2 재적용), JH(감사 로그 화면 소비) | 확정 (2026-08-30, 명선 확정) |

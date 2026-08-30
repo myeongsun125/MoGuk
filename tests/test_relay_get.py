@@ -242,7 +242,7 @@ def test_dispatch_admin_transition_errors(monkeypatch):
         "/api/v1/reports/abc",              # id 가 정수가 아님
         "/api/v1/reports/1/confirm",        # POST 전용 하위 경로 — GET 으로 오인 금지
         "/api/v1/admin/reports/abc",
-        "/api/v1/admin/glossary",           # 미등록 GET
+        "/api/v1/admin/documents",          # 미등록 GET (glossary 는 승인큐 PR 에서 등록됨)
         "/api/v1/health",
     ],
 )
