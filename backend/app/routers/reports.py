@@ -31,6 +31,7 @@ from app.services.system_service import role
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 PATH = "/api/v1/reports"
+DETAIL_PATH = "/api/v1/reports/{report_id}"          # M-28c ① 릴레이 경로
 CONFIRM_PATH = "/api/v1/reports/{report_id}/confirm"
 
 # M-08b ④ 허용 필드 화이트리스트 — 이 밖의 키(tenant/tenant_slug/worker_id/reporter 등)는 400
@@ -98,15 +99,24 @@ async def create_report(
 
 
 @router.get("/{report_id}")
-def get_report(report_id: int) -> dict:
+async def get_report(
+    report_id: int, identity: dict | None = Depends(optional_identity)
+) -> JSONResponse:
     """근로자 상태 조회 — 5필드 한정. events[]·original_text 미포함.
 
     본인 조회는 original_viewed 감사 비대상(총괄 확정).
+    M-28c ①②: edge 는 DB 자격이 없으므로 릴레이 경유(GET 은 body 없음 → 빈 dict).
     """
+    if role() == "edge":
+        item = queue.enqueue("GET", DETAIL_PATH.format(report_id=report_id), {}, identity)
+        relayed = await queue.wait_for_response(item)
+        return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
+
     try:
-        return risk_reports.get_report_public(report_id)
+        result = await asyncio.to_thread(risk_reports.get_report_public, report_id)
     except risk_reports.ReportNotFound:
         raise HTTPException(status_code=404, detail="report not found") from None
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/{report_id}/confirm")
