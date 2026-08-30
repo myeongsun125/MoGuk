@@ -1,0 +1,28 @@
+.admin-layout {
+  min-height: 100vh;
+}
+
+.admin-nav {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+}
+
+.admin-nav-link {
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #444;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.admin-nav-link:hover {
+  background: #f4f4f4;
+}
+
+.admin-nav-link.active {
+  background: #1a1a1a;
+  color: #fff;
+}
