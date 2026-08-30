@@ -19,7 +19,7 @@ WORKORDER 67행(인제스천: 분류→마스킹→청킹 500–800/오버랩 10
   - 미적재    : phrases·quiz·safety_courses·testset — V3-1·V5-1 범위 (phrases.note 기본선 유지)
   - text/ 코퍼스(--sources text|all, 2026-08-30 판정 4건): manifest status=fetched ∧ text/<ID>.md 실재 → 13건.
                 단위 = 페이지 표식(<!-- p.N -->) 또는 ## 헤딩(LAW 조문·별표) → 500–800/오버랩 100.
-                documents(origin='seed', source=text 경로, version 1) — 시드 42청크와 source 가 달라 보존.
+                documents(origin='seed', source=text 경로, version 1) — 시드 42청크와 source 가 달라 보존. glossary 는 무접촉(seed|all 한정).
                 meta.category = LAW·KOSHA→safety / NCS→instruction (①), KOSHA-CASE-1 포함 + meta.role='case' (② 근거 노출 제외는 SB),
                 draft:false (③), meta.license 동반. 라이선스 트리거 문안 "RAG 적재분(text/ 13건) 포함" 확장 (④)
 
@@ -307,10 +307,11 @@ def main() -> int:
                             (doc_id, idx, c["content"], "[" + ",".join(repr(float(x)) for x in v) + "]",
                              json.dumps(c["meta"], ensure_ascii=False)))
             print(f"documents.id={doc_id} chunks={len(d['chunks'])}")
-        cur.execute("DELETE FROM glossary WHERE status='draft' AND source_question_id IS NULL")
-        for g in gl:
-            cur.execute("INSERT INTO glossary (term_ko, term_vi, term_in, note, status) VALUES (%s,%s,%s,%s,'draft')",
-                        (g["term_ko"], g.get("term_vi"), g.get("term_in"), g.get("note")))
+        if a.sources in ("seed", "all"):   # glossary 는 seed 경로 한정 — --sources text 단독 실행 시 소실 차단 (SB 상신 0830)
+            cur.execute("DELETE FROM glossary WHERE status='draft' AND source_question_id IS NULL")
+            for g in gl:
+                cur.execute("INSERT INTO glossary (term_ko, term_vi, term_in, note, status) VALUES (%s,%s,%s,%s,'draft')",
+                            (g["term_ko"], g.get("term_vi"), g.get("term_in"), g.get("note")))
         cur.execute("SELECT (SELECT count(*) FROM documents), (SELECT count(*) FROM chunks), (SELECT count(*) FROM glossary), "
                     "(SELECT count(*) FROM chunks WHERE content LIKE '%[src:%'), "
                     "(SELECT count(DISTINCT vector_dims(embedding)) FROM chunks)")
