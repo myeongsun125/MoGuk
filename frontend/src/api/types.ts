@@ -82,8 +82,8 @@ export interface TransitionResult {
   status: ReportStatus;
 }
 
-// 대시보드 — skeleton-v3 §3 GET /admin/dashboard (B). KPI 4종 확정판(총괄 0830 정정,
-// SB 계약 표 확정 전까지 이 shape이 mock 정본 — 실API 배선 시 이 타입이 실계약).
+// 대시보드 — skeleton-v3 §3 GET /admin/dashboard (B). #45 실API 계약 그대로(0830 머지).
+// per_worker/per_module 은 이 API 응답에 없음(§3 "V5" 명시) — 별도 상수 mock(아래)로 분리.
 export type ComprehensionLabel = "red" | "yellow" | "green";
 
 export interface ReportStatusCounts {
@@ -92,11 +92,28 @@ export interface ReportStatusCounts {
   resolved: number;
 }
 
+export interface CitationRate {
+  answered: number;
+  with_sources: number;
+  rate: number | null; // 0~1 소수 — 화면 표기 시 ×100. answered=0 이면 null.
+}
+
 export interface HourlyTrendPoint {
-  hour: string; // "09" 등 — 오늘 시간대
+  hour: string; // 풀 ISO — "2026-08-30T09:00:00" (Asia/Seoul 버킷)
   count: number;
 }
 
+export interface DashboardSummary {
+  open_reports: number; // KPI① 미확인 위험보고 수 — A 화면과 동일 소스(risk_reports)
+  reports_by_status: ReportStatusCounts; // KPI② 상태별 3칸 (건수, % 없음)
+  unanswered_open: number; // KPI③ 무근거 질의 대기 수 (unanswered_queue)
+  citation_rate: CitationRate; // KPI④ 근거 인용률
+  reports_today_hourly: HourlyTrendPoint[]; // 오늘 시간대별 보고 건수, 00시~현재 zero-fill
+  generated_at: string;
+  timezone: string;
+}
+
+// 보조 영역 — 학습 KPI(V5), /admin/dashboard 응답에 없어 상수 mock으로 별도 관리.
 export interface PerWorkerRow {
   worker_id: number;
   name: string;
@@ -107,16 +124,6 @@ export interface PerWorkerRow {
 export interface PerModuleRow {
   module: string;
   completion_rate: number;
-}
-
-export interface DashboardSummary {
-  open_reports: number; // KPI① 미확인 위험보고 수 — A 화면과 동일 소스
-  status_counts: ReportStatusCounts; // KPI② 상태별 3칸 (건수, % 없음)
-  ungrounded_pending: number; // KPI③ 무근거 질의 대기 수 (unanswered_queue, mock)
-  grounded_rate: number; // KPI④ 근거 인용률 % (mock)
-  hourly_trend: HourlyTrendPoint[]; // 오늘 시간대별 보고 건수
-  per_worker: PerWorkerRow[]; // 보조 영역 — 퀴즈 실데이터 전, mock 명시
-  per_module: PerModuleRow[]; // 보조 영역 — mock 명시
 }
 
 // 승인큐 — skeleton-v3 §3 GET /admin/glossary?status= / approve|reject (C). DB(001) 컬럼 그대로.

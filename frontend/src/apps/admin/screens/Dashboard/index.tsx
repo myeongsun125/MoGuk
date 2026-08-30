@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getDashboard } from "../../../../api/dashboard";
+import { PER_MODULE_MOCK, PER_WORKER_MOCK } from "../../../../api/fixtures/dashboard.fixtures";
 import type { DashboardSummary } from "../../../../api/types";
 import "./Dashboard.css";
 
@@ -16,7 +17,9 @@ export default function AdminDashboardScreen() {
   if (error) return <p className="error">{error}</p>;
   if (!data) return <p>불러오는 중...</p>;
 
-  const maxTrend = Math.max(...data.hourly_trend.map((p) => p.count), 1);
+  const maxTrend = Math.max(...data.reports_today_hourly.map((p) => p.count), 1);
+  const citationPct =
+    data.citation_rate.rate === null ? "—" : `${Math.round(data.citation_rate.rate * 100)}%`;
 
   return (
     <div className="admin-dashboard" data-testid="admin-dashboard-screen">
@@ -32,15 +35,15 @@ export default function AdminDashboardScreen() {
           <span className="kpi-label">② 위험보고 상태별</span>
           <div className="triple-row">
             <div className="triple-cell">
-              <span className="triple-value">{data.status_counts.submitted}</span>
+              <span className="triple-value">{data.reports_by_status.submitted}</span>
               <span className="triple-label">접수</span>
             </div>
             <div className="triple-cell">
-              <span className="triple-value">{data.status_counts.acknowledged}</span>
+              <span className="triple-value">{data.reports_by_status.acknowledged}</span>
               <span className="triple-label">확인됨</span>
             </div>
             <div className="triple-cell">
-              <span className="triple-value">{data.status_counts.resolved}</span>
+              <span className="triple-value">{data.reports_by_status.resolved}</span>
               <span className="triple-label">해결됨</span>
             </div>
           </div>
@@ -48,26 +51,23 @@ export default function AdminDashboardScreen() {
 
         <div className="kpi-card" data-testid="kpi-ungrounded">
           <span className="kpi-label">③ 무근거 질의 대기</span>
-          <span className="kpi-value">{data.ungrounded_pending}</span>
+          <span className="kpi-value">{data.unanswered_open}</span>
         </div>
 
         <div className="kpi-card" data-testid="kpi-grounded-rate">
           <span className="kpi-label">④ 근거 인용률</span>
-          <span className="kpi-value">{data.grounded_rate}%</span>
+          <span className="kpi-value">{citationPct}</span>
         </div>
       </div>
 
       <section>
         <h2>오늘 시간대별 보고 건수</h2>
         <div className="trend-bars" data-testid="trend-chart">
-          {data.hourly_trend.map((p) => (
+          {data.reports_today_hourly.map((p) => (
             <div key={p.hour} className="trend-col">
-              <div
-                className="trend-bar"
-                style={{ height: `${(p.count / maxTrend) * 100}px` }}
-              />
+              <div className="trend-bar" style={{ height: `${(p.count / maxTrend) * 100}px` }} />
               <span className="trend-val">{p.count}</span>
-              <span className="trend-date">{p.hour}시</span>
+              <span className="trend-date">{new Date(p.hour).getHours()}시</span>
             </div>
           ))}
         </div>
@@ -80,7 +80,7 @@ export default function AdminDashboardScreen() {
 
         <h2>근로자별 이해도 (mock)</h2>
         <ul className="per-worker-list" data-testid="per-worker-list">
-          {data.per_worker.map((w) => (
+          {PER_WORKER_MOCK.map((w) => (
             <li key={w.worker_id}>
               <span className={`badge badge-label-${w.label}`}>{w.label}</span>
               <span className="pw-name">{w.name}</span>
@@ -91,7 +91,7 @@ export default function AdminDashboardScreen() {
 
         <h2>모듈별 완주율 (mock)</h2>
         <ul className="per-module-list" data-testid="per-module-list">
-          {data.per_module.map((m) => (
+          {PER_MODULE_MOCK.map((m) => (
             <li key={m.module}>
               <span className="pm-name">{m.module}</span>
               <div className="pm-bar-track">
