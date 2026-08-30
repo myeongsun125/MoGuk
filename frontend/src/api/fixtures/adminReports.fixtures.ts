@@ -1,4 +1,5 @@
 import type { AdminReportDetail, ReportEvent } from "../types";
+import { appendEvent } from "./adminEvents.fixtures";
 
 // 관리자 위험보고 mock 저장소 — §3 계약과 필드 동일. 전이(ack/resolve)가 상태를 바꿔야
 // DoD("ack 클릭 후 카운트 감소")를 mock만으로 재현할 수 있어 모듈 내 mutable store로 둔다.
@@ -102,7 +103,21 @@ export function listMock(status?: string): AdminReportDetail[] {
 }
 
 export function getMock(id: number): AdminReportDetail | undefined {
-  return store.find((r) => r.id === id);
+  const r = store.find((x) => x.id === id);
+  if (r) {
+    // 원문 열람 감사(M-08a) — 실제 상세 조회 시점에만 기록(prefetch 없음, index.tsx 참고).
+    r.events = [...r.events, mkEvent("original_viewed", null, null)];
+    appendEvent({
+      actor: "admin:unauthenticated",
+      target_type: "risk_report",
+      target_id: id,
+      action: "original_viewed",
+      from_state: null,
+      to_state: null,
+      detail: "admin detail view",
+    });
+  }
+  return r;
 }
 
 export function ackMock(id: number): { id: number; status: string } | "conflict" | "not_found" {
@@ -112,6 +127,15 @@ export function ackMock(id: number): { id: number; status: string } | "conflict"
   r.status = "acknowledged";
   r.acked_at = new Date().toISOString();
   r.events = [...r.events, mkEvent("report_acknowledged", "submitted", "acknowledged")];
+  appendEvent({
+    actor: "admin:unauthenticated",
+    target_type: "risk_report",
+    target_id: id,
+    action: "report_acknowledged",
+    from_state: "submitted",
+    to_state: "acknowledged",
+    detail: null,
+  });
   return { id, status: r.status };
 }
 
@@ -126,6 +150,15 @@ export function resolveMock(
   r.resolved_at = new Date().toISOString();
   r.resolution_note = note ?? null;
   r.events = [...r.events, mkEvent("report_resolved", "acknowledged", "resolved")];
+  appendEvent({
+    actor: "admin:unauthenticated",
+    target_type: "risk_report",
+    target_id: id,
+    action: "report_resolved",
+    from_state: "acknowledged",
+    to_state: "resolved",
+    detail: note ?? null,
+  });
   return { id, status: r.status };
 }
 

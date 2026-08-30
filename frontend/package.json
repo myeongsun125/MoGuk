@@ -10,6 +10,7 @@
     "shot": "node scripts/shot.mjs",
     "shot:admin": "node scripts/shot-admin-reports.mjs",
     "shot:admin-bc": "node scripts/shot-admin-bc.mjs",
+    "shot:admin-events": "node scripts/shot-admin-events.mjs",
     "rehearse": "node scripts/rehearse.mjs",
     "postinstall": "playwright install chromium"
   },

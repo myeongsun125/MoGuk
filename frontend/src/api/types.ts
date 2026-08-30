@@ -140,3 +140,18 @@ export interface GlossaryTerm {
   approved_by: number | null;
   approved_at: string | null;
 }
+
+// 감사 로그 — M-08d(검토 중), GET /admin/events (읽기 전용). 실API 계약 표 확정 전까지
+// 이 필드 목록이 mock 정본(총괄 0830 지정): actor·target_type·target_id·action·
+// from_state·to_state·detail·created_at.
+export interface AdminEvent {
+  id: number;
+  actor: string | null;
+  target_type: string;
+  target_id: number;
+  action: string;
+  from_state: string | null;
+  to_state: string | null;
+  detail: string | null;
+  created_at: string;
+}

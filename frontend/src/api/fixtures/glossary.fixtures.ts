@@ -1,4 +1,5 @@
 import type { GlossaryTerm } from "../types";
+import { appendEvent } from "./adminEvents.fixtures";
 
 // approve/reject가 상태를 바꿔야 승인큐에서 항목이 빠지는 걸 mock으로 재현할 수 있어
 // adminReports.fixtures 와 동일하게 모듈 내 mutable store로 둔다.
@@ -45,14 +46,34 @@ export function listMock(status: string): GlossaryTerm[] {
 export function approveMock(id: number): GlossaryTerm | undefined {
   const t = store.find((x) => x.id === id);
   if (!t) return undefined;
+  const from = t.status;
   t.status = "approved";
   t.approved_at = new Date().toISOString();
+  appendEvent({
+    actor: "admin:unauthenticated",
+    target_type: "glossary_term",
+    target_id: id,
+    action: "glossary_approved",
+    from_state: from,
+    to_state: "approved",
+    detail: t.term_ko,
+  });
   return t;
 }
 
 export function rejectMock(id: number): GlossaryTerm | undefined {
   const t = store.find((x) => x.id === id);
   if (!t) return undefined;
+  const from = t.status;
   t.status = "rejected";
+  appendEvent({
+    actor: "admin:unauthenticated",
+    target_type: "glossary_term",
+    target_id: id,
+    action: "glossary_rejected",
+    from_state: from,
+    to_state: "rejected",
+    detail: t.term_ko,
+  });
   return t;
 }
