@@ -200,6 +200,12 @@ CREATE TABLE access_logs (                          -- M-07 감사 로그
   action text NOT NULL,        -- 'view_conversation_full'|'view_report_original'|...
   target_type text NOT NULL, target_id int NOT NULL,
   created_at timestamptz DEFAULT now());
+
+CREATE TABLE admin_events (                         -- M-08d 관리자 전이 감사 (append-only, 24번째)
+  id serial PRIMARY KEY, actor text,
+  target_type text NOT NULL, target_id int NOT NULL,
+  action text NOT NULL, from_state text, to_state text, detail text,
+  created_at timestamptz NOT NULL DEFAULT now());
 ```
 
 ## 3. API 계약 (edge, /api/v1, JSON snake_case)
@@ -229,11 +235,12 @@ GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,ackno
 POST /admin/workers/invite {name, emp_no, lang}            → {invite_url}
 POST /admin/documents      multipart                        → 202 (ingest job)
 GET  /admin/glossary?status=draft → [{id, term_ko, term_vi, term_in, note, status, source_question_id, approved_by, approved_at}]   # 001 정본 필드 전사. status CHECK('draft','approved','rejected'), 기본 필터 draft(?status= 빈 값 = 전체). glossary 에 created_at 컬럼 없음 — 정렬 id
-POST /admin/glossary/{id}/approve|reject {note?}   # 전이는 감사 이벤트 수용처 판정 후 (별도 커밋)
+POST /admin/glossary/{id}/approve → {id, status:'approved'} / reject {note?} → {id, status:'rejected'}   # draft 에서만(그 외 422·대상 없음 404). 전이마다 admin_events 1행(M-08d). approved_by 는 integer FK 라 NULL 유지(M-15b), approve 만 approved_at 갱신. reject 사유는 admin_events.detail 에 보존 — glossary.note(용어 설명) 무접촉. 신원 필드 본문 수신 금지(400)
 GET  /admin/unanswered?status=open → [{id, question_id, status, question, lang, question_created_at, admin_answer, answered_at}]   # unanswered_queue ⋈ questions. status CHECK('open','answered'), 기본 필터 open. 적재 대상은 M-05a 2종(no_chunks·no_answer)뿐 — 시스템 오류 미적재
 POST /admin/unanswered/{id}/answer {text}   # → ingest_answer job → documents(origin='admin_answer') 편입 (M-05)
 GET  /admin/reports?status= / POST /admin/reports/{id}/ack|resolve {note?}
 GET  /admin/reports/{id}   → 상세 {id, source, original_text, lang, ko_summary, severity, status, processing_state, reporter_confirmed, acked_by, acked_at, resolved_by, resolved_at, resolution_note, created_at, processed_at} + events[{id, actor, action, from_state, to_state, detail, created_at}]   # acked_by·resolved_by 는 관리자 인증 도입 전까지 null(M-15b, additive). 원문 반출 → original_viewed 이벤트 기록(M-08a)
+GET  /admin/events?date=&target_type=&limit=&offset= → [{id, actor, target_type, target_id, action, from_state, to_state, detail, created_at}]   # M-08d ③ 감사 로그. date=Asia/Seoul 일자, 정렬 id desc(최신 우선), limit 기본 50·최대 200, offset 기본 0. 읽기 전용
 GET  /admin/conversations/risk                              # 요약만
 GET  /admin/conversations/{id}/full                         # 원문 — access_logs 기록
 GET  /admin/safety/ledger?course_id&period                  → PDF|HTML
