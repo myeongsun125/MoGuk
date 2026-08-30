@@ -1,12 +1,20 @@
 # MoGuk edge 리버스 프록시 (dev). prod: 도메인·TLS 자동발급 — 병갑 [infra]
 :80 {
-	handle /api/* {
-		reverse_proxy edge-api:8000
-	}
-	handle /health {
-		reverse_proxy edge-api:8000
-	}
-	handle {
-		reverse_proxy frontend:80
-	}
+        @admin {
+                path /api/v1/admin/*
+                not remote_ip {$ADMIN_ALLOW_IPS}
+        }
+        handle @admin {
+                respond "admin access restricted" 403
+        }
+        handle /api/* {
+                reverse_proxy edge-api:8000
+        }
+        handle /health {
+                reverse_proxy edge-api:8000
+        }
+        handle {
+                reverse_proxy frontend:80
+        }
 }
+
