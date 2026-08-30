@@ -77,9 +77,12 @@ PUBNO_RE = re.compile(r"(\d{4}-[가-힣]+-\d+|M\s*-\s*\d+\s*-\s*\d{4})")
 
 
 # ---- 공통 --------------------------------------------------------------------
+CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")   # C0/C1 제어문자 (\n \t 제외)
+
+
 def norm_lines(text: str) -> str:
-    """줄 단위 rstrip + 연속 공백줄 → 1줄. 문자 변경 없음(NFC 정규화만)."""
-    text = unicodedata.normalize("NFC", text)
+    """줄 단위 rstrip + 연속 공백줄 → 1줄 + 제어문자(BEL 등) 제거. 문자 내용 변경 없음(NFC 정규화만)."""
+    text = unicodedata.normalize("NFC", CTRL_RE.sub("", text))
     lines = [l.rstrip() for l in text.splitlines()]
     out, blank = [], 0
     for l in lines:
