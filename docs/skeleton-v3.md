@@ -228,8 +228,10 @@ POST /auth/admin/login     {email, pw}
 GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,acknowledged,resolved}, unanswered_open, citation_rate:{answered,with_sources,rate}, reports_today_hourly[{hour,count}], generated_at, timezone}   # KPI 4종+추이. citation_rate 분모=답변 방출(gated 제외)·분자=sources 존재. 추이=오늘(Asia/Seoul) 시간대별, 00시~현재 zero-fill. 학습 KPI(avg_comprehension·completion_rate·per_worker·per_module)는 V5
 POST /admin/workers/invite {name, emp_no, lang}            → {invite_url}
 POST /admin/documents      multipart                        → 202 (ingest job)
-GET  /admin/glossary?status=draft / POST /admin/glossary/{id}/approve|reject
-GET  /admin/unanswered     / POST /admin/unanswered/{id}/answer {text}   # → ingest_answer job → M-05 편입
+GET  /admin/glossary?status=draft → [{id, term_ko, term_vi, term_in, note, status, source_question_id, approved_by, approved_at}]   # 001 정본 필드 전사. status CHECK('draft','approved','rejected'), 기본 필터 draft(?status= 빈 값 = 전체). glossary 에 created_at 컬럼 없음 — 정렬 id
+POST /admin/glossary/{id}/approve|reject {note?}   # 전이는 감사 이벤트 수용처 판정 후 (별도 커밋)
+GET  /admin/unanswered?status=open → [{id, question_id, status, question, lang, question_created_at, admin_answer, answered_at}]   # unanswered_queue ⋈ questions. status CHECK('open','answered'), 기본 필터 open. 적재 대상은 M-05a 2종(no_chunks·no_answer)뿐 — 시스템 오류 미적재
+POST /admin/unanswered/{id}/answer {text}   # → ingest_answer job → documents(origin='admin_answer') 편입 (M-05)
 GET  /admin/reports?status= / POST /admin/reports/{id}/ack|resolve {note?}
 GET  /admin/reports/{id}   → 상세 {id, source, original_text, lang, ko_summary, severity, status, processing_state, reporter_confirmed, acked_by, acked_at, resolved_by, resolved_at, resolution_note, created_at, processed_at} + events[{id, actor, action, from_state, to_state, detail, created_at}]   # acked_by·resolved_by 는 관리자 인증 도입 전까지 null(M-15b, additive). 원문 반출 → original_viewed 이벤트 기록(M-08a)
 GET  /admin/conversations/risk                              # 요약만
