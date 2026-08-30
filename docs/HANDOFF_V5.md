@@ -16,6 +16,8 @@
   M-15b·M-28b·M-28c + 경로(가)·마스킹 범위·라이선스·TTL core·
   admin 노출 완화(Caddy IP) 등
 - 머지 게이트: #6·#20~#29·#31~#36 처리
+- CI: main #138~#141 실패 = test_admin_approval.py:378 동적 가드 필터
+  불일치(오탐), #48(A)로 종결·초록 복귀(run #143). 001 변경 감지 기능 유지
 - 어필 문서: APPEAL_POINTS ②③ 보강(#30 — 서명 취합 중)
 ■ 측정 수치
 - 인제스천: documents 2·chunks 42·glossary 50 / bge-m3 1024d
