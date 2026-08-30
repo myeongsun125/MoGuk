@@ -1,5 +1,7 @@
 """pgvector 검색 (chunks.embedding hnsw cosine, meta 필터). [새봄]
 
+M-29a: meta.role='case' 청크는 검색 후보에서 원천 배제 — M-29 "근거 인용 금지"의 검색 계층 이행.
+
 skeleton-v3 §4 동결: retrieve(query, k=4, meta_filter=None) -> list[Chunk]
 질의 임베딩 = services.llm_adapter.embed (M-02a: ollama /api/embed 단일 런타임 — 적재와 동일).
 반환 Chunk 는 §3 sources 스키마({document_id, chunk_id, title, category})를 채울 수 있어야 한다.
@@ -13,6 +15,8 @@ from app.services import tenancy
 from app.services.llm_adapter import embed
 
 # meta_filter 는 chunks.meta jsonb 포함(@>) 조건. 유사도 = 코사인 (1 - <=>).
+# M-29a: role='case' 청크는 검색 후보에서 원천 배제한다 — 답변 생성·sources 노출 양쪽 차단.
+# COALESCE 로 NULL 안전 — role 키가 없는 청크(기존 적재분 전부)는 '' 로 평가돼 통과한다.
 _SQL = """
 SELECT c.id, c.document_id, c.content, c.meta,
        COALESCE(d.title, '') AS title,
@@ -21,6 +25,7 @@ SELECT c.id, c.document_id, c.content, c.meta,
 FROM chunks c
 LEFT JOIN documents d ON d.id = c.document_id
 WHERE (%(meta)s::jsonb IS NULL OR c.meta @> %(meta)s::jsonb)
+  AND COALESCE(c.meta->>'role', '') <> 'case'
 ORDER BY c.embedding <=> %(vec)s::vector
 LIMIT %(k)s
 """

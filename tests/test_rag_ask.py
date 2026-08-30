@@ -647,3 +647,110 @@ def test_run_ask_enqueue_only_for_two_reasons(monkeypatch):
 
         enqueued = any("unanswered_queue" in c[0] for c in store["calls"])
         assert enqueued is expect_enqueue, f"{name}: 적재={enqueued}, 기대={expect_enqueue}"
+
+
+# ── M-29a: role='case' 원천 제외 ───────────────────────────
+
+CASE_FILTER_SQL = "COALESCE(c.meta->>'role', '') <> 'case'"
+
+
+def _pg_role_filter(meta: dict | None) -> bool:
+    """SQL `COALESCE(c.meta->>'role','') <> 'case'` 의 Postgres 의미를 그대로 옮긴 판정.
+
+    meta->>'role' 는 키 부재 시 NULL → COALESCE 로 '' → 'case' 와 불일치 → 통과.
+    """
+    role = (meta or {}).get("role")
+    return (role if role is not None else "") != "case"
+
+
+def test_retrieve_sql_excludes_case_role_at_db_layer(monkeypatch):
+    """M-29a: 배제는 SELECT WHERE 절에서 일어난다 — 파이썬 후처리가 아니라 원천 배제."""
+    store = _store(rows=[])
+    monkeypatch.setattr(retrieve_mod.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(retrieve_mod, "embed", lambda texts: [_vec()])
+
+    retrieve("프레스 점검", k=4)
+
+    sql, _ = store["calls"][0]
+    assert CASE_FILTER_SQL in sql, sql
+    # 배제는 WHERE 절에서만 — ORDER BY/LIMIT 앞에 위치해야 top-k 이전에 걸러진다
+    assert sql.index(CASE_FILTER_SQL) < sql.index("ORDER BY")
+    assert sql.index(CASE_FILTER_SQL) < sql.index("LIMIT")
+
+
+@pytest.mark.parametrize(
+    "meta,passes,label",
+    [
+        ({"role": "case"}, False, "role='case' — 배제"),
+        ({"category": "safety"}, True, "role 키 부재(기존 적재 42청크) — 통과"),
+        ({}, True, "meta 빈 dict — 통과"),
+        (None, True, "meta NULL — 통과"),
+        ({"role": "guide"}, True, "타 role — 통과"),
+        ({"role": "law"}, True, "타 role — 통과"),
+        ({"role": "Case"}, True, "대소문자 다름 — 통과(정확 일치만 배제)"),
+        ({"role": ""}, True, "빈 문자열 role — 통과"),
+    ],
+)
+def test_case_filter_semantics(meta, passes, label):
+    """WHERE 조건의 판정 결과 — NULL 안전성·기존 청크 회귀 방지."""
+    assert _pg_role_filter(meta) is passes, label
+
+
+def test_case_filter_is_negation_not_selection():
+    """조건이 뒤집히면(='case') 기존 청크가 전멸한다 — 반전 회귀 방지."""
+    assert CASE_FILTER_SQL.count("<>") == 1 and "=" not in CASE_FILTER_SQL.replace("<>", "")
+    assert not _pg_role_filter({"role": "case"})
+    assert _pg_role_filter({"category": "safety"})
+
+
+def test_retrieve_returns_rows_db_gave_without_extra_filtering(monkeypatch):
+    """DB 가 걸러 보낸 행은 파이썬이 다시 손대지 않는다 — 이중 필터 없음."""
+    store = _store(
+        rows=[
+            (11, 1, "본문 1", {"category": "safety"}, "선반 매뉴얼", "safety", 0.93),
+            (12, 2, "본문 2", {"category": "process", "role": "guide"}, "프레스 매뉴얼", "process", 0.81),
+        ]
+    )
+    monkeypatch.setattr(retrieve_mod.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(retrieve_mod, "embed", lambda texts: [_vec()])
+
+    chunks = retrieve("q", k=4)
+
+    assert [c.id for c in chunks] == [11, 12]
+    assert chunks[1].meta["role"] == "guide"
+
+
+def test_case_filter_coexists_with_meta_filter_and_topk(monkeypatch):
+    """기존 meta @> 필터·top-k·유사도 정렬 무변경 (M-29a 는 조건 1개 추가일 뿐)."""
+    store = _store(rows=[])
+    monkeypatch.setattr(retrieve_mod.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(retrieve_mod, "embed", lambda texts: [_vec()])
+
+    retrieve("q", k=4, meta_filter={"category": "safety"})
+
+    sql, params = store["calls"][0]
+    assert "c.meta @> %(meta)s::jsonb" in sql          # 기존 필터 유지
+    assert CASE_FILTER_SQL in sql                       # M-29a 추가분
+    assert "ORDER BY c.embedding <=> %(vec)s::vector" in sql
+    assert "LIMIT %(k)s" in sql
+    assert json.loads(params["meta"]) == {"category": "safety"}
+    assert params["k"] == 4
+
+
+def test_ask_never_surfaces_case_sources(monkeypatch):
+    """M-29a 의 효과 — case 청크가 검색되지 않으므로 답변·sources 어디에도 나타나지 않는다."""
+    seen_sql = {}
+
+    def _retrieve(query, k=4, meta_filter=None):
+        # 실제 SQL 은 위 테스트가 단정한다. 여기서는 검색 결과에 case 가 없다는 전제의 귀결을 본다.
+        seen_sql["k"] = k
+        return [_chunk(1)]
+
+    monkeypatch.setattr(graph, "retrieve", _retrieve)
+    monkeypatch.setattr(graph, "complete", lambda *a, **k: llm_adapter.LLMResult(text="답변", tier_used="local", model="m", latency_ms=10))
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(_store()))
+
+    out = graph.run_ask("프레스 점검", "vi")
+
+    assert out.sources and all("case" not in str(s) for s in out.sources)
+    assert seen_sql["k"] == 4
