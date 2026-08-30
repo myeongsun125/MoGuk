@@ -128,3 +128,13 @@ export function resolveMock(
   r.events = [...r.events, mkEvent("report_resolved", "acknowledged", "resolved")];
   return { id, status: r.status };
 }
+
+// 대시보드(B) KPI①② 소스 — A와 같은 mock 저장소를 직접 집계한다(총괄 지시: "A 화면과
+// 동일 소스"). 실API 전환 시에도 둘 다 같은 risk_reports 테이블이라 자연히 일치.
+export function statusCounts(): { submitted: number; acknowledged: number; resolved: number } {
+  return {
+    submitted: store.filter((r) => r.status === "submitted").length,
+    acknowledged: store.filter((r) => r.status === "acknowledged").length,
+    resolved: store.filter((r) => r.status === "resolved").length,
+  };
+}

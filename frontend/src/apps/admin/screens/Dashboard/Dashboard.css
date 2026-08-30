@@ -49,6 +49,46 @@
   font-weight: 700;
 }
 
+.kpi-card-triple {
+  justify-content: space-between;
+}
+
+.triple-row {
+  display: flex;
+  gap: 10px;
+}
+
+.triple-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.triple-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.triple-label {
+  font-size: 0.7rem;
+  color: #666;
+}
+
+.secondary-section {
+  border-top: 1px dashed #ddd;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.secondary-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #999;
+}
+
 .trend-bars {
   display: flex;
   align-items: flex-end;

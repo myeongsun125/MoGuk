@@ -82,14 +82,19 @@ export interface TransitionResult {
   status: ReportStatus;
 }
 
-// 대시보드 — skeleton-v3 §3 GET /admin/dashboard (B). 응답 필드 목록만 계약, 항목별
-// 내부 shape 은 §3 미정의 — BLUEPRINT §4-6 "등록 수·평균 이해도·완주율·미확인 위험보고·
-// 주간 추이·근로자별/모듈별" 기준으로 구성. 백엔드 실API 배선 시 이 타입이 실계약.
+// 대시보드 — skeleton-v3 §3 GET /admin/dashboard (B). KPI 4종 확정판(총괄 0830 정정,
+// SB 계약 표 확정 전까지 이 shape이 mock 정본 — 실API 배선 시 이 타입이 실계약).
 export type ComprehensionLabel = "red" | "yellow" | "green";
 
-export interface WeeklyTrendPoint {
-  date: string;
-  avg_comprehension: number;
+export interface ReportStatusCounts {
+  submitted: number;
+  acknowledged: number;
+  resolved: number;
+}
+
+export interface HourlyTrendPoint {
+  hour: string; // "09" 등 — 오늘 시간대
+  count: number;
 }
 
 export interface PerWorkerRow {
@@ -105,13 +110,13 @@ export interface PerModuleRow {
 }
 
 export interface DashboardSummary {
-  workers: number;
-  avg_comprehension: number;
-  completion_rate: number;
-  open_reports: number;
-  weekly_trend: WeeklyTrendPoint[];
-  per_worker: PerWorkerRow[];
-  per_module: PerModuleRow[];
+  open_reports: number; // KPI① 미확인 위험보고 수 — A 화면과 동일 소스
+  status_counts: ReportStatusCounts; // KPI② 상태별 3칸 (건수, % 없음)
+  ungrounded_pending: number; // KPI③ 무근거 질의 대기 수 (unanswered_queue, mock)
+  grounded_rate: number; // KPI④ 근거 인용률 % (mock)
+  hourly_trend: HourlyTrendPoint[]; // 오늘 시간대별 보고 건수
+  per_worker: PerWorkerRow[]; // 보조 영역 — 퀴즈 실데이터 전, mock 명시
+  per_module: PerModuleRow[]; // 보조 영역 — mock 명시
 }
 
 // 승인큐 — skeleton-v3 §3 GET /admin/glossary?status= / approve|reject (C). DB(001) 컬럼 그대로.
