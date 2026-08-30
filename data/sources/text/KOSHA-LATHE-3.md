@@ -15,7 +15,7 @@ pub_no_in_document:
 pub_no_check: OK
 redistribution_trigger: |-
   raw/ 재배포 검토 트리거: 레포 공개 전환 / raw 포함 외부 제출 / 상업화. 해당 시 미표시
-  2건(M-96·M-138)과 PRESS-3 페이지 추출본 우선 재검토.
+  2건(M-96·M-138)과 PRESS-3 페이지 추출본 우선 재검토. RAG 적재분(text/ 13건) 포함.
 ---
 
 <!-- p.1 -->

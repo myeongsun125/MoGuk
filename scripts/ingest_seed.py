@@ -17,6 +17,11 @@ WORKORDER 67행(인제스천: 분류→마스킹→청킹 500–800/오버랩 10
   - 멱등      : 같은 seed_file 의 기존 documents(origin='seed') 삭제 후 재적재(chunks 는 CASCADE),
                 glossary 는 draft·source_question_id IS NULL 행만 교체 (승인·질문 유래 행 무접촉)
   - 미적재    : phrases·quiz·safety_courses·testset — V3-1·V5-1 범위 (phrases.note 기본선 유지)
+  - text/ 코퍼스(--sources text|all, 2026-08-30 판정 4건): manifest status=fetched ∧ text/<ID>.md 실재 → 13건.
+                단위 = 페이지 표식(<!-- p.N -->) 또는 ## 헤딩(LAW 조문·별표) → 500–800/오버랩 100.
+                documents(origin='seed', source=text 경로, version 1) — 시드 42청크와 source 가 달라 보존.
+                meta.category = LAW·KOSHA→safety / NCS→instruction (①), KOSHA-CASE-1 포함 + meta.role='case' (② 근거 노출 제외는 SB),
+                draft:false (③), meta.license 동반. 라이선스 트리거 문안 "RAG 적재분(text/ 13건) 포함" 확장 (④)
 
 실행 (compose 안 postgres·ollama 는 포트 미공개 → core_net 에 붙은 러너 컨테이너에서 실행. core_net 은 외부 차단이라 pip 는 bridge 에서 먼저)
   docker run -d --name ingest-runner -v <repo>:/repo:ro -e DATABASE_URL=<core-api 와 동일> \\
@@ -160,6 +165,90 @@ def embed(texts: list[str]) -> list[list[float]]:
     return out
 
 
+# ── text/ 근거 원문 코퍼스 (2026-08-30 판정 4건: category 매핑 / CASE-1 포함+role / draft:false / 트리거 문안 확장) ──
+MANIFEST = "data/sources/manifest.yaml"
+TEXT_DIR = "data/sources/text"
+CATEGORY_BY_PREFIX = {"LAW": "safety", "KOSHA": "safety", "NCS": "instruction"}   # 판정 ① (NULL 방치 기각)
+PAGE_MARK = re.compile(r"^<!-- (p\.\d+|slide \d+) -->$", re.M)
+
+
+def _split_800(text: str) -> list[str]:
+    """줄 경계 기준 MAX_CHARS 분할 + OVERLAP 꼬리 (make_chunks 의 분할 규칙과 동일, 별도 함수 — 기존 로직 무접촉)."""
+    if len(text) <= MAX_CHARS:
+        return [text]
+    parts, buf = [], ""
+    for line in text.splitlines():
+        if len(buf) + len(line) + 1 > MAX_CHARS and buf:
+            parts.append(buf)
+            buf = buf[-OVERLAP:] + "\n" + line
+        else:
+            buf = (buf + "\n" + line) if buf else line
+    if buf:
+        parts.append(buf)
+    return parts
+
+
+def split_text_source(md: str) -> tuple[dict, list[dict]]:
+    """text/<ID>.md → front matter + 단위 [{section, text}].
+    단위 경계 = `<!-- p.N -->` 페이지 표식(KOSHA·NCS) 또는 `## ` 헤딩(LAW 조문·별표). fenced 블록(별표 표)은 단위 안에 유지."""
+    m = FRONT.match(md)
+    fm = yaml.safe_load(m.group(1)) if m else {}
+    body = md[m.end():] if m else md
+    units: list[dict] = []
+    if PAGE_MARK.search(body):
+        pos = [(mm.start(), mm.end(), mm.group(1)) for mm in PAGE_MARK.finditer(body)]
+        for i, (s, e, label) in enumerate(pos):
+            seg = body[e:pos[i + 1][0] if i + 1 < len(pos) else len(body)]
+            if seg.strip():
+                units.append({"section": label, "text": seg.strip()})
+    else:
+        cur, in_code = None, False
+        for line in body.splitlines():
+            if line.strip().startswith("```"):
+                in_code = not in_code
+            h = re.match(r"^##\s+(.*)", line)
+            if h and not in_code:
+                cur = {"section": h.group(1).strip()[:60], "lines": []}
+                units.append(cur)
+                continue
+            if cur is not None and line.strip():
+                cur["lines"].append(line)
+        units = [{"section": u["section"], "text": "\n".join(u["lines"])} for u in units if u["lines"]]
+    return fm, units
+
+
+def load_text_plan() -> list[dict]:
+    """manifest 연동: status=fetched ∧ text/<ID>.md 실재 → 13건. documents(origin='seed', source=text 경로, version 1)."""
+    manifest = yaml.safe_load((ROOT / MANIFEST).read_text(encoding="utf-8"))["sources"]
+    docs = []
+    for src in manifest:
+        sid = src["id"]
+        rel = f"{TEXT_DIR}/{sid}.md"
+        if src.get("status") != "fetched" or not (ROOT / rel).exists():
+            continue
+        fm, units = split_text_source((ROOT / rel).read_text(encoding="utf-8"))
+        if fm.get("id") != sid:
+            raise ValueError(f"{rel}: front matter id {fm.get('id')!r} != manifest {sid!r}")
+        category = CATEGORY_BY_PREFIX[sid.split("-")[0]]
+        chunks = []
+        for u in units:
+            parts = _split_800(clean_text(f"{sid} {u['section']}\n{u['text']}"))
+            for pi, p in enumerate(parts):
+                chunks.append({
+                    "content": p,
+                    "meta": {
+                        "src": [sid], "draft": False, "lang": fm.get("lang", src.get("lang", "ko")),       # 판정 ③
+                        "seed_file": rel, "section": u["section"] + (f"#{pi + 1}" if len(parts) > 1 else ""),
+                        "category": category, "machine": None, "doc_version": 1,
+                        "license": str(src.get("license") or ""), "role": src.get("role"),                   # 판정 ② role='case'
+                    },
+                })
+        docs.append({"title": clean_text(str(fm.get("title") or src.get("title") or sid)), "category": category,
+                     "source": rel, "version": 1, "chunks": chunks})
+        print(f"{rel}: units {len(units)}, chunks {len(chunks)}, max {max(len(c['content']) for c in chunks)} chars, role={src.get('role')}")
+    return docs
+
+
 def load_plan() -> tuple[list[dict], list[dict]]:
     docs = []
     for rel in MANUALS:
@@ -184,8 +273,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slug", default=os.environ.get("TENANT_SLUG", "axis_demo"))
     ap.add_argument("--dry-run", action="store_true", help="청킹·정제 통계만 출력 (DB·ollama 불필요)")
+    ap.add_argument("--sources", choices=("seed", "text", "all"), default="seed",
+                    help="seed=매뉴얼 2+glossary(기본, 기존 동작) / text=근거 원문 text/ 13건 / all=둘 다. 멱등 키는 documents.source 라 서로 보존")
     a = ap.parse_args()
-    docs, gl = load_plan()
+    docs, gl = [], []
+    if a.sources in ("seed", "all"):
+        docs, gl = load_plan()
+    if a.sources in ("text", "all"):
+        docs += load_text_plan()
     if a.dry_run:
         print("dry-run: no DB write")
         return 0

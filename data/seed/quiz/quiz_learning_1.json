@@ -8,7 +8,7 @@
     "review_note": "07 재생성 초안(2026-08-29). q_vi·choices_vi 전부 초안 — 원어민 검수 전 시연 문구로 확정 금지. 각 문항의 근거는 src(manifest ID), 4유형 인용은 quote(원문 무변형)로 표기",
     "source_docs": ["data/seed/manuals/cnc_lathe_manual.md", "data/seed/manuals/press_manual.md"],
     "lang_map": {"vi": "베트남어", "in": "인도네시아어 (manifest lang 'id')"},
-    "redistribution_trigger": "raw/ 재배포 검토 트리거: 레포 공개 전환 / raw 포함 외부 제출 / 상업화. 해당 시 미표시\n2건(M-96·M-138)과 PRESS-3 페이지 추출본 우선 재검토."
+    "redistribution_trigger": "raw/ 재배포 검토 트리거: 레포 공개 전환 / raw 포함 외부 제출 / 상업화. 해당 시 미표시\n2건(M-96·M-138)과 PRESS-3 페이지 추출본 우선 재검토. RAG 적재분(text/ 13건) 포함."
   },
   "items": [
     {

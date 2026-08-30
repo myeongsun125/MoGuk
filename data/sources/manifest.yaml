@@ -1,6 +1,7 @@
 # data/sources/manifest.yaml — M-29 근거 자료 SSOT. 여기 없는 ID는 어디서도 쓸 수 없다.
 # status: pending | fetched | collected | hold(라이선스 미확인) | fetch_failed | excluded(제외 확정 — 사유 note 필수)
 # lang 표기: manifest 'id'(인도네시아어) ↔ 시드 산출물 필드 접두사 '_in' (D5, 2026-08-29 확정)
+# raw/ 재배포 검토 트리거(2026-08-29 명선, 2026-08-30 확장): 레포 공개 전환 / raw 포함 외부 제출 / 상업화. 해당 시 미표시 2건(M-96·M-138)과 PRESS-3 페이지 추출본 우선 재검토. RAG 적재분(text/ 13건) 포함. — 07 산출물·text/ 헤더의 redistribution_trigger 와 동일 문안
 sources:
   - id: LAW-KOSH-RULE
     title: 산업안전보건기준에 관한 규칙
