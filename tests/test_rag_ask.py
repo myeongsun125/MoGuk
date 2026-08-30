@@ -754,3 +754,106 @@ def test_ask_never_surfaces_case_sources(monkeypatch):
 
     assert out.sources and all("case" not in str(s) for s in out.sources)
     assert seen_sql["k"] == 4
+
+
+# ── 응답 언어 = 질의 lang (총괄 재판정 0830) ───────────────
+
+@pytest.mark.parametrize(
+    "lang,name,native",
+    [("vi", "베트남어", "Tiếng Việt"), ("in", "인도네시아어", "Bahasa Indonesia"), ("ko", "한국어", None)],
+)
+def test_prompt_states_output_language_per_lang(lang, name, native):
+    """lang 별 언어 지시가 프롬프트에 실린다 — 언어명 + 원어 표기(ko 는 동일해 생략)."""
+    p = graph.build_prompt("q?", lang, [_chunk(1)])
+
+    head = [l for l in p.splitlines() if l.startswith("[출력 언어]")]
+    assert len(head) == 1, p
+    assert name in head[0]
+    if native:
+        assert native in head[0], head[0]
+    else:
+        assert head[0] == "[출력 언어] 한국어"          # "한국어(한국어)" 중복 금지
+    assert f"답변 전체를 {name}로 작성" in p
+
+
+@pytest.mark.parametrize("lang,name", [("vi", "베트남어"), ("in", "인도네시아어"), ("ko", "한국어")])
+def test_prompt_repeats_language_at_answer_header(lang, name):
+    """지시를 [답변] 헤더에도 중복 배치 — 규칙 목록 말미 1회로는 무시되는 사례 실측(EC2 0830)."""
+    p = graph.build_prompt("q?", lang, [_chunk(1)])
+    last = p.splitlines()[-1]
+    assert last.startswith("[답변 — ") and name in last, last
+
+
+def test_prompt_language_block_precedes_rules_and_context():
+    """언어 지시 위치 — 규칙 목록·근거 자료보다 앞(모델이 무시하기 어려운 상단)."""
+    p = graph.build_prompt("q?", "vi", [_chunk(1)])
+    assert p.index("[출력 언어]") < p.index("규칙(반드시 지킬 것):")
+    assert p.index("[출력 언어]") < p.index("[근거 자료]")
+
+
+def test_prompt_unknown_lang_falls_back_to_vi():
+    """미지 lang 은 기존과 동일하게 vi 로 폴백(동작 무변경)."""
+    p = graph.build_prompt("q?", "xx", [_chunk(1)])
+    assert "베트남어" in p
+
+
+def test_prompt_no_answer_marker_is_exempt_from_translation():
+    """NO_ANSWER 는 번역 금지 — is_no_answer 검출이 언어에 따라 깨지지 않게 한다."""
+    p = graph.build_prompt("q?", "vi", [_chunk(1)])
+    assert f"{graph.NO_ANSWER} 는 번역하지 말고 그대로 출력" in p
+    assert graph.is_no_answer(graph.NO_ANSWER)
+
+
+def test_prompt_keeps_existing_grounding_rules():
+    """기존 프롬프트 요소 무변경 — 근거 강제·NO_ANSWER 규약·3문장·블록 구조."""
+    chunks = [_chunk(1), _chunk(2)]
+    p = graph.build_prompt("프레스 점검 절차는?", "vi", chunks)
+
+    assert "아래 [근거 자료]에 있는 내용만으로 답하십시오" in p
+    assert "자료 밖의 일반 지식·추측을 절대 쓰지 마십시오" in p
+    assert f"정확히 {graph.NO_ANSWER} 한 단어만 출력하십시오" in p
+    assert "3문장 이내로 간결하게" in p
+    for block in ("[근거 자료]", "[질문]"):
+        assert block in p
+    for c in chunks:
+        assert c.content in p
+    assert "프레스 점검 절차는?" in p
+
+
+def test_run_ask_passes_request_lang_into_prompt(monkeypatch):
+    """배선 — 라우터가 준 lang 이 프롬프트까지 그대로 도달한다."""
+    seen = {}
+
+    def _complete(prompt, tier, timeout_s=None):
+        seen["prompt"] = prompt
+        return llm_adapter.LLMResult(text="Trả lời", tier_used="local", model="m", latency_ms=5)
+
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4, meta_filter=None: [_chunk(1)])
+    monkeypatch.setattr(graph, "complete", _complete)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(_store()))
+
+    graph.run_ask("Khi vận hành máy tiện?", "vi")
+    assert "[출력 언어] 베트남어(Tiếng Việt)" in seen["prompt"]
+
+    graph.run_ask("q", "in")
+    assert "[출력 언어] 인도네시아어(Bahasa Indonesia)" in seen["prompt"]
+
+
+def test_ask_endpoint_lang_reaches_prompt(monkeypatch):
+    """§3 계약 무변경 — 요청 {question, lang} 의 lang 이 생성 프롬프트에 반영된다."""
+    monkeypatch.setenv("API_ROLE", "core")   # edge 는 릴레이 경유(tests/test_relay.py 소관)
+    seen = {}
+
+    def _complete(prompt, tier, timeout_s=None):
+        seen["prompt"] = prompt
+        return llm_adapter.LLMResult(text="Trả lời", tier_used="local", model="m", latency_ms=5)
+
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4, meta_filter=None: [_chunk(1)])
+    monkeypatch.setattr(graph, "complete", _complete)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(_store()))
+
+    r = client.post("/api/v1/ask", json={"question": "Khi nào?", "lang": "vi"})
+
+    assert r.status_code == 200
+    assert set(r.json()) == {"answer", "sources", "verify", "trace_id"}   # §3 4필드 무변경
+    assert "베트남어" in seen["prompt"]

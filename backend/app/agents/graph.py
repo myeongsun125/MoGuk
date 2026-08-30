@@ -1,6 +1,7 @@
 """그래프 엔트리 — classify → retrieve → translate → verify (≤3홉). [새봄]
 
 V2-2 범위: retrieve(top-k=4) → 근거 강제 프롬프트 → complete(tier="local") → 응답 조립.
+- 응답 언어 = 질의 lang (총괄 재판정 0830) — 프롬프트 상단 [출력 언어] 블록 + [답변] 헤더에 중복 지시.
 - 근거 없음(검색 0건 또는 모델이 NO_ANSWER 반환) → grounded=false → 답변 차단 + unanswered_queue(M-05).
 - questions(qa_logs) 기록: grounded·sources·trace(M-09 lineage)·latency_ms.
 - 티어 정책(M-17): 사업장 지식 질의는 로컬 고정 — tier="local", timeout_s=None(티어 설정값, M-30).
@@ -29,9 +30,18 @@ TOP_K = 4
 NO_ANSWER = "NO_ANSWER"
 
 _LANG_NAME = {"vi": "베트남어", "in": "인도네시아어", "ko": "한국어"}
+# 원어 표기 병기 — 언어명만으로는 모델이 근거 자료 언어(한국어)로 이어쓰는 경향이 있다.
+_LANG_NATIVE = {"vi": "Tiếng Việt", "in": "Bahasa Indonesia", "ko": "한국어"}
 
 # 근거 강제 프롬프트 (BLUEPRINT §4-1) — 청크 밖 지식 사용 금지.
+# 출력 언어 지시는 규칙 목록 안이 아니라 상단 독립 블록 + [답변] 헤더에 중복 배치한다 —
+# 규칙 3 말미에 길이 규약과 섞여 있을 때 vi 질의에 한국어로 답하는 사례가 실측됐다(EC2 0830).
 PROMPT_TEMPLATE = """당신은 제조 사업장의 안전·작업 안내 도우미입니다.
+
+[출력 언어] {lang_label}
+- 답변 전체를 {lang_name}로 작성하십시오. 근거 자료의 언어와 무관합니다.
+- 근거 자료가 다른 언어면 내용을 {lang_name}로 옮겨 답하십시오. 다른 언어를 섞지 마십시오.
+- 이 지시는 아래 규칙보다 우선합니다. 단 {no_answer} 는 번역하지 말고 그대로 출력하십시오.
 
 규칙(반드시 지킬 것):
 1. 아래 [근거 자료]에 있는 내용만으로 답하십시오. 자료 밖의 일반 지식·추측을 절대 쓰지 마십시오.
@@ -44,7 +54,7 @@ PROMPT_TEMPLATE = """당신은 제조 사업장의 안전·작업 안내 도우�
 [질문]
 {question}
 
-[답변]"""
+[답변 — {lang_label}로 작성]"""
 
 
 @dataclass(frozen=True)
@@ -89,9 +99,13 @@ def build_context(chunks: list[Chunk]) -> str:
 
 
 def build_prompt(question: str, lang: str, chunks: list[Chunk]) -> str:
+    name = _LANG_NAME.get(lang, _LANG_NAME["vi"])
+    native = _LANG_NATIVE.get(lang, _LANG_NATIVE["vi"])
     return PROMPT_TEMPLATE.format(
         no_answer=NO_ANSWER,
-        lang_name=_LANG_NAME.get(lang, _LANG_NAME["vi"]),
+        lang_name=name,
+        # 원어 표기가 언어명과 같으면(ko) 괄호를 붙이지 않는다 — "한국어(한국어)" 방지
+        lang_label=f"{name}({native})" if native != name else name,
         context=build_context(chunks),
         question=question,
     )
