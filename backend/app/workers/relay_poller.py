@@ -8,7 +8,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
      · POST /api/v1/auth/{activate,login}(services.auth, M-15 배선)
      · POST /api/v1/reports/{id}/confirm(risk_reports.confirm, M-08c 배선)
      · GET /api/v1/reports/{id} · GET /api/v1/admin/reports?status= · GET /api/v1/admin/reports/{id}
-     · GET /api/v1/admin/dashboard(KPI 4종+추이)
+     · GET /api/v1/admin/dashboard(KPI 4종+추이) · GET /api/v1/admin/{glossary,unanswered}?status=
      · POST /api/v1/admin/reports/{id}/ack|resolve  (M-28c ① — method 축 추가).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
@@ -80,6 +80,13 @@ def _dispatch_get(route: str, query: dict) -> tuple[int, object]:
         from app.services.dashboard import get_dashboard
 
         return 200, get_dashboard()
+
+    if route in ("/api/v1/admin/glossary", "/api/v1/admin/unanswered"):
+        from app.services import approval
+
+        status = (query.get("status") or [None])[0]
+        fn = approval.list_glossary if route.endswith("/glossary") else approval.list_unanswered
+        return 200, fn(status)
 
     if route == "/api/v1/admin/reports":
         # ?status= 는 쿼리스트링으로 전달된다(M-28c ①). 미지정이면 전체.

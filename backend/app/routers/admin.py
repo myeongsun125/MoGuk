@@ -16,7 +16,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.services import dashboard as dashboard_service, risk_reports
+from app.services import approval, dashboard as dashboard_service, risk_reports
 from app.services.relay import queue
 from app.services.system_service import role
 
@@ -24,6 +24,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # M-28c ① 릴레이 경로 — §3 관리자 블록 등재분.
 DASHBOARD_PATH = "/api/v1/admin/dashboard"
+GLOSSARY_PATH = "/api/v1/admin/glossary"
+UNANSWERED_PATH = "/api/v1/admin/unanswered"
 LIST_PATH = "/api/v1/admin/reports"
 DETAIL_PATH = "/api/v1/admin/reports/{report_id}"
 ACK_PATH = "/api/v1/admin/reports/{report_id}/ack"
@@ -89,8 +91,13 @@ def upload_document() -> dict:
 
 
 @router.get("/glossary")
-def list_glossary(status: str = "draft") -> list:
-    raise NotImplementedError("[새봄] GET /admin/glossary?status=")
+async def list_glossary(status: str | None = approval.GLOSSARY_DEFAULT_STATUS) -> JSONResponse:
+    """용어 후보 목록 — 기본 필터 draft. 읽기 전용(전이는 approve/reject 소관)."""
+    if role() == "edge":
+        path = GLOSSARY_PATH + (f"?status={quote(status)}" if status else "")
+        return await _relay(path, "GET", {})
+    result = await asyncio.to_thread(approval.list_glossary, status)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/glossary/{term_id}/approve")
@@ -104,8 +111,13 @@ def reject_glossary(term_id: int) -> dict:
 
 
 @router.get("/unanswered")
-def list_unanswered() -> list:
-    raise NotImplementedError("[새봄] GET /admin/unanswered")
+async def list_unanswered(status: str | None = approval.UNANSWERED_DEFAULT_STATUS) -> JSONResponse:
+    """무근거 질의 대기 목록(M-05·M-05a 2종 한정) — 기본 필터 open."""
+    if role() == "edge":
+        path = UNANSWERED_PATH + (f"?status={quote(status)}" if status else "")
+        return await _relay(path, "GET", {})
+    result = await asyncio.to_thread(approval.list_unanswered, status)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/unanswered/{question_id}/answer")
