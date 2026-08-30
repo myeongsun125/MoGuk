@@ -225,7 +225,7 @@ GET  /speaking/phrases     / POST /speaking/records         multipart(audio)
 관리자:
 ```
 POST /auth/admin/login     {email, pw}
-GET  /admin/dashboard      → {workers, avg_comprehension, completion_rate, open_reports, weekly_trend[], per_worker[], per_module[]}
+GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,acknowledged,resolved}, unanswered_open, citation_rate:{answered,with_sources,rate}, reports_today_hourly[{hour,count}], generated_at, timezone}   # KPI 4종+추이. citation_rate 분모=답변 방출(gated 제외)·분자=sources 존재. 추이=오늘(Asia/Seoul) 시간대별, 00시~현재 zero-fill. 학습 KPI(avg_comprehension·completion_rate·per_worker·per_module)는 V5
 POST /admin/workers/invite {name, emp_no, lang}            → {invite_url}
 POST /admin/documents      multipart                        → 202 (ingest job)
 GET  /admin/glossary?status=draft / POST /admin/glossary/{id}/approve|reject

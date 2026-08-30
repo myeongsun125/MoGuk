@@ -16,13 +16,14 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.services import risk_reports
+from app.services import dashboard as dashboard_service, risk_reports
 from app.services.relay import queue
 from app.services.system_service import role
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 # M-28c ① 릴레이 경로 — §3 관리자 블록 등재분.
+DASHBOARD_PATH = "/api/v1/admin/dashboard"
 LIST_PATH = "/api/v1/admin/reports"
 DETAIL_PATH = "/api/v1/admin/reports/{report_id}"
 ACK_PATH = "/api/v1/admin/reports/{report_id}/ack"
@@ -64,9 +65,15 @@ def _reject_identity_fields(body: object) -> None:
 
 
 @router.get("/dashboard")
-def dashboard() -> dict:
-    # → {workers, avg_comprehension, completion_rate, open_reports, weekly_trend[], per_worker[], per_module[]}
-    raise NotImplementedError("[새봄] GET /admin/dashboard")
+async def dashboard() -> JSONResponse:
+    """KPI 4종 + 오늘 시간대별 추이 (총괄 확정 0830). 읽기 전용 — 쓰기·이벤트 없음.
+
+    학습 KPI(avg_comprehension·completion_rate·per_worker·per_module)는 학습 모듈 구현 후(V5).
+    """
+    if role() == "edge":
+        return await _relay(DASHBOARD_PATH, "GET", {})
+    result = await asyncio.to_thread(dashboard_service.get_dashboard)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/workers/invite")
