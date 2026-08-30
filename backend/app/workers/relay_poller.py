@@ -9,6 +9,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
      · POST /api/v1/reports/{id}/confirm(risk_reports.confirm, M-08c 배선)
      · GET /api/v1/reports/{id} · GET /api/v1/admin/reports?status= · GET /api/v1/admin/reports/{id}
      · GET /api/v1/admin/dashboard(KPI 4종+추이) · GET /api/v1/admin/{glossary,unanswered}?status=
+     · GET /api/v1/admin/events(M-08d 감사 로그) · POST /api/v1/admin/glossary/{id}/approve|reject
      · POST /api/v1/admin/reports/{id}/ack|resolve  (M-28c ① — method 축 추가).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
@@ -80,6 +81,15 @@ def _dispatch_get(route: str, query: dict) -> tuple[int, object]:
         from app.services.dashboard import get_dashboard
 
         return 200, get_dashboard()
+
+    if route == "/api/v1/admin/events":
+        from app.services import admin_events
+
+        one = lambda k: (query.get(k) or [None])[0]   # noqa: E731
+        return 200, admin_events.list_events(
+            one("date"), one("target_type"),
+            int(one("limit") or admin_events.LIMIT_DEFAULT), int(one("offset") or 0),
+        )
 
     if route in ("/api/v1/admin/glossary", "/api/v1/admin/unanswered"):
         from app.services import approval
@@ -177,6 +187,23 @@ def dispatch(
             # 사유를 응답으로 구분하지 않는다(계정·토큰 존재 여부 비노출)
             return 401, {"detail": auth_service.AUTH_FAILED_MESSAGE}
         return 200, result
+    if method == "POST" and route.startswith("/api/v1/admin/glossary/") and route.endswith(
+        ("/approve", "/reject")
+    ):
+        # M-08d 전이 — actor 는 core 가 결정한다(단일 주입 지점).
+        from app.services import approval
+
+        term_id = _path_id(route, 5, segments=7)
+        if term_id is None:
+            return 404, {"detail": f"relay: 잘못된 term_id 경로 {route}"}
+        try:
+            if route.endswith("/approve"):
+                return 200, approval.approve_glossary(term_id)
+            return 200, approval.reject_glossary(term_id, body.get("note"))
+        except approval.TermNotFound:
+            return 404, {"detail": "glossary term not found"}
+        except approval.TransitionError as exc:
+            return 422, {"detail": str(exc)}
     if method == "POST" and route.startswith("/api/v1/admin/reports/") and route.endswith(
         ("/ack", "/resolve")
     ):

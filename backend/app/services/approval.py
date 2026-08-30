@@ -1,7 +1,13 @@
 """관리자 승인큐 — glossary 후보·무근거 질의 목록 (총괄 확정 0830). [새봄]
 
-이번 커밋 범위 = **목록 조회(읽기 전용)**. 전이(approve/reject)는 감사 이벤트 수용처
-판정(0-c A/B 상신) 후 별도 반영한다 — 이벤트 없이 상태만 바꾸는 구현은 두지 않는다.
+범위 = 목록 조회 + 전이(approve/reject). 전이는 admin_events 1행을 함께 남긴다(M-08d).
+
+M-08d 배선:
+- 수용처 = admin_events (범용 감사 — actor text·target_type/target_id·from/to·detail)
+- actor = risk_reports.ADMIN_ACTOR_UNAUTHENTICATED 재사용 (M-15b 단일 주입 지점, 새 리터럴 금지)
+- glossary.approved_by 는 integer FK 라 NULL 유지(M-15b 판정 1 동일), approved_at 은 승인 시각만 갱신
+- reject 사유를 담을 컬럼이 001 glossary 에 없다 — glossary.note 는 용어 설명이라 덮으면 자료가
+  사라진다. 따라서 사유는 admin_events.detail 에 남기고 note 는 건드리지 않는다
 
 필드는 001 정본 전사 (db/migrations/001_tenant_template.sql, R4):
   glossary(id, term_ko, term_vi, term_in, note, status, source_question_id, approved_by, approved_at)
@@ -18,7 +24,8 @@ from __future__ import annotations
 
 import logging
 
-from app.services import tenancy
+from app.services import admin_events, tenancy
+from app.services.risk_reports import ADMIN_ACTOR_UNAUTHENTICATED
 
 log = logging.getLogger(__name__)
 
@@ -85,3 +92,71 @@ def list_unanswered(status: str | None = UNANSWERED_DEFAULT_STATUS) -> list[dict
             cur.execute(_LIST_UNANSWERED, {"status": status or None})   # ?status= 빈 값 = 전체
             rows = cur.fetchall()
     return [_row(UNANSWERED_KEYS, r) for r in rows]
+
+
+# ── 전이 (M-08d) ──────────────────────────────────────────
+
+EV_GLOSSARY_APPROVED = "glossary_approved"
+EV_GLOSSARY_REJECTED = "glossary_rejected"
+TARGET_GLOSSARY = "glossary"
+
+# draft 에서만 전이한다 — 승인·반려 후 되돌리는 경로는 두지 않는다(M-08 단방향 패턴).
+GLOSSARY_TRANSITIONS = {"approve": "approved", "reject": "rejected"}
+GLOSSARY_FROM_STATE = "draft"
+
+
+class TransitionError(Exception):
+    """draft 아닌 항목에 전이 시도 — 라우터가 422 로 변환."""
+
+
+class TermNotFound(Exception):
+    """대상 용어 없음 — 404."""
+
+
+_SELECT_STATUS_FOR_UPDATE = "SELECT status FROM glossary WHERE id = %(id)s FOR UPDATE"
+
+# approved_by(integer FK)는 건드리지 않는다 — M-15b 판정 1 과 동일. 행위자는 admin_events.actor 단독.
+_APPROVE = "UPDATE glossary SET status = %(to_state)s, approved_at = now() WHERE id = %(id)s"
+# reject 는 승인 시각이 아니므로 approved_at 을 채우지 않는다. 사유는 admin_events.detail.
+_REJECT = "UPDATE glossary SET status = %(to_state)s WHERE id = %(id)s"
+
+
+def _transition(term_id: int, action: str, sql: str, event: str, detail: str | None) -> dict:
+    """draft → approved|rejected 1회. 스냅숏 갱신 + admin_events 1행을 한 트랜잭션으로."""
+    to_state = GLOSSARY_TRANSITIONS[action]
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_STATUS_FOR_UPDATE, {"id": term_id})
+            row = cur.fetchone()
+            if row is None:
+                raise TermNotFound(f"glossary_id={term_id}")
+            current = row[0]
+            if current != GLOSSARY_FROM_STATE:
+                raise TransitionError(
+                    f"{current} → {to_state} 불가 ({GLOSSARY_FROM_STATE} 에서만)"
+                )
+
+            cur.execute(sql, {"id": term_id, "to_state": to_state})
+            admin_events.record(
+                cur,
+                actor=ADMIN_ACTOR_UNAUTHENTICATED,
+                target_type=TARGET_GLOSSARY,
+                target_id=term_id,
+                action=event,
+                from_state=current,
+                to_state=to_state,
+                detail=detail,
+            )
+        conn.commit()
+    log.info("glossary: 전이 id=%s %s → %s", term_id, GLOSSARY_FROM_STATE, to_state)
+    return {"id": term_id, "status": to_state}
+
+
+def approve_glossary(term_id: int) -> dict:
+    """draft → approved. approved_at 갱신, approved_by 는 NULL 유지(M-15b)."""
+    return _transition(term_id, "approve", _APPROVE, EV_GLOSSARY_APPROVED, None)
+
+
+def reject_glossary(term_id: int, note: str | None = None) -> dict:
+    """draft → rejected. 사유는 admin_events.detail 에 보존 — glossary.note 는 무접촉."""
+    return _transition(term_id, "reject", _REJECT, EV_GLOSSARY_REJECTED, note)
