@@ -375,7 +375,7 @@ def test_001_defines_admin_events_and_keeps_existing_tables():
                           cwd=root, capture_output=True).stdout.decode("utf-8")
     if base:                       # origin/main 을 못 읽는 환경이면 생략
         old = [l for l in base.split("\n") if l.startswith("CREATE TABLE")]
-        new = [l for l in ddl.split("\n") if l.startswith("CREATE TABLE") and "admin_events" not in l]
+        new = [l for l in ddl.split("\n") if l.startswith("CREATE TABLE")]
         assert old == new, "기존 CREATE TABLE 정의가 변경됨"
 
 
