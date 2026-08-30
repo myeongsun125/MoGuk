@@ -1,0 +1,204 @@
+.admin-reports {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.admin-reports h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.unconfirmed-badge {
+  align-self: flex-start;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #fdecea;
+  color: #b71c1c;
+}
+
+.report-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.report-row {
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.badge {
+  font-size: 0.78rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  white-space: nowrap;
+}
+
+.badge-status-submitted {
+  background: #fdecea;
+  color: #b71c1c;
+}
+
+.badge-status-acknowledged {
+  background: #fff4e5;
+  color: #9c5700;
+}
+
+.badge-status-resolved {
+  background: #eef7ee;
+  color: #2e7d32;
+}
+
+.badge-severity-high {
+  background: #fdecea;
+  color: #b71c1c;
+}
+
+.badge-severity-medium {
+  background: #fff4e5;
+  color: #9c5700;
+}
+
+.badge-severity-low {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.badge-confirmed {
+  background: #eef7ee;
+  color: #2e7d32;
+}
+
+.report-row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-row-actions button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.action-msg {
+  font-size: 0.8rem;
+  color: #c0392b;
+}
+
+.report-detail {
+  position: relative;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.report-detail .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.report-detail dl {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 12px;
+  margin: 12px 0;
+}
+
+.report-detail dt {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.report-detail dd {
+  margin: 0;
+}
+
+.resolve-form {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.resolve-form input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.resolve-form button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a1a;
+  color: #fff;
+  cursor: pointer;
+}
+
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+
+.event-list li {
+  display: flex;
+  gap: 10px;
+  color: #444;
+}
+
+.ev-action {
+  font-weight: 600;
+  min-width: 140px;
+}
+
+.ev-actor {
+  color: #666;
+  min-width: 130px;
+}
+
+.ev-time {
+  color: #999;
+}

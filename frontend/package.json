@@ -8,6 +8,7 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
     "shot": "node scripts/shot.mjs",
+    "shot:admin": "node scripts/shot-admin-reports.mjs",
     "rehearse": "node scripts/rehearse.mjs",
     "postinstall": "playwright install chromium"
   },
