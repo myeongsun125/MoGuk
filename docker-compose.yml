@@ -92,6 +92,7 @@ services:
       GATE_TAU: ${GATE_TAU:-0.80}
       BACKTRANS_TIMEOUT_S: ${BACKTRANS_TIMEOUT_S:-10.0}
       GATE_SRC: ${GATE_SRC:-question}
+      BASE_URL: ${BASE_URL:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy
