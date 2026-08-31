@@ -1,6 +1,6 @@
 {
   "worker.invite.title": "Chào mừng đến với MoGuk",
-  "worker.invite.tokenMissing": "Liên kết mời không hợp lệ. Vui lòng quét lại mã QR.",
+  "worker.invite.noToken": "Vui lòng quét mã QR mời",
   "worker.invite.langLabel": "Chọn ngôn ngữ",
   "worker.invite.langVi": "Tiếng Việt",
   "worker.invite.langKo": "한국어",
@@ -9,7 +9,7 @@
   "worker.invite.pinPlaceholder": "PIN 4-6 số",
   "worker.invite.submit": "Kích hoạt",
   "worker.invite.activating": "Đang kích hoạt...",
-  "worker.invite.error": "Kích hoạt thất bại. Vui lòng thử lại.",
+  "worker.invite.invalidToken": "Liên kết mời không hợp lệ — vui lòng liên hệ quản trị viên để cấp lại",
   "worker.ask.title": "Hỏi đáp",
   "worker.ask.placeholder": "Nhập câu hỏi của bạn",
   "worker.ask.submit": "Gửi",
@@ -33,5 +33,7 @@
   "worker.report.confirmError": "Xác nhận thất bại. Vui lòng thử lại.",
   "worker.report.confirmedDone": "Cảm ơn bạn đã xác nhận.",
   "worker.report.correctedDone": "Yêu cầu chỉnh sửa đã được tiếp nhận.",
-  "worker.report.summaryFailed": "Tạo tóm tắt thất bại. Báo cáo đã được tiếp nhận bình thường và quản trị viên sẽ trực tiếp kiểm tra nội dung gốc."
+  "worker.report.summaryFailed": "Tạo tóm tắt thất bại. Báo cáo đã được tiếp nhận bình thường và quản trị viên sẽ trực tiếp kiểm tra nội dung gốc.",
+  "worker.nav.ask": "Hỏi đáp",
+  "worker.nav.report": "Báo cáo nguy hiểm"
 }

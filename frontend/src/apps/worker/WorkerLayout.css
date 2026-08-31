@@ -1,0 +1,62 @@
+.worker-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.worker-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+}
+
+.worker-lang-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.worker-lang-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.worker-lang-btn.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+
+.worker-content {
+  flex: 1;
+  padding-bottom: 60px; /* 하단 탭바 높이만큼 확보 */
+}
+
+.worker-tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  border-top: 1px solid #e5e5e5;
+  background: #fff;
+}
+
+.worker-tab {
+  flex: 1;
+  padding: 14px 0;
+  text-align: center;
+  color: #666;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.worker-tab.active {
+  color: #1a1a1a;
+  font-weight: 600;
+}

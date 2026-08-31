@@ -30,6 +30,10 @@ export interface AskResponse {
 export interface ActivateResponse {
   jwt: string;
   refresh: string;
+  // §3 계약 밖 — 현재 services/auth.py activate()는 lang을 반환하지 않는다(workers.lang
+  // 컬럼은 001에 있지만 issue_token_pair가 아직 안 담음). 향후 추가될 때를 대비한 optional
+  // 필드 — 없으면 화면은 기존 기본 vi로 폴백한다.
+  lang?: Lang;
 }
 
 // 위험보고 — skeleton-v3 §3 관리자/근로자 블록, M-08·M-08a·M-15b
