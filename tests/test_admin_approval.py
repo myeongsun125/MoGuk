@@ -523,6 +523,7 @@ def test_list_events_filters_and_defaults(monkeypatch):
     admin_events.list_events()
     p = store["calls"][0][1]
     assert p == {"date": None, "target_type": None, "tz": "Asia/Seoul",
+                 "report_type": admin_events.REPORT_TARGET_TYPE,   # M-36 report 행 사영 상수
                  "limit": admin_events.LIMIT_DEFAULT, "offset": 0}
 
     admin_events.list_events("2026-08-30", "glossary", 10, 5)
@@ -554,11 +555,156 @@ def test_list_events_sql_shape(monkeypatch):
     admin_events.list_events()
 
     sql = store["calls"][0][0]
-    assert "ORDER BY id DESC" in sql                       # 최신 우선
+    assert "ORDER BY created_at DESC" in sql               # 최신 우선 (M-36 — id 정렬 폐지)
+    assert "ORDER BY id DESC" not in sql
     assert "LIMIT %(limit)s OFFSET %(offset)s" in sql
     assert "(created_at AT TIME ZONE %(tz)s)::date = %(date)s::date" in sql
     assert "%(date)s::text IS NULL OR" in sql              # 필터 미지정 = 전체
     assert sql.strip().split()[0].upper() == "SELECT"
+
+
+# ── M-36 병합 조회 ────────────────────────────────────────
+
+# 병합 결과에서 report 행이 갖는 모습 — id=risk_report_events.id, target_type='report',
+# target_id=report_id, action 은 원값, detail 은 note(ack/resolve) 또는 null.
+REPORT_EVENT_ROW = (34, "admin:unauthenticated", "report", 9,
+                    "report_resolved", "acknowledged", "resolved", "현장 조치 완료", AT)
+REPORT_EVENT_ROW_NULL_DETAIL = (35, "worker:3", "report", 9,
+                                "reporter_confirmed", None, None, None, AT)
+
+
+def _events_store(monkeypatch, rows):
+    store = _store(rows2=rows)
+    monkeypatch.setattr(admin_events.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(FakeCursor, "fetchall", lambda self: self.store.get("rows2", []))
+    return store
+
+
+def _outer_where(sql: str) -> str:
+    """UNION 바깥(= 병합 결과에 걸리는) 절만 잘라낸다."""
+    return sql[sql.index(") events"):]
+
+
+def test_merged_report_rows_map_to_nine_keys(monkeypatch):
+    """(a) report 행도 admin_events 행과 같은 9종 필드·순서로 나온다."""
+    _events_store(monkeypatch, [REPORT_EVENT_ROW, REPORT_EVENT_ROW_NULL_DETAIL])
+
+    out = admin_events.list_events()
+
+    assert [tuple(r) for r in out] == [admin_events.EVENT_KEYS] * 2   # 키 이름·순서 무변경
+    first, second = out
+    assert first["id"] == 34                                  # 원본 테이블 id
+    assert first["target_type"] == admin_events.REPORT_TARGET_TYPE == "report"
+    assert first["target_id"] == 9                            # = report_id
+    assert first["action"] == "report_resolved"               # 원값 (M-36 ②)
+    assert first["detail"] == "현장 조치 완료"                  # = note
+    assert first["actor"] == "admin:unauthenticated"
+    assert (first["from_state"], first["to_state"]) == ("acknowledged", "resolved")
+    assert first["created_at"] == AT_ISO
+    assert second["detail"] is None                           # note 미지정 → null
+
+
+def test_merge_sql_unions_both_tables_with_report_projection(monkeypatch):
+    """(a) 병합 소스 2개와 report 사영이 SQL 에 있고, 저장 이중화는 없다."""
+    store = _events_store(monkeypatch, [])
+    admin_events.list_events()
+
+    sql, params = store["calls"][0]
+    assert "FROM admin_events" in sql and "FROM risk_report_events" in sql
+    assert "UNION ALL" in sql
+    assert "::text AS target_type" in sql                      # report 행 target_type 사영
+    assert "report_id AS target_id" in sql                     # target_id = report_id
+    assert params["report_type"] == admin_events.REPORT_TARGET_TYPE
+    # 저장 이중화 없음 — 조회 경로에 INSERT/UPDATE 가 없다
+    assert all(q.strip().split()[0].upper() == "SELECT" for q, _ in store["calls"])
+    assert "risk_report_events" not in admin_events._INSERT   # 기록 규약 무접촉(M-08d)
+
+
+def test_merge_orders_globally_by_created_at_desc(monkeypatch):
+    """(b) 정렬은 병합 결과 전역에 3키(created_at, target_type, id) desc 로 걸린다."""
+    store = _events_store(monkeypatch, [REPORT_EVENT_ROW, EVENT_ROW])
+    out = admin_events.list_events()
+
+    sql = store["calls"][0][0]
+    outer = _outer_where(sql)
+    assert "ORDER BY created_at DESC, target_type DESC, id DESC" in outer   # UNION 바깥 = 전역
+    assert "ORDER BY" not in sql[:sql.index(") events")]       # 브랜치 내부 정렬 없음
+    # 커서가 준 순서를 그대로 낸다(파이썬에서 다시 정렬하지 않는다)
+    assert [r["id"] for r in out] == [34, 12]
+
+
+def test_merge_tiebreak_is_deterministic_on_equal_created_at(monkeypatch):
+    """동률 — 같은 created_at 이면 target_type DESC(report 선행), 같은 축 안에서는 id DESC.
+
+    정렬은 DB 가 수행하므로 여기서는 ORDER BY 키 순서·방향을 SQL 로 단정하고,
+    그 키로 정렬한 결과가 어떤 순서가 되는지를 같은 규칙으로 확인한다.
+    """
+    same_time_rows = [
+        REPORT_EVENT_ROW,                                      # id 34, target_type 'report'
+        REPORT_EVENT_ROW_NULL_DETAIL,                          # id 35, target_type 'report'
+        EVENT_ROW,                                             # id 12, target_type 'glossary'
+    ]
+    assert {r[8] for r in same_time_rows} == {AT}              # 세 행 created_at 동률
+
+    store = _events_store(monkeypatch, same_time_rows)
+    admin_events.list_events()
+    outer = _outer_where(store["calls"][0][0])
+    keys = outer[outer.index("ORDER BY"):].splitlines()[0]
+    assert keys == "ORDER BY created_at DESC, target_type DESC, id DESC"
+
+    # 같은 3키로 정렬하면: report(35) → report(34) → glossary(12)
+    ordered = sorted(same_time_rows, key=lambda r: (r[8], r[2], r[0]), reverse=True)
+    assert [r[0] for r in ordered] == [35, 34, 12]
+    assert [r[2] for r in ordered] == ["report", "report", "glossary"]   # report 선행
+
+
+def test_merge_target_type_filter_selects_source(monkeypatch):
+    """(c) 'report' → report 행만 / 다른 값 → admin_events 만 / 미지정 → 병합."""
+    store = _events_store(monkeypatch, [])
+
+    admin_events.list_events(target_type="report")
+    admin_events.list_events(target_type="glossary")
+    admin_events.list_events()
+
+    p_report, p_glossary, p_none = (c[1] for c in store["calls"])
+    assert p_report["target_type"] == "report"
+    assert p_glossary["target_type"] == "glossary"
+    assert p_none["target_type"] is None                       # 미지정 = 필터 없음 = 병합
+
+    # 필터는 UNION 바깥에 걸린다 — report 행의 target_type 은 상수 사영이므로
+    # 'report' 는 risk_report_events 만, 그 외 값은 admin_events 만 남는다.
+    outer = _outer_where(store["calls"][0][0])
+    assert "%(target_type)s::text IS NULL OR target_type = %(target_type)s" in outer
+
+
+def test_merge_applies_date_limit_offset_to_merged_result(monkeypatch):
+    """(d) date·limit·offset 이 병합 결과에 적용된다(브랜치별 적용 아님)."""
+    store = _events_store(monkeypatch, [])
+    admin_events.list_events("2026-08-30", None, 10, 5)
+
+    sql, params = store["calls"][0]
+    outer = _outer_where(sql)
+    assert "(created_at AT TIME ZONE %(tz)s)::date = %(date)s::date" in outer
+    assert "LIMIT %(limit)s OFFSET %(offset)s" in outer
+    inner = sql[:sql.index(") events")]
+    for token in ("LIMIT", "OFFSET", "AT TIME ZONE"):
+        assert token not in inner, token                        # 브랜치 안에는 없다
+    assert params["date"] == "2026-08-30" and params["limit"] == 10 and params["offset"] == 5
+
+    admin_events.list_events(limit=10_000, offset=-5)
+    p2 = store["calls"][1][1]
+    assert p2["limit"] == admin_events.LIMIT_MAX and p2["offset"] == 0   # 병합 후에도 상한 유지
+
+
+def test_merge_keeps_admin_events_rows_unchanged(monkeypatch):
+    """(e) 기존 admin_events 행의 응답 모습은 병합 전과 같다 — 무회귀."""
+    _events_store(monkeypatch, [EVENT_ROW])
+    out = admin_events.list_events()
+
+    assert len(out) == 1 and tuple(out[0]) == admin_events.EVENT_KEYS
+    assert out[0]["id"] == 12 and out[0]["target_type"] == "glossary"
+    assert out[0]["target_id"] == 7 and out[0]["action"] == "glossary_approved"
+    assert out[0]["detail"] is None and out[0]["created_at"] == AT_ISO
 
 
 def test_list_events_is_read_only(monkeypatch):
@@ -645,7 +791,7 @@ def test_skeleton_events_contract_matches_implementation():
     assert f"기본 {admin_events.LIMIT_DEFAULT}" in line
     assert f"최대 {admin_events.LIMIT_MAX}" in line
     assert admin_events.EVENTS_TZ in line
-    assert "id desc" in line
+    assert "created_at desc, target_type desc, id desc" in line   # M-36 3키 정렬(총괄 0901)
 
 
 def test_skeleton_transition_contract_documents_m08d_decisions():
