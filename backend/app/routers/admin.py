@@ -15,8 +15,15 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
-from app.services import admin_events, approval, dashboard as dashboard_service, risk_reports
+from app.services import (
+    admin_events,
+    approval,
+    dashboard as dashboard_service,
+    invites,
+    risk_reports,
+)
 from app.services.relay import queue
 from app.services.system_service import role
 
@@ -81,10 +88,28 @@ async def dashboard() -> JSONResponse:
     return JSONResponse(status_code=200, content=result)
 
 
-@router.post("/workers/invite")
-def invite_worker(body: dict) -> dict:
-    # {name, emp_no, lang} → {invite_url}
-    raise NotImplementedError("[새봄] POST /admin/workers/invite")
+class InviteRequest(BaseModel):
+    name: str
+    emp_no: str
+    lang: str
+
+
+@router.post("/workers/invite", status_code=201)
+async def invite_worker(body: InviteRequest) -> JSONResponse:
+    """{name, emp_no, lang} → 201 {invite_url} (M-32).
+
+    emp_no 미활성 중복은 재초대(기존 미사용 초대 만료 후 신규 1건), 활성 워커는 409.
+    발급마다 admin_events 1행(action='worker_invited').
+    """
+    try:
+        result = await asyncio.to_thread(
+            invites.create_invite, body.name, body.emp_no, body.lang
+        )
+    except invites.InvalidInviteRequest as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except invites.WorkerAlreadyActive as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return JSONResponse(status_code=201, content=result)
 
 
 @router.post("/documents", status_code=202)
