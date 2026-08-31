@@ -20,5 +20,17 @@
   "worker.ask.noSources": "Không có căn cứ",
   "worker.ask.gatedMessage": "Cần quản trị viên xác nhận",
   "worker.ask.traceLabel": "Mã theo dõi",
-  "worker.ask.scoreLabel": "Điểm xác minh"
+  "worker.ask.scoreLabel": "Điểm xác minh",
+  "worker.report.title": "Báo cáo nguy hiểm",
+  "worker.report.placeholder": "Nhập tình huống nguy hiểm",
+  "worker.report.submit": "Gửi",
+  "worker.report.submitting": "Đang gửi...",
+  "worker.report.error": "Gửi thất bại. Vui lòng thử lại.",
+  "worker.report.acceptedLabel": "Đã tiếp nhận",
+  "worker.report.confirmPrompt": "Nội dung tóm tắt có đúng không?",
+  "worker.report.confirmYes": "Đúng",
+  "worker.report.confirmNo": "Không đúng",
+  "worker.report.confirmError": "Xác nhận thất bại. Vui lòng thử lại.",
+  "worker.report.confirmedDone": "Cảm ơn bạn đã xác nhận.",
+  "worker.report.correctedDone": "Yêu cầu chỉnh sửa đã được tiếp nhận."
 }
