@@ -142,6 +142,9 @@ export interface DashboardSummary {
   reports_today_hourly: HourlyTrendPoint[]; // 오늘 시간대별 보고 건수, 00시~현재 zero-fill
   generated_at: string;
   timezone: string;
+  // 학습 KPI(V5) — 실API 미반환(admin.py:76 이월). 응답에 없으면 화면이 보조 섹션을 숨긴다(P8 결손 수정).
+  per_worker?: PerWorkerRow[];
+  per_module?: PerModuleRow[];
 }
 
 // 보조 영역 — 학습 KPI(V5), /admin/dashboard 응답에 없어 상수 mock으로 별도 관리.
