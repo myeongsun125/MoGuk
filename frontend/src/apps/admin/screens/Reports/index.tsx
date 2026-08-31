@@ -7,6 +7,7 @@ import {
   resolveReport,
 } from "../../../../api/adminReports";
 import type { AdminReportDetail, AdminReportListItem } from "../../../../api/types";
+import { formatKst } from "../../../../utils/formatKst";
 import "./Reports.css";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -179,7 +180,7 @@ export default function AdminReportsScreen() {
               <li key={ev.id}>
                 <span className="ev-action">{ev.action}</span>
                 <span className="ev-actor">{ev.actor ?? "-"}</span>
-                <span className="ev-time">{ev.created_at}</span>
+                <span className="ev-time">{formatKst(ev.created_at)}</span>
               </li>
             ))}
           </ul>

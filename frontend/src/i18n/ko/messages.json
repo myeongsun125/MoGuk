@@ -35,5 +35,8 @@
   "worker.report.correctedDone": "정정 요청이 접수되었습니다.",
   "worker.report.summaryFailed": "요약 생성에 실패했습니다. 신고는 정상 접수되었으며 관리자가 원문을 직접 확인합니다.",
   "worker.nav.ask": "질의응답",
-  "worker.nav.report": "위험보고"
+  "worker.nav.report": "위험보고",
+  "admin.glossary.rejectNotePlaceholder": "반려 사유(선택)",
+  "admin.glossary.rejectConfirm": "반려 확정",
+  "admin.glossary.rejectCancel": "취소"
 }

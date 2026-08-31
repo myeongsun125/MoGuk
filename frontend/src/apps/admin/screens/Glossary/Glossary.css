@@ -77,6 +77,20 @@
   font-size: 0.85rem;
 }
 
+.reject-draft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reject-draft input {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 0.85rem;
+  min-width: 160px;
+}
+
 .term-empty {
   color: #999;
   padding: 12px 0;

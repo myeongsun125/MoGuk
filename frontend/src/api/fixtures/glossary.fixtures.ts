@@ -56,12 +56,12 @@ export function approveMock(id: number): GlossaryTransitionResult | undefined {
     action: "glossary_approved",
     from_state: from,
     to_state: "approved",
-    detail: t.term_ko,
+    detail: null, // _transition(...,None) — approve는 detail 없음(approval.py:157)
   });
   return { id: t.id, status: t.status };
 }
 
-export function rejectMock(id: number): GlossaryTransitionResult | undefined {
+export function rejectMock(id: number, note?: string): GlossaryTransitionResult | undefined {
   const t = store.find((x) => x.id === id);
   if (!t) return undefined;
   const from = t.status;
@@ -73,7 +73,7 @@ export function rejectMock(id: number): GlossaryTransitionResult | undefined {
     action: "glossary_rejected",
     from_state: from,
     to_state: "rejected",
-    detail: t.term_ko,
+    detail: note ?? null, // detail=note(approval.py:161-162) — 용어명 아님(정정)
   });
   return { id: t.id, status: t.status };
 }

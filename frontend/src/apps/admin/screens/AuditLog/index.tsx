@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAdminEvents } from "../../../../api/adminEvents";
 import type { AdminEvent } from "../../../../api/types";
+import { formatKst } from "../../../../utils/formatKst";
 import "./AuditLog.css";
 
 function todayLocal(): string {
@@ -72,7 +73,7 @@ export default function AdminAuditLogScreen() {
         <tbody>
           {events.map((ev) => (
             <tr key={ev.id} data-testid="event-row">
-              <td className="col-time">{ev.created_at.replace("T", " ").slice(0, 19)}</td>
+              <td className="col-time">{formatKst(ev.created_at)}</td>
               <td>{ev.actor ?? "-"}</td>
               <td>
                 {ev.target_type} #{ev.target_id}

@@ -26,14 +26,18 @@ export async function approveGlossary(id: number): Promise<GlossaryTransitionRes
   return (await res.json()) as GlossaryTransitionResult;
 }
 
-export async function rejectGlossary(id: number): Promise<GlossaryTransitionResult> {
+export async function rejectGlossary(id: number, note?: string): Promise<GlossaryTransitionResult> {
   if (USE_MOCK) {
     await delay(150);
-    const t = rejectMock(id);
+    const t = rejectMock(id, note);
     if (!t) throw new Error(`term ${id} not found`);
     return t;
   }
-  const res = await fetch(`/api/v1/admin/glossary/${id}/reject`, { method: "POST" });
+  const res = await fetch(`/api/v1/admin/glossary/${id}/reject`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(note ? { note } : {}),
+  });
   if (!res.ok) throw new Error(`reject failed: ${res.status}`);
   return (await res.json()) as GlossaryTransitionResult;
 }
