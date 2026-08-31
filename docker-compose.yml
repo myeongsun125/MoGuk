@@ -88,6 +88,10 @@ services:
       HEARTBEAT_INTERVAL_S: ${HEARTBEAT_INTERVAL_S:-30}
       JWT_ACCESS_TTL_S: ${JWT_ACCESS_TTL_S:-1800}
       JWT_REFRESH_TTL_S: ${JWT_REFRESH_TTL_S:-1209600}
+      JOBS_POLL_S: ${JOBS_POLL_S:-2.0}
+      GATE_TAU: ${GATE_TAU:-0.80}
+      BACKTRANS_TIMEOUT_S: ${BACKTRANS_TIMEOUT_S:-10.0}
+      GATE_SRC: ${GATE_SRC:-question}
     depends_on:
       postgres:
         condition: service_healthy
