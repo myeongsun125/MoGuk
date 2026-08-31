@@ -128,7 +128,7 @@ async def confirm_report(
 ) -> JSONResponse:
     """M-08c 보고자 확인 루프 — 비차단. actor = worker:<wid>(M-28b identity 소비).
 
-    인증 필수(M-35 D-4 A) — 헤더 부재·위조·만료는 require_worker 가 401 로 끊는다.
+    인증 필수(M-37) — 헤더 부재·위조·만료는 require_worker 가 401 로 끊는다.
     "비차단"은 접수·관리자 노출이 보고자 확인을 기다리지 않는다는 뜻이고(M-08c ①)
     확인 요청 자체의 인증 요구와는 무관하다.
     """
