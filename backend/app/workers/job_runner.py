@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 import time
 
 from app.services import risk_reports, tenancy
@@ -21,6 +23,23 @@ from app.services.llm_adapter import complete
 log = logging.getLogger(__name__)
 
 BACKOFF_S = 5.0  # attempts 재시도 간격 (run_after 로 지연)
+DEFAULT_POLL_S = 2.0             # 큐가 비었을 때 쉬는 간격 (기존 run_jobs 기본값과 동일)
+
+
+def poll_s() -> float:
+    """JOBS_POLL_S — 기본값은 run_jobs 의 기존 기본값 그대로. relay.py env 헬퍼 패턴(R4)."""
+    raw = os.getenv("JOBS_POLL_S")
+    if not raw:
+        return DEFAULT_POLL_S
+    try:
+        value = float(raw)
+    except ValueError:
+        log.warning("job_runner: env JOBS_POLL_S=%r 가 숫자가 아님 — 기본값 %s 사용", raw, DEFAULT_POLL_S)
+        return DEFAULT_POLL_S
+    if value <= 0:
+        log.warning("job_runner: env JOBS_POLL_S=%r 가 0 이하 — 기본값 %s 사용", raw, DEFAULT_POLL_S)
+        return DEFAULT_POLL_S
+    return value
 
 SEVERITY_VALUES = ("high", "medium", "low")
 
@@ -167,13 +186,27 @@ def process_once() -> bool:
     return True
 
 
-def run_jobs(poll_s: float = 2.0) -> None:
-    """기동~정지까지 반복. 큐가 비면 poll_s 만큼 쉰다."""
+def _idle(stop: threading.Event | None, seconds: float) -> None:
+    """큐가 비었을 때의 대기. stop 이 있으면 신호 즉시 깨어난다(종료 지연 제거)."""
+    if stop is None:
+        time.sleep(seconds)
+    else:
+        stop.wait(seconds)
+
+
+def run_jobs(poll_s: float = 2.0, stop: threading.Event | None = None) -> None:
+    """기동~정지까지 반복. 큐가 비면 poll_s 만큼 쉰다.
+
+    M-33: core-api lifespan 이 asyncio.to_thread 로 이 함수를 띄운다. 동기 루프라
+    종료 신호는 스레드 안전한 threading.Event 를 쓴다(릴레이 폴러의 asyncio.Event 는
+    코루틴 전용). stop=None 이면 기존 동작 그대로 무한 루프 — 기존 호출부 호환.
+    """
     log.info("job_runner: 시작 (poll_s=%s)", poll_s)
-    while True:
+    while stop is None or not stop.is_set():
         try:
             if not process_once():
-                time.sleep(poll_s)
+                _idle(stop, poll_s)
         except Exception as exc:  # noqa: BLE001 — DB 단절 등도 루프를 끊지 않는다
             log.error("job_runner: 폴링 오류 %s: %s", type(exc).__name__, exc)
-            time.sleep(poll_s)
+            _idle(stop, poll_s)
+    log.info("job_runner: 정상 종료")

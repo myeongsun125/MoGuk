@@ -12,6 +12,7 @@
 import asyncio
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -38,23 +39,31 @@ API_V1 = "/api/v1"
 
 
 def _lifespan(api_role: str):
-    """core 에서만 릴레이 폴러를 띄운다. 종료 시그널에 정상 종료."""
+    """core 에서만 릴레이 폴러·하트비트·jobs 러너를 띄운다. 종료 시그널에 정상 종료."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         tasks: list[asyncio.Task] = []
         stop = asyncio.Event()
+        jobs_stop: threading.Event | None = None
         if poller_enabled(api_role):
             from app.workers.heartbeat import run_heartbeat
+            from app.workers.job_runner import poll_s, run_jobs
             from app.workers.relay_poller import run_poller
 
             tasks.append(asyncio.create_task(run_poller(stop)))
             # core→edge outbound 하트비트 (M-22). 기존 수신부 사용, 신규 /internal 없음
             tasks.append(asyncio.create_task(run_heartbeat(stop)))
+            # M-33: jobs 폴러는 동기 루프라 별도 스레드에서 띄운다(BLUEPRINT "jobs 워커: core-api 내장").
+            # 종료 신호만 스레드 안전한 threading.Event — 기동·종료 구조는 위 두 태스크와 동형.
+            jobs_stop = threading.Event()
+            tasks.append(asyncio.create_task(asyncio.to_thread(run_jobs, poll_s(), stop=jobs_stop)))
         try:
             yield
         finally:
             stop.set()
+            if jobs_stop is not None:
+                jobs_stop.set()
             for task in tasks:
                 task.cancel()
                 try:
