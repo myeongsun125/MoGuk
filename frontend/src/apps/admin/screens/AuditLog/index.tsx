@@ -72,7 +72,9 @@ export default function AdminAuditLogScreen() {
         </thead>
         <tbody>
           {events.map((ev) => (
-            <tr key={ev.id} data-testid="event-row">
+            // M-36: id는 target_type별 시퀀스(admin_events·risk_report_events)라 유일하지
+            // 않다 — target_type+id로 합성해야 병합 시 충돌하지 않는다.
+            <tr key={`${ev.target_type}-${ev.id}`} data-testid="event-row">
               <td className="col-time">{formatKst(ev.created_at)}</td>
               <td>{ev.actor ?? "-"}</td>
               <td>
