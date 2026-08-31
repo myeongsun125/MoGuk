@@ -19,6 +19,8 @@
   "worker.ask.sourcesLabel": "Nguồn tham khảo",
   "worker.ask.noSources": "Không có căn cứ",
   "worker.ask.gatedMessage": "Cần quản trị viên xác nhận",
+  "worker.ask.gated.grounding": "Không có tài liệu căn cứ để trả lời. Cần quản trị viên xác nhận.",
+  "worker.ask.gated.threshold": "Xác minh bản dịch không đạt. Cần quản trị viên xác nhận.",
   "worker.ask.traceLabel": "Mã theo dõi",
   "worker.ask.scoreLabel": "Điểm xác minh",
   "worker.report.title": "Báo cáo nguy hiểm",

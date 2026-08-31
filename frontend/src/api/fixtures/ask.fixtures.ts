@@ -7,14 +7,22 @@ export const ASK_FIXTURE_GROUNDED: AskResponse = {
   sources: [
     { document_id: 1, chunk_id: 12, title: "프레스 작업 안전수칙", category: "safety" },
   ],
-  verify: { score: 0.93, passed: true, gated: false },
+  verify: { score: 0.93, passed: true, gated: false, gate_reason: null },
   trace_id: "mock-trace-0001",
 };
 
-// 무근거/게이트 케이스 — verify.gated=true 시 화면은 답변 대신 폴백 메시지를 보여야 한다 (BLUEPRINT §4-2).
+// 무근거 게이트 케이스 — verify.gated=true 시 화면은 답변 대신 폴백 메시지를 보여야 한다 (BLUEPRINT §4-2).
 export const ASK_FIXTURE_GATED: AskResponse = {
   answer: "",
   sources: [],
-  verify: { score: 0.41, passed: false, gated: true },
+  verify: { score: null, passed: false, gated: true, gate_reason: "grounding" },
   trace_id: "mock-trace-0002",
+};
+
+// 되번역 임계값 미달 게이트 케이스 — gate_reason 분기 렌더 확인용(verify-gatereason).
+export const ASK_FIXTURE_GATED_THRESHOLD: AskResponse = {
+  answer: "",
+  sources: [],
+  verify: { score: 0.55, passed: false, gated: true, gate_reason: "threshold" },
+  trace_id: "mock-trace-0003",
 };
