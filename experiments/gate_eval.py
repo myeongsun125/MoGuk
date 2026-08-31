@@ -7,7 +7,16 @@
 채점
   각 행을 backend 의 agents.verify.verify_backtranslation 으로 그대로 태운다(어댑터 경유 —
   되번역 local complete() 1회 + bge-m3 embed 1회 + 코사인). src = ko 원문 고정(M-34 c ② 기본축),
-  aux_src 는 주지 않는다 → score_chunks 는 항상 null(오프라인엔 근거 청크 본문이 없다, Q3).
+  기본값은 aux_src 미지정 → score_chunks 는 항상 null(오프라인엔 근거 청크 본문이 없다, Q3).
+
+  --online-chunks 를 주면 근거축을 함께 잰다: ko 원문으로 retrieve(k=4) 한 청크를 graph 와 같은
+  build_context() 로 묶어 aux_src 로 넘긴다. 게이트 축은 여전히 src(question) — gate_on 은 바꾸지
+  않는다. DB·임베딩이 붙는 환경에서만 동작하며, 근거축 집계는 score_chunks 가 산출된 행만 센다.
+
+표본 불균형 (읽을 때 주의)
+  오염셋은 term_swap 30 / negation 20 / number 10 이다. number 는 base 의 answer_vi 에 숫자
+  토큰이 있어야 rules.number("숫자만 변경")를 지킬 수 있는데 그런 문장이 9개뿐이라 10건이 상한이다
+  (corrupted_30.json _meta.number_limit). 유형별 검출률은 by_type 과 n_by_type 을 함께 읽는다.
 
 장애 분류 제외 (온라인 분석도 같은 규칙)
   "grounded=false ∧ 장애 분류 제외" — 게이트 성능은 점수가 실제로 산출된 행에서만 센다.
@@ -35,12 +44,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.agents import verify as verify_mod                        # noqa: E402
+from app.agents.graph import build_context                         # noqa: E402
+from app.agents.retrieve import retrieve                           # noqa: E402
 from app.services import llm_adapter                               # noqa: E402
 
 TESTSET = Path(__file__).resolve().parent / "testset"
 OUT_DIR = Path(__file__).resolve().parent / "out"
 
-SRC_KIND = "question"                 # M-34 c ② 기본축. 오프라인은 이 축 단독(Q3)
+SRC_KIND = "question"                 # M-34 c ② 기본축. 게이트 축은 --online-chunks 여부와 무관
+RETRIEVE_K = 4                        # §3 sources 와 동수 — graph 의 근거 청크 수를 맞춘다
 TAU_START, TAU_STOP, TAU_STEP = 0.50, 0.95, 0.05
 
 # 집계에서 빼는 장애 분류 — 게이트 판정이 아니라 실행 실패인 행
@@ -48,8 +60,8 @@ EXCLUDED_CLASSES = {"local_failed", "retrieve_error"}
 
 COLUMNS = [
     "id", "base_id", "variant_type", "safety", "src_kind", "ko_src", "vi_text",
-    "back_text", "score_question", "score_chunks", "back_ms", "timed_out",
-    "error", "error_class",
+    "back_text", "score_question", "score_chunks", "n_chunks", "back_ms", "timed_out",
+    "error", "error_class", "chunks_error",
 ]
 
 
@@ -86,6 +98,19 @@ def load_rows(limit: int | None = None) -> list[dict]:
     return rows[:limit] if limit else rows
 
 
+def fetch_context(query: str) -> tuple[str | None, int, str]:
+    """--online-chunks 용 근거축 — graph 와 같은 retrieve→build_context 경로.
+
+    반환 (context, n_chunks, error). 조회 실패는 그 행의 근거축만 포기하고(질문축은 그대로 잰다)
+    chunks_error 에 사유를 남긴다 — 근거축 집계에서만 빠진다.
+    """
+    try:
+        chunks = retrieve(query, k=RETRIEVE_K)
+    except Exception as exc:                      # DB·임베딩 장애 — 행 전체를 버리지 않는다
+        return None, 0, f"{type(exc).__name__}: {exc}"
+    return (build_context(chunks) if chunks else None), len(chunks), ""
+
+
 # ── dry-run mock — 결정적(해시 기반). 점수는 재현용 더미이지 실측치가 아니다 ──
 def _fake_vector(text: str) -> list[float]:
     digest = hashlib.sha256(text.encode("utf-8")).digest()
@@ -98,22 +123,32 @@ def install_dry_run() -> None:
         tier_used="local", model="dry-run", latency_ms=1, error=None,
     )
     verify_mod.embed = lambda texts: [_fake_vector(t) for t in texts]
+    # --online-chunks 를 DB 없이 형식만 확인할 수 있게 근거축도 결정적 mock 으로 대체한다.
+    globals()["fetch_context"] = lambda query: (
+        f"[1] 문서 0 · dry-run 근거\n{query}", RETRIEVE_K, "",
+    )
 
 
-def score_rows(rows: list[dict]) -> list[dict]:
+def score_rows(rows: list[dict], *, online_chunks: bool = False) -> list[dict]:
     out = []
     for row in rows:
-        v = verify_mod.verify_backtranslation(row["ko_src"], row["vi_text"], aux_src=None)
+        aux, n_chunks, chunks_error = (None, 0, "")
+        if online_chunks:
+            aux, n_chunks, chunks_error = fetch_context(row["ko_src"])
+        # gate_on 은 넘기지 않는다 — 게이트 축은 M-34 c ② 기본축(src) 고정, aux 는 측정만 한다.
+        v = verify_mod.verify_backtranslation(row["ko_src"], row["vi_text"], aux_src=aux)
         out.append({
             **row,
             "src_kind": SRC_KIND,
             "back_text": v.back_text,
             "score_question": v.score_src,
-            "score_chunks": v.score_aux,          # 항상 None (aux_src 미지정)
+            "score_chunks": v.score_aux,          # aux_src 미지정이면 None
+            "n_chunks": n_chunks,
             "back_ms": v.back_ms,
             "timed_out": v.timed_out,
             "error": v.error or "",
             "error_class": classify_error(v.error),
+            "chunks_error": chunks_error,
         })
     return out
 
@@ -123,52 +158,91 @@ def taus() -> list[float]:
     return [round(TAU_START + i * TAU_STEP, 2) for i in range(n)]
 
 
+def _sweep(normals: list[dict], corrupts: list[dict], key: str) -> list[dict]:
+    """τ 스윕 1축 — 검출률·오탐률·유형별 검출률. 분모가 0이면 null 로 남긴다."""
+    types = sorted({r["variant_type"] for r in corrupts})
+    rate = lambda rs, tau: (                                        # noqa: E731
+        round(sum(1 for r in rs if r[key] < tau) / len(rs), 4) if rs else None
+    )
+    return [
+        {
+            "tau": t,
+            "detection_rate": rate(corrupts, t),                    # 오염에서 passed=False 비율
+            "false_positive_rate": rate(normals, t),                # 정상에서 passed=False 비율
+            "by_type": {ty: rate([r for r in corrupts if r["variant_type"] == ty], t)
+                        for ty in types},
+        }
+        for t in taus()
+    ]
+
+
+def _count_by_type(rows: list[dict]) -> dict:
+    out: dict[str, int] = {}
+    for r in rows:
+        out[r["variant_type"]] = out.get(r["variant_type"], 0) + 1
+    return dict(sorted(out.items()))
+
+
 def summarize(scored: list[dict]) -> dict:
     usable = [r for r in scored if r["error_class"] not in EXCLUDED_CLASSES
               and r["score_question"] is not None]
     excluded = len(scored) - len(usable)
     normals = [r for r in usable if r["variant_type"] == "normal"]
     corrupts = [r for r in usable if r["variant_type"] != "normal"]
-    types = sorted({r["variant_type"] for r in corrupts})
 
-    rate = lambda rs, tau: (                                        # noqa: E731
-        round(sum(1 for r in rs if r["score_question"] < tau) / len(rs), 4) if rs else None
-    )
-    return {
+    # 근거축 — --online-chunks 로 score_chunks 가 실제로 산출된 행만 센다(질문축 집계와 독립).
+    aux = [r for r in scored if r["error_class"] not in EXCLUDED_CLASSES
+           and r.get("score_chunks") is not None]
+    aux_normals = [r for r in aux if r["variant_type"] == "normal"]
+    aux_corrupts = [r for r in aux if r["variant_type"] != "normal"]
+
+    summary = {
         "n_rows": len(scored),
         "n_excluded": excluded,
         "n_usable": len(usable),
         "n_normal": len(normals),
         "n_corrupted": len(corrupts),
+        "n_by_type": _count_by_type(usable),        # 유형별 표본수 — 검출률과 함께 읽는다
         "excluded_classes": sorted(EXCLUDED_CLASSES),
-        "by_tau": [
-            {
-                "tau": t,
-                "detection_rate": rate(corrupts, t),                # 오염에서 passed=False 비율
-                "false_positive_rate": rate(normals, t),            # 정상에서 passed=False 비율
-                "by_type": {ty: rate([r for r in corrupts if r["variant_type"] == ty], t)
-                            for ty in types},
-            }
-            for t in taus()
-        ],
+        "sample_note": (
+            "표본 불균형 — number 는 10건이 상한이다(corrupted_30.json _meta.number_limit). "
+            "유형별 검출률은 n_by_type 과 함께 읽는다."
+        ),
+        "by_tau": _sweep(normals, corrupts, "score_question"),
+        "n_chunks_scored": len(aux),
+        "by_tau_chunks": _sweep(aux_normals, aux_corrupts, "score_chunks") if aux else None,
     }
+    return summary
+
+
+def _print_sweep(by_tau: list[dict], title: str) -> None:
+    types = list(by_tau[0]["by_type"]) if by_tau else []
+    print(f"  [{title}]")
+    print("  τ     검출률  오탐률  " + "  ".join(f"{t:>10}" for t in types))
+    for row in by_tau:
+        fmt = lambda v: "  n/a " if v is None else f"{v:6.3f}"      # noqa: E731
+        print(f"  {row['tau']:.2f}  {fmt(row['detection_rate'])}  {fmt(row['false_positive_rate'])}  "
+              + "  ".join(f"{fmt(row['by_type'][t]):>10}" for t in types))
 
 
 def print_summary(s: dict) -> None:
     print(f"행 {s['n_rows']} / 집계 제외 {s['n_excluded']} ({', '.join(s['excluded_classes'])}) "
           f"/ 유효 {s['n_usable']} (정상 {s['n_normal']} · 오염 {s['n_corrupted']})")
-    types = list(s["by_tau"][0]["by_type"]) if s["by_tau"] else []
-    print("  τ     검출률  오탐률  " + "  ".join(f"{t:>10}" for t in types))
-    for row in s["by_tau"]:
-        fmt = lambda v: "  n/a " if v is None else f"{v:6.3f}"      # noqa: E731
-        print(f"  {row['tau']:.2f}  {fmt(row['detection_rate'])}  {fmt(row['false_positive_rate'])}  "
-              + "  ".join(f"{fmt(row['by_type'][t]):>10}" for t in types))
+    print("  유형별 표본: " + " · ".join(f"{k} {v}" for k, v in s["n_by_type"].items()))
+    print(f"  ※ {s['sample_note']}")
+    _print_sweep(s["by_tau"], "질문축 score_question — 게이트 판정축")
+    if s.get("by_tau_chunks"):
+        print(f"  근거축 표본 {s['n_chunks_scored']} 행 (--online-chunks)")
+        _print_sweep(s["by_tau_chunks"], "근거축 score_chunks — 참고(게이트 판정축 아님)")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="측정 #3 — 게이트 검출률 → τ 확정 (M-10a)")
     ap.add_argument("--dry-run", action="store_true",
                     help="LLM·임베딩을 결정적 mock 으로 대체 (점수는 더미 — 형식 확인용)")
+    ap.add_argument("--online-chunks", action="store_true",
+                    help="ko 원문으로 retrieve(k=4) 한 근거 청크를 aux_src 로 함께 채점 "
+                         "(DB·임베딩 필요. 게이트 판정축은 질문축 그대로)")
     ap.add_argument("--limit", type=int, default=None, help="선두 N 행만")
     ap.add_argument("--out", type=Path, default=None, help="CSV 경로 (기본 out/gate_eval_<ts>.csv)")
     args = ap.parse_args()
@@ -177,7 +251,7 @@ def main() -> None:
         install_dry_run()
 
     rows = load_rows(args.limit)
-    scored = score_rows(rows)
+    scored = score_rows(rows, online_chunks=args.online_chunks)
 
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_csv = args.out or (OUT_DIR / f"gate_eval_{ts}.csv")
