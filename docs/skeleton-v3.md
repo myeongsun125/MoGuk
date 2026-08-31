@@ -240,7 +240,7 @@ GET  /admin/unanswered?status=open → [{id, question_id, status, question, lang
 POST /admin/unanswered/{id}/answer {text}   # → ingest_answer job → documents(origin='admin_answer') 편입 (M-05)
 GET  /admin/reports?status= / POST /admin/reports/{id}/ack|resolve {note?}
 GET  /admin/reports/{id}   → 상세 {id, source, original_text, lang, ko_summary, severity, status, processing_state, reporter_confirmed, acked_by, acked_at, resolved_by, resolved_at, resolution_note, created_at, processed_at} + events[{id, actor, action, from_state, to_state, detail, created_at}]   # acked_by·resolved_by 는 관리자 인증 도입 전까지 null(M-15b, additive). 원문 반출 → original_viewed 이벤트 기록(M-08a)
-GET  /admin/events?date=&target_type=&limit=&offset= → [{id, actor, target_type, target_id, action, from_state, to_state, detail, created_at}]   # M-08d ③ 감사 로그. date=Asia/Seoul 일자, 정렬 id desc(최신 우선), limit 기본 50·최대 200, offset 기본 0. 읽기 전용
+GET  /admin/events?date=&target_type=&limit=&offset= → [{id, actor, target_type, target_id, action, from_state, to_state, detail, created_at}]   # M-08d ③ 감사 로그. admin_events + risk_report_events 읽기 시 병합(저장 이중화 없음, M-36) — report 행은 target_type='report'·target_id=report_id·action·detail 원값(ack/resolve는 note). id = 원본 테이블 id(report 행은 risk_report_events.id), 유일키 = target_type+id. date=Asia/Seoul 일자, 정렬 created_at desc, target_type desc, id desc(최신 우선·결정적), limit 기본 50·최대 200, offset 기본 0. 읽기 전용
 GET  /admin/conversations/risk                              # 요약만
 GET  /admin/conversations/{id}/full                         # 원문 — access_logs 기록
 GET  /admin/safety/ledger?course_id&period                  → PDF|HTML
