@@ -257,6 +257,84 @@ def test_dispatch_post_branches_unchanged(monkeypatch):
     assert status == 404 and "디스패치 대상 아님" in body["detail"]
 
 
+# ── M-32b: invite edge 릴레이 편입 ─────────────────────────
+# 판정 ①b — EDGE_CASES(성공 코드 200 하드코딩) 무접촉. 201 은 독립 함수로 검증한다.
+
+INVITE_BODY = {"name": "Nguyen", "emp_no": "E-1001", "lang": "vi"}
+
+
+@pytest.mark.asyncio
+async def test_edge_invite_goes_through_relay_with_201(monkeypatch):
+    """edge POST /admin/workers/invite 는 500 이 아니라 릴레이 왕복 — 201 그대로 투과."""
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "3")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "5")
+    monkeypatch.delenv("DATABASE_URL", raising=False)   # DB 자격 없이도 성립해야 한다
+    app = build_app("edge")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://edge"
+    ) as client:
+        task = asyncio.create_task(client.post("/api/v1/admin/workers/invite", json=INVITE_BODY))
+
+        pend = await client.get("/internal/relay/pending")
+        items = pend.json()["items"]
+        assert len(items) == 1, items
+        assert items[0]["method"] == "POST"
+        assert items[0]["path"] == "/api/v1/admin/workers/invite"
+        assert items[0]["body"] == INVITE_BODY      # 본문 온전 전달
+        assert items[0]["identity"] is None         # 관리자 인증 부재(M-15b)
+        rid = items[0]["request_id"]
+
+        rr = await client.post(
+            f"/internal/relay/{rid}/respond",
+            json={"status_code": 201, "body": {"invite_url": "http://localhost/activate?token=t"}},
+        )
+        assert rr.status_code == 200
+
+        resp = await task
+
+    assert resp.status_code == 201, resp.text        # 200 으로 눌리지 않는다
+    assert resp.json() == {"invite_url": "http://localhost/activate?token=t"}
+
+
+def test_dispatch_invite_created(monkeypatch):
+    """디스패치 성공 매핑 — 201 + create_invite 인자 전달."""
+    from app.services import invites
+
+    seen = {}
+
+    def fake_create(name, emp_no, lang):
+        seen.update(name=name, emp_no=emp_no, lang=lang)
+        return {"invite_url": "http://localhost/activate?token=t"}
+
+    monkeypatch.setattr(invites, "create_invite", fake_create)
+    status, body = relay_poller.dispatch("POST", "/api/v1/admin/workers/invite", INVITE_BODY)
+    assert status == 201
+    assert body == {"invite_url": "http://localhost/activate?token=t"}
+    assert seen == INVITE_BODY
+
+
+@pytest.mark.parametrize(
+    "exc,expected",
+    [
+        ("InvalidInviteRequest", 422),
+        ("WorkerAlreadyActive", 409),
+    ],
+)
+def test_dispatch_invite_error_mapping(monkeypatch, exc, expected):
+    """예외→상태코드 3분기가 core 라우터와 동일하다 (422·409)."""
+    from app.services import invites
+
+    def boom(*a, **k):
+        raise getattr(invites, exc)("사유")
+
+    monkeypatch.setattr(invites, "create_invite", boom)
+    status, body = relay_poller.dispatch("POST", "/api/v1/admin/workers/invite", INVITE_BODY)
+    assert status == expected
+    assert body == {"detail": "사유"}
+
+
 # ── M-28c ③: 무접촉 단정 ──────────────────────────────────
 
 def test_m28a_parameters_untouched():

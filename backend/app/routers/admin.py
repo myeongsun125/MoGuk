@@ -36,6 +36,7 @@ UNANSWERED_PATH = "/api/v1/admin/unanswered"
 GLOSSARY_APPROVE_PATH = "/api/v1/admin/glossary/{term_id}/approve"
 GLOSSARY_REJECT_PATH = "/api/v1/admin/glossary/{term_id}/reject"
 EVENTS_PATH = "/api/v1/admin/events"
+INVITE_PATH = "/api/v1/admin/workers/invite"
 LIST_PATH = "/api/v1/admin/reports"
 DETAIL_PATH = "/api/v1/admin/reports/{report_id}"
 ACK_PATH = "/api/v1/admin/reports/{report_id}/ack"
@@ -100,7 +101,11 @@ async def invite_worker(body: InviteRequest) -> JSONResponse:
 
     emp_no 미활성 중복은 재초대(기존 미사용 초대 만료 후 신규 1건), 활성 워커는 409.
     발급마다 admin_events 1행(action='worker_invited').
+
+    M-32b: edge 는 DB 자격이 없으므로 릴레이 큐 경유(M-28c 동형) — 201·409·422 그대로 투과.
     """
+    if role() == "edge":
+        return await _relay(INVITE_PATH, "POST", body.model_dump())
     try:
         result = await asyncio.to_thread(
             invites.create_invite, body.name, body.emp_no, body.lang
