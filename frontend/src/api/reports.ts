@@ -13,7 +13,7 @@ function authHeaders(): Record<string, string> {
 export async function submitReport(req: ReportSubmitRequest): Promise<ReportSubmitResponse> {
   if (USE_MOCK) {
     await delay(250);
-    return buildSubmitMock();
+    return buildSubmitMock(req.original_text);
   }
   const res = await fetch("/api/v1/reports", {
     method: "POST",

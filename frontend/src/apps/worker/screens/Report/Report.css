@@ -76,3 +76,11 @@
   color: #2e7d32;
   font-weight: 600;
 }
+
+.confirm-failed {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff4e5;
+  color: #9c5700;
+}

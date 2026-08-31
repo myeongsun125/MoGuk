@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useLang } from "../../../../i18n/LangContext";
 import { confirmReport, submitReport } from "../../../../api/reports";
-import type { ConfirmResult, ReportSubmitResponse } from "../../../../api/types";
+import type { ConfirmResponse, ConfirmResult, ReportSubmitResponse } from "../../../../api/types";
 import "./Report.css";
 
 type SubmitStatus = "idle" | "loading" | "error";
@@ -13,7 +13,7 @@ export default function ReportScreen() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [submitted, setSubmitted] = useState<ReportSubmitResponse | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>("idle");
-  const [confirmResult, setConfirmResult] = useState<ConfirmResult | null>(null);
+  const [confirmResult, setConfirmResult] = useState<ConfirmResponse["result"] | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,9 +35,7 @@ export default function ReportScreen() {
     setConfirmStatus("loading");
     try {
       const res = await confirmReport(submitted.id, { result });
-      if (res.result === "confirmed" || res.result === "corrected") {
-        setConfirmResult(res.result);
-      }
+      setConfirmResult(res.result);
       setConfirmStatus("done");
     } catch {
       setConfirmStatus("error");
@@ -98,7 +96,13 @@ export default function ReportScreen() {
             </div>
           )}
 
-          {confirmStatus === "done" && (
+          {confirmStatus === "done" && confirmResult === "local_failed" && (
+            <p className="confirm-failed" data-testid="confirm-failed">
+              {t("worker.report.summaryFailed")}
+            </p>
+          )}
+
+          {confirmStatus === "done" && confirmResult !== "local_failed" && (
             <p className="confirm-done" data-testid="confirm-done">
               {confirmResult === "confirmed"
                 ? t("worker.report.confirmedDone")

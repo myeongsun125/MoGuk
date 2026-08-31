@@ -32,5 +32,6 @@
   "worker.report.confirmNo": "Không đúng",
   "worker.report.confirmError": "Xác nhận thất bại. Vui lòng thử lại.",
   "worker.report.confirmedDone": "Cảm ơn bạn đã xác nhận.",
-  "worker.report.correctedDone": "Yêu cầu chỉnh sửa đã được tiếp nhận."
+  "worker.report.correctedDone": "Yêu cầu chỉnh sửa đã được tiếp nhận.",
+  "worker.report.summaryFailed": "Tạo tóm tắt thất bại. Báo cáo đã được tiếp nhận bình thường và quản trị viên sẽ trực tiếp kiểm tra nội dung gốc."
 }
