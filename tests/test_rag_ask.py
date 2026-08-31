@@ -19,12 +19,28 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.agents import graph, retrieve as retrieve_mod
+from app.agents import graph, retrieve as retrieve_mod, verify as verify_mod
 from app.agents.retrieve import Chunk, retrieve, to_vector_literal
 from app.main import app
 from app.services import llm_adapter, tenancy
 
 client = TestClient(app)
+
+
+# ── M-34 c 되번역 기본 패치 ──────────────────────────────────
+# graph 를 태우는 모든 테스트가 되번역 LLM·임베딩을 실제로 호출하지 않게 한다
+# (_patch_llm 은 graph.complete 만 덮으므로 verify 쪽은 여기서 막는다).
+# 기본값은 코사인 1.0 → τ 통과. τ 미달·타임아웃은 개별 테스트가 덮어쓴다.
+@pytest.fixture(autouse=True)
+def _patch_backtranslation(monkeypatch):
+    monkeypatch.setattr(
+        verify_mod,
+        "complete",
+        lambda prompt, tier, timeout_s=None: llm_adapter.LLMResult(
+            text="되번역 결과", tier_used="local", model="qwen3:8b", latency_ms=5, error=None
+        ),
+    )
+    monkeypatch.setattr(verify_mod, "embed", lambda texts: [[1.0, 0.0] for _ in texts])
 
 
 # ── 가짜 DB (psycopg 커넥션 최소 인터페이스) ───────────────────
@@ -288,7 +304,7 @@ def test_run_ask_grounded_records_sources_and_trace(monkeypatch):
     assert result.answer == "안전덮개를 확인하세요."
     assert len(result.sources) == 2
     assert result.sources[0]["chunk_id"] == 11
-    assert result.verify == {"score": 0.0, "passed": True, "gated": False}
+    assert result.verify == {"score": 1.0, "passed": True, "gated": False, "gate_reason": None}
     assert len(result.trace_id) == 32
 
     # M-17·M-30: 로컬 고정 + 티어 설정값 위임
@@ -310,7 +326,16 @@ def test_run_ask_grounded_records_sources_and_trace(monkeypatch):
     assert trace["retrieve"]["top_score"] == pytest.approx(0.89)
     assert trace["route"]["tier"] == "local"
     assert trace["route"]["model"] == "qwen3:8b"
-    assert trace["verify"] == {"score": 0.0, "passed": True, "gated": False}
+    assert {k: trace["verify"][k] for k in ("score", "passed", "gated", "gate_reason")} == {
+        "score": 1.0, "passed": True, "gated": False, "gate_reason": None
+    }
+    # M-34 c 실측은 trace 에만 — 두 축 점수·되번역 원문·예산 축
+    assert trace["verify"]["score_question"] == 1.0
+    assert trace["verify"]["score_chunks"] == 1.0
+    assert trace["verify"]["src_kind"] == "question"
+    assert trace["verify"]["back_text"] == "되번역 결과"
+    assert trace["verify"]["timed_out"] is False and trace["verify"]["error"] is None
+    assert trace["verify"]["chunks_joined_len"] > 0
     assert trace["grounded"] is True
     assert json.loads(params["sources"])[0]["title"] == "프레스 작업 안전수칙"
 
@@ -346,7 +371,7 @@ def test_run_ask_no_chunks_blocks_and_enqueues(monkeypatch):
 
     assert result.answer == ""
     assert result.sources == []
-    assert result.verify == {"score": 0.0, "passed": False, "gated": True}
+    assert result.verify == {"score": None, "passed": False, "gated": True, "gate_reason": "grounding"}
 
     sqls = [c[0] for c in store["calls"]]
     assert any("INSERT INTO unanswered_queue" in s for s in sqls)
@@ -426,7 +451,7 @@ def test_ask_endpoint_response_schema(monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"answer", "sources", "verify", "trace_id"}
-    assert set(body["verify"]) == {"score", "passed", "gated"}
+    assert set(body["verify"]) == {"score", "passed", "gated", "gate_reason"}
     assert set(body["sources"][0]) == {"document_id", "chunk_id", "title", "category"}
     assert body["trace_id"]
     assert "mock" not in body and "echo" not in body  # mock 제거 확인
@@ -484,7 +509,7 @@ def test_run_ask_embed_failure_is_isolated(monkeypatch):
 
     assert result.answer == ""
     assert result.sources == []
-    assert result.verify == {"score": 0.0, "passed": False, "gated": True}
+    assert result.verify == {"score": None, "passed": False, "gated": True, "gate_reason": "grounding"}
     assert result.trace_id
 
     sqls = [c[0] for c in store["calls"]]
@@ -540,7 +565,7 @@ def test_ask_endpoint_returns_200_on_retrieve_failure(monkeypatch):
     body = r.json()
     assert set(body) == {"answer", "sources", "verify", "trace_id"}
     assert body["answer"] == "" and body["sources"] == []
-    assert body["verify"] == {"score": 0.0, "passed": False, "gated": True}
+    assert body["verify"] == {"score": None, "passed": False, "gated": True, "gate_reason": "grounding"}
     assert not any("unanswered_queue" in c[0] for c in store["calls"])
 
 
@@ -567,7 +592,7 @@ def test_run_ask_records_relay_timestamps(monkeypatch):
 
     # Answer(=API 응답 소스)에는 relay 가 없다
     assert not hasattr(result, "relay")
-    assert set(result.verify) == {"score", "passed", "gated"}
+    assert set(result.verify) == {"score", "passed", "gated", "gate_reason"}
 
 
 def test_run_ask_direct_path_omits_relay(monkeypatch):
@@ -609,7 +634,7 @@ def test_run_ask_local_failed_not_enqueued(monkeypatch):
 
     assert result.answer == ""
     assert result.sources == []
-    assert result.verify == {"score": 0.0, "passed": False, "gated": True}
+    assert result.verify == {"score": None, "passed": False, "gated": True, "gate_reason": "grounding"}
 
     sqls = [c[0] for c in store["calls"]]
     assert any("INSERT INTO questions" in s for s in sqls)
@@ -857,3 +882,135 @@ def test_ask_endpoint_lang_reaches_prompt(monkeypatch):
     assert r.status_code == 200
     assert set(r.json()) == {"answer", "sources", "verify", "trace_id"}   # §3 4필드 무변경
     assert "베트남어" in seen["prompt"]
+
+
+# ── M-34 c 되번역 게이트 (graph 레벨) ─────────────────────────
+def _patch_bt(monkeypatch, *, vectors=None, text="되번역 결과", error=None, seen=None):
+    """되번역 LLM·임베딩 개별 패치 — autouse 기본값을 덮어쓴다."""
+
+    def _complete(prompt, tier, timeout_s=None):
+        if seen is not None:
+            seen.append({"prompt": prompt, "tier": tier, "timeout_s": timeout_s})
+        return llm_adapter.LLMResult(
+            text=text, tier_used="local", model="qwen3:8b", latency_ms=5, error=error
+        )
+
+    monkeypatch.setattr(verify_mod, "complete", _complete)
+    if vectors is not None:
+        monkeypatch.setattr(verify_mod, "embed", lambda texts: vectors)
+
+
+def _run(monkeypatch, chunks, question="프레스 점검?", lang="vi", question_id=90):
+    store = _store(question_id=question_id)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(graph, "retrieve", lambda q, k=4: chunks)
+    _patch_llm(monkeypatch)
+    result = graph.run_ask(question, lang)
+    params = [c[1] for c in store["calls"] if "INSERT INTO questions" in c[0]][0]
+    return result, json.loads(params["trace"])
+
+
+def test_gate_blocks_safety_query_below_tau(monkeypatch):
+    """안전 질의 τ 미달 → gated=true·gate_reason='threshold'·answer/sources 비움."""
+    _patch_bt(monkeypatch, vectors=[[0.6, 0.8], [1.0, 0.0], [1.0, 0.0]])   # cos=0.6 < 0.80
+    result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+    assert result.verify == {
+        "score": pytest.approx(0.6), "passed": False, "gated": True, "gate_reason": "threshold",
+    }
+    assert result.answer == "" and result.sources == []
+
+
+def test_gate_badges_non_safety_query_below_tau_without_blocking(monkeypatch):
+    """비안전 τ 미달 → passed=False 배지만, answer·sources 유지(WORKORDER V4-1 '안전만 차단')."""
+    _patch_bt(monkeypatch, vectors=[[0.6, 0.8], [1.0, 0.0], [1.0, 0.0]])
+    result, trace = _run(monkeypatch, [_chunk(1, category="instruction")])
+    assert result.verify["passed"] is False
+    assert result.verify["gated"] is False
+    assert result.verify["gate_reason"] is None
+    assert result.answer == "안전덮개를 확인하세요."
+    assert len(result.sources) == 1
+
+
+def test_gate_passes_above_tau(monkeypatch):
+    _patch_bt(monkeypatch, vectors=[[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]])
+    result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+    assert result.verify == {"score": 1.0, "passed": True, "gated": False, "gate_reason": None}
+    assert result.answer == "안전덮개를 확인하세요."
+
+
+@pytest.mark.parametrize(
+    "error, timed_out",
+    [("local_failed[qwen3:8b:timeout]", True), ("local_failed[qwen3:8b:connect]", False)],
+)
+def test_gate_fail_open_keeps_answer(monkeypatch, error, timed_out):
+    """되번역 타임아웃·에러 → score None·passed True·차단 없음(fail-open)."""
+    _patch_bt(monkeypatch, text="", error=error)
+    result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+    assert result.verify == {"score": None, "passed": True, "gated": False, "gate_reason": None}
+    assert result.answer == "안전덮개를 확인하세요."
+    assert trace["verify"]["timed_out"] is timed_out
+    assert trace["verify"]["error"] == error
+
+
+def test_gate_skips_llm_when_no_budget_left(monkeypatch):
+    """M-30 잔여 ≤ 0 → 되번역 호출 없이 fail-open."""
+    monkeypatch.setenv("LLM_DEADLINE_S", "0")
+    seen = []
+    _patch_bt(monkeypatch, seen=seen)
+    result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+    assert seen == []                                     # 되번역 LLM 호출 0
+    assert result.verify["score"] is None and result.verify["passed"] is True
+    assert result.verify["gated"] is False
+    assert trace["verify"]["error"] == "no_budget"
+    assert trace["verify"]["timed_out"] is True
+
+
+def test_gate_src_env_switches_axis(monkeypatch):
+    """GATE_SRC=chunks → 근거 결합문 점수로 게이트. 두 점수는 항상 병기."""
+    monkeypatch.setenv("GATE_SRC", "chunks")
+    # back=[1,0] / question=[1,0](cos 1.0) / chunks=[0.6,0.8](cos 0.6)
+    _patch_bt(monkeypatch, vectors=[[1.0, 0.0], [1.0, 0.0], [0.6, 0.8]])
+    result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+    assert result.verify["score"] == pytest.approx(0.6)   # 게이트 축 = chunks
+    assert result.verify["gated"] is True and result.verify["gate_reason"] == "threshold"
+    assert trace["verify"]["src_kind"] == "chunks"
+    assert trace["verify"]["score_question"] == pytest.approx(1.0)
+    assert trace["verify"]["score_chunks"] == pytest.approx(0.6)
+
+
+def test_gate_records_both_scores_on_default_axis(monkeypatch):
+    _patch_bt(monkeypatch, vectors=[[1.0, 0.0], [1.0, 0.0], [0.6, 0.8]])
+    result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+    assert result.verify["score"] == pytest.approx(1.0)   # 기본 축 = question
+    assert trace["verify"]["score_question"] == pytest.approx(1.0)
+    assert trace["verify"]["score_chunks"] == pytest.approx(0.6)
+    assert trace["verify"]["src_kind"] == "question"
+
+
+@pytest.mark.parametrize(
+    "kind", ["no_chunks", "no_answer", "retrieve_error", "local_failed"],
+)
+def test_grounded_false_paths_all_report_grounding(monkeypatch, kind):
+    """grounded=False 인 전 경로가 gate_reason='grounding' — 경로별 분기 없음."""
+    store = _store(question_id=91)
+    monkeypatch.setattr(graph.tenancy, "connect", fake_connect(store))
+    if kind == "retrieve_error":
+        def _boom(q, k=4):
+            raise httpx.ConnectError("ollama refused")
+        monkeypatch.setattr(graph, "retrieve", _boom)
+        _patch_llm(monkeypatch)
+    elif kind == "no_chunks":
+        monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [])
+        _patch_llm(monkeypatch)
+    elif kind == "no_answer":
+        monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+        _patch_llm(monkeypatch, text=graph.NO_ANSWER)
+    else:
+        monkeypatch.setattr(graph, "retrieve", lambda q, k=4: [_chunk(1)])
+        _patch_llm(monkeypatch, text="", error="local_failed[qwen3:8b:timeout]")
+
+    result = graph.run_ask("프레스 점검?", "vi")
+    assert result.verify == {
+        "score": None, "passed": False, "gated": True, "gate_reason": "grounding",
+    }
+    assert result.answer == "" and result.sources == []
