@@ -11,6 +11,7 @@
 - [ ] blue-green 전환 시 릴레이 인메모리 큐 in-flight 유실 — 전환 전 큐 드레인 확인 (V7, M-28a)
 - [ ] 본선 당일 SSH 계획: 핫스팟 IP 사전 등록 vs 한시 개방·폐회 즉시 원복 — 9/1 리허설에서 결정 (SG 22 화이트리스트 원칙 유지)
 - [ ] admin 경로 IP 화이트리스트(Caddy, env ADMIN_ALLOW_IPS) — 범위: /api/v1/admin/* 전체, 해제 조건: 관리자 인증 도입(M-15b 해소). 시연장 IP는 9/1 SSH 계획과 함께 결정
+- [ ] HTTPS: https://moguk.ai.kr (Caddy 자동 TLS, 인증서는 caddy_data 볼륨 보존 — 볼륨 삭제·재생성 금지, LE 발급 제한 주 5회). QR·검증 URL 전부 https 기준
 
 ## 측정 (V6)
 - [ ] trace.relay{enqueued_at, leased_at, responded_at}로 릴레이 오버헤드/LLM 시간 분리 — 내부 계측 전용, API 응답 미노출
