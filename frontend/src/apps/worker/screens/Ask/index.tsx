@@ -59,22 +59,12 @@ export default function AskScreen() {
         <div className="ask-result" data-testid="ask-result">
           {result.verify.gated ? (
             <p className="gated" data-testid="ask-gated">
-              {result.verify.gate_reason === "grounding"
-                ? t("worker.ask.gated.grounding")
-                : result.verify.gate_reason === "threshold"
-                  ? t("worker.ask.gated.threshold")
-                  : t("worker.ask.gatedMessage")}
+              {t("worker.ask.gatedMessage")}
             </p>
           ) : (
-            <>
-              <p className="answer" data-testid="ask-answer">
-                {result.answer}
-              </p>
-              <div className="score-badge" data-testid="ask-score">
-                {t("worker.ask.scoreLabel")}:{" "}
-                {result.verify.score != null ? result.verify.score.toFixed(2) : "—"}
-              </div>
-            </>
+            <p className="answer" data-testid="ask-answer">
+              {result.answer}
+            </p>
           )}
 
           <div className="sources" data-testid="ask-sources">
