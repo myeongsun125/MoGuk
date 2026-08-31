@@ -35,5 +35,8 @@
   "worker.report.correctedDone": "Permintaan koreksi telah diterima.",
   "worker.report.summaryFailed": "Pembuatan ringkasan gagal. Laporan telah diterima dengan normal dan admin akan memeriksa teks asli secara langsung.",
   "worker.nav.ask": "Tanya Jawab",
-  "worker.nav.report": "Laporan bahaya"
+  "worker.nav.report": "Laporan bahaya",
+  "admin.glossary.rejectNotePlaceholder": "Alasan penolakan (opsional)",
+  "admin.glossary.rejectConfirm": "Konfirmasi penolakan",
+  "admin.glossary.rejectCancel": "Batal"
 }

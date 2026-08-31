@@ -35,5 +35,8 @@
   "worker.report.correctedDone": "Yêu cầu chỉnh sửa đã được tiếp nhận.",
   "worker.report.summaryFailed": "Tạo tóm tắt thất bại. Báo cáo đã được tiếp nhận bình thường và quản trị viên sẽ trực tiếp kiểm tra nội dung gốc.",
   "worker.nav.ask": "Hỏi đáp",
-  "worker.nav.report": "Báo cáo nguy hiểm"
+  "worker.nav.report": "Báo cáo nguy hiểm",
+  "admin.glossary.rejectNotePlaceholder": "Lý do từ chối (tuỳ chọn)",
+  "admin.glossary.rejectConfirm": "Xác nhận từ chối",
+  "admin.glossary.rejectCancel": "Huỷ"
 }
