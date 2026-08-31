@@ -37,5 +37,6 @@
   "worker.nav.report": "위험보고",
   "admin.glossary.rejectNotePlaceholder": "반려 사유(선택)",
   "admin.glossary.rejectConfirm": "반려 확정",
-  "admin.glossary.rejectCancel": "취소"
+  "admin.glossary.rejectCancel": "취소",
+  "worker.report.echoLabel": "제출하신 내용"
 }
