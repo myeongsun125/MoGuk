@@ -621,16 +621,41 @@ def test_merge_sql_unions_both_tables_with_report_projection(monkeypatch):
 
 
 def test_merge_orders_globally_by_created_at_desc(monkeypatch):
-    """(b) 정렬은 병합 결과 전역에 created_at desc 로 걸린다 — 클라이언트 재정렬 없음."""
+    """(b) 정렬은 병합 결과 전역에 3키(created_at, target_type, id) desc 로 걸린다."""
     store = _events_store(monkeypatch, [REPORT_EVENT_ROW, EVENT_ROW])
     out = admin_events.list_events()
 
     sql = store["calls"][0][0]
     outer = _outer_where(sql)
-    assert "ORDER BY created_at DESC" in outer                 # UNION 바깥 = 전역 정렬
+    assert "ORDER BY created_at DESC, target_type DESC, id DESC" in outer   # UNION 바깥 = 전역
     assert "ORDER BY" not in sql[:sql.index(") events")]       # 브랜치 내부 정렬 없음
     # 커서가 준 순서를 그대로 낸다(파이썬에서 다시 정렬하지 않는다)
     assert [r["id"] for r in out] == [34, 12]
+
+
+def test_merge_tiebreak_is_deterministic_on_equal_created_at(monkeypatch):
+    """동률 — 같은 created_at 이면 target_type DESC(report 선행), 같은 축 안에서는 id DESC.
+
+    정렬은 DB 가 수행하므로 여기서는 ORDER BY 키 순서·방향을 SQL 로 단정하고,
+    그 키로 정렬한 결과가 어떤 순서가 되는지를 같은 규칙으로 확인한다.
+    """
+    same_time_rows = [
+        REPORT_EVENT_ROW,                                      # id 34, target_type 'report'
+        REPORT_EVENT_ROW_NULL_DETAIL,                          # id 35, target_type 'report'
+        EVENT_ROW,                                             # id 12, target_type 'glossary'
+    ]
+    assert {r[8] for r in same_time_rows} == {AT}              # 세 행 created_at 동률
+
+    store = _events_store(monkeypatch, same_time_rows)
+    admin_events.list_events()
+    outer = _outer_where(store["calls"][0][0])
+    keys = outer[outer.index("ORDER BY"):].splitlines()[0]
+    assert keys == "ORDER BY created_at DESC, target_type DESC, id DESC"
+
+    # 같은 3키로 정렬하면: report(35) → report(34) → glossary(12)
+    ordered = sorted(same_time_rows, key=lambda r: (r[8], r[2], r[0]), reverse=True)
+    assert [r[0] for r in ordered] == [35, 34, 12]
+    assert [r[2] for r in ordered] == ["report", "report", "glossary"]   # report 선행
 
 
 def test_merge_target_type_filter_selects_source(monkeypatch):
@@ -766,7 +791,7 @@ def test_skeleton_events_contract_matches_implementation():
     assert f"기본 {admin_events.LIMIT_DEFAULT}" in line
     assert f"최대 {admin_events.LIMIT_MAX}" in line
     assert admin_events.EVENTS_TZ in line
-    assert "created_at desc" in line                       # M-36 — 병합으로 id 정렬 폐지
+    assert "created_at desc, target_type desc, id desc" in line   # M-36 3키 정렬(총괄 0901)
 
 
 def test_skeleton_transition_contract_documents_m08d_decisions():
