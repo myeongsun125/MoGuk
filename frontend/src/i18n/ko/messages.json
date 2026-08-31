@@ -1,6 +1,6 @@
 {
   "worker.invite.title": "MoGuk에 오신 것을 환영합니다",
-  "worker.invite.tokenMissing": "초대 링크가 유효하지 않습니다. QR을 다시 스캔해 주세요.",
+  "worker.invite.noToken": "초대 QR을 스캔해 주세요",
   "worker.invite.langLabel": "언어 선택",
   "worker.invite.langVi": "Tiếng Việt",
   "worker.invite.langKo": "한국어",
@@ -9,7 +9,7 @@
   "worker.invite.pinPlaceholder": "PIN 4~6자리",
   "worker.invite.submit": "활성화",
   "worker.invite.activating": "활성화 중...",
-  "worker.invite.error": "활성화에 실패했습니다. 다시 시도해 주세요.",
+  "worker.invite.invalidToken": "초대 링크가 유효하지 않습니다 — 관리자에게 재발급을 요청하세요",
   "worker.ask.title": "질문하기",
   "worker.ask.placeholder": "질문을 입력하세요",
   "worker.ask.submit": "제출",

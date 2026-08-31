@@ -5,10 +5,15 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 
 // "__lang_<code>__" 포함 토큰으로 응답 lang 유무 두 경로를 재현(로컬 스모크용, 계약 필드 아님).
 const LANG_MARKER = /__lang_(ko|vi|in)__/;
+// "__invalid__" 포함 토큰으로 활성화 실패(실API 401, auth.py:13 uniform) 경로를 재현.
+const INVALID_MARKER = "__invalid__";
 
 export async function activate(token: string, pin: string): Promise<ActivateResponse> {
   if (USE_MOCK) {
     await delay(200);
+    if (token.includes(INVALID_MARKER)) {
+      throw new Error("activate failed: 401");
+    }
     const match = token.match(LANG_MARKER);
     const lang = match ? (match[1] as Lang) : undefined;
     return { jwt: "mock-jwt-token", refresh: "mock-refresh-token", ...(lang ? { lang } : {}) };

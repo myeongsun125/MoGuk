@@ -1,6 +1,6 @@
 {
   "worker.invite.title": "Selamat datang di MoGuk",
-  "worker.invite.tokenMissing": "Tautan undangan tidak valid. Silakan pindai ulang kode QR.",
+  "worker.invite.noToken": "Silakan pindai kode QR undangan",
   "worker.invite.langLabel": "Pilih bahasa",
   "worker.invite.langVi": "Tiếng Việt",
   "worker.invite.langKo": "한국어",
@@ -9,7 +9,7 @@
   "worker.invite.pinPlaceholder": "PIN 4-6 digit",
   "worker.invite.submit": "Aktifkan",
   "worker.invite.activating": "Mengaktifkan...",
-  "worker.invite.error": "Aktivasi gagal. Silakan coba lagi.",
+  "worker.invite.invalidToken": "Tautan undangan tidak valid — silakan hubungi admin untuk penerbitan ulang",
   "worker.ask.title": "Tanya Jawab",
   "worker.ask.placeholder": "Masukkan pertanyaan Anda",
   "worker.ask.submit": "Kirim",

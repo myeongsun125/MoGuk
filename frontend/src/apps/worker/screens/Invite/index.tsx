@@ -45,7 +45,7 @@ export default function InviteScreen() {
   if (!token) {
     return (
       <div className="invite-screen">
-        <p data-testid="invite-no-token">{t("worker.invite.tokenMissing")}</p>
+        <p data-testid="invite-no-token">{t("worker.invite.noToken")}</p>
       </div>
     );
   }
@@ -83,7 +83,11 @@ export default function InviteScreen() {
         <button type="submit" disabled={status === "loading"}>
           {status === "loading" ? t("worker.invite.activating") : t("worker.invite.submit")}
         </button>
-        {status === "error" && <p className="error">{t("worker.invite.error")}</p>}
+        {status === "error" && (
+          <p className="error" data-testid="invite-invalid-token">
+            {t("worker.invite.invalidToken")}
+          </p>
+        )}
       </form>
     </div>
   );
