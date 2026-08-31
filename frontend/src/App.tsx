@@ -4,6 +4,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import InviteScreen from "./apps/worker/screens/Invite";
 import AskScreen from "./apps/worker/screens/Ask";
 import ReportScreen from "./apps/worker/screens/Report";
+import WorkerLayout from "./apps/worker/WorkerLayout";
 import AdminReportsScreen from "./apps/admin/screens/Reports";
 import AdminDashboardScreen from "./apps/admin/screens/Dashboard";
 import AdminGlossaryScreen from "./apps/admin/screens/Glossary";
@@ -18,8 +19,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/activate" replace />} />
             <Route path="/activate" element={<InviteScreen />} />
-            <Route path="/ask" element={<AskScreen />} />
-            <Route path="/report" element={<ReportScreen />} />
+            <Route element={<WorkerLayout />}>
+              <Route path="/ask" element={<AskScreen />} />
+              <Route path="/report" element={<ReportScreen />} />
+            </Route>
             <Route path="/admin" element={<AdminLayout />}>
               <Route path="reports" element={<AdminReportsScreen />} />
               <Route path="dashboard" element={<AdminDashboardScreen />} />

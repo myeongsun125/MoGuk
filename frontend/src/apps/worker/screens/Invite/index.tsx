@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useLang } from "../../../../i18n/LangContext";
 import { useAuth } from "../../../../auth/AuthContext";
 import { activate } from "../../../../api/auth";
@@ -17,7 +17,7 @@ export default function InviteScreen() {
   const [params] = useSearchParams();
   const token = params.get("token");
   const { lang, setLang, t } = useLang();
-  const { setToken } = useAuth();
+  const { jwt, setToken } = useAuth();
   const [pin, setPin] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const navigate = useNavigate();
@@ -29,10 +29,17 @@ export default function InviteScreen() {
     try {
       const res = await activate(token, pin);
       setToken(res.jwt, res.refresh);
+      if (res.lang) setLang(res.lang);
       navigate("/ask");
     } catch {
       setStatus("error");
     }
+  }
+
+  // 이미 유효 세션이 있으면(뒤로가기·새로고침) 재활성화 시도 대신 워커 홈으로 —
+  // 1회용 초대 토큰을 재소진 시도하다 실패하는 것을 막는다(D-1).
+  if (jwt) {
+    return <Navigate to="/ask" replace />;
   }
 
   if (!token) {

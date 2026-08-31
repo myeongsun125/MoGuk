@@ -33,5 +33,7 @@
   "worker.report.confirmError": "Konfirmasi gagal. Silakan coba lagi.",
   "worker.report.confirmedDone": "Terima kasih atas konfirmasinya.",
   "worker.report.correctedDone": "Permintaan koreksi telah diterima.",
-  "worker.report.summaryFailed": "Pembuatan ringkasan gagal. Laporan telah diterima dengan normal dan admin akan memeriksa teks asli secara langsung."
+  "worker.report.summaryFailed": "Pembuatan ringkasan gagal. Laporan telah diterima dengan normal dan admin akan memeriksa teks asli secara langsung.",
+  "worker.nav.ask": "Tanya Jawab",
+  "worker.nav.report": "Laporan bahaya"
 }
