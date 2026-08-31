@@ -17,6 +17,8 @@
 
 gate_eval 채점 행은 **정상 30 + 오염 60 = 90행**이다. 배분 근거는 `corrupted_30.json`의 `_meta`가 단일 출처이며, `seed_check.py`는 이 `_meta.counts` 선언과 실배분이 같은지만 본다(건수 하드코딩 없음).
 
+> ⚠ **예비 스윕과 오염 구성비가 다르다** — 예비 스윕은 유형별 각 10(10/10/10), 이 셋은 `term_swap` 30 / `negation` 20 / `number` 10 이다. 구성이 바뀌면 전체 검출률의 유형 가중이 달라지므로 **두 스윕의 전체 검출률을 단순 비교하지 않는다 — 유형별 검출률(`by_type`)을 `n_by_type`과 함께 놓고 보는 비교만 유효하다.**
+
 - **number 10건이 상한** — `_meta.number_limit`. `rules.number`("숫자만 변경")를 지키려면 base의 `answer_vi`에 숫자 토큰이 있어야 하는데 그런 문장이 S06·S07·S20~S23·S27·S29·S30의 9개뿐이고 M01~M10이 이미 전부 소진했다(M10은 S06 재사용). 유형별 검출률은 표본 불균형(30/20/10)을 밝히고 읽는다.
 - **negation base 풀 소진** — `_meta.negation_base_pool`. safety:true 20문장을 N01~N10(S01·S02·S04·S05·S16·S17·S18·S19·S24·S25)과 N11~N20(S03·S10·S11·S12·S13·S14·S15·S26·S27·S28)이 전량 사용해 추가 배정 여지가 없다.
 - **S30 term_swap 대체** — `_meta.term_swap_exception`. S30은 `answer_vi`에 `terms[]`의 term_vi(프레스=`máy dập`)가 나타나지 않아 `rules.term_swap` 대조를 통과할 수 없다. 20건째는 S23의 두 번째 용어축으로 대체했다(C26 프레스축 / C30 금형축).

@@ -206,7 +206,9 @@ def summarize(scored: list[dict]) -> dict:
         "excluded_classes": sorted(EXCLUDED_CLASSES),
         "sample_note": (
             "표본 불균형 — number 는 10건이 상한이다(corrupted_30.json _meta.number_limit). "
-            "유형별 검출률은 n_by_type 과 함께 읽는다."
+            "유형별 검출률은 n_by_type 과 함께 읽는다. "
+            "구성비가 예비 스윕(유형별 각 10)과 다르므로 전체 검출률을 예비 스윕과 "
+            "단순 비교하지 않는다 — 유형별(by_type) 비교만 유효하다."
         ),
         "by_tau": _sweep(normals, corrupts, "score_question"),
         "n_chunks_scored": len(aux),
