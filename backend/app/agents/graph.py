@@ -30,6 +30,7 @@ TOP_K = 4
 # M-34 c: 되번역 예산 — 시도별 상한(env)과 M-30 요청 예산 잔여 중 작은 값.
 DEFAULT_BACKTRANS_TIMEOUT_S = 10.0
 DEFAULT_GATE_SRC = "question"      # M-34 c Q6: 게이트 축 = 원질문(질의 lang 그대로, ko 변환 금지)
+GATE_SRC_VALUES = ("question", "chunks")
 
 # 근거가 없을 때 모델이 내야 하는 정확한 토큰. 이 값이 응답에 있으면 grounded=false 로 판정한다.
 NO_ANSWER = "NO_ANSWER"
@@ -165,6 +166,18 @@ def _persist(
         return None
 
 
+def _gate_src() -> str:
+    """GATE_SRC — question|chunks 외 값은 경고 후 기본축(question)으로 폴백한다."""
+    raw = _env("GATE_SRC", DEFAULT_GATE_SRC)
+    if raw in GATE_SRC_VALUES:
+        return raw
+    log.warning(
+        "graph: env GATE_SRC=%r 가 %s 밖 — 기본값 %s 사용",
+        raw, list(GATE_SRC_VALUES), DEFAULT_GATE_SRC,
+    )
+    return DEFAULT_GATE_SRC
+
+
 def _backtrans_budget_s(t0: float) -> float:
     """되번역에 줄 시도별 timeout — env 상한과 M-30 요청 예산 잔여 중 작은 값.
 
@@ -176,11 +189,13 @@ def _backtrans_budget_s(t0: float) -> float:
     return min(cap, left)
 
 
-def _backtrans_trace(bt: Verify | None, *, high_risk: bool, chunks_joined: str = "") -> dict:
+def _backtrans_trace(
+    bt: Verify | None, *, high_risk: bool, src_kind: str, chunks_joined: str = ""
+) -> dict:
     """trace.verify 실측 — §3 응답(4키) 밖으로는 나가지 않는다."""
     base = {
         "high_risk": high_risk,
-        "src_kind": _env("GATE_SRC", DEFAULT_GATE_SRC),
+        "src_kind": src_kind,
         "chunks_joined_len": len(chunks_joined),
     }
     if bt is None:
@@ -245,6 +260,7 @@ def run_ask(
     answer_text = ""
     grounded = False
     bt: Verify | None = None                  # M-34 c 되번역 결과(미수행이면 None)
+    gate_src = _gate_src()                    # 요청당 1회 판정 — 오값이면 경고 후 question
     chunks_joined = ""                        # 게이트 aux 축(근거 결합문) — trace 길이 기록용
     gate_reason: str | None = None            # M-10b: 'grounding' | 'threshold' | None
     # M-05a: unanswered_queue 적재 대상은 "관리자 답변이 필요한 무근거" 2종뿐 —
@@ -272,7 +288,6 @@ def run_ask(
             grounded = True
             # M-34 c: 되번역 게이트. src=원질문(질의 lang 그대로), aux=근거 청크 결합문(ko).
             chunks_joined = build_context(chunks)
-            gate_src = _env("GATE_SRC", DEFAULT_GATE_SRC)
             bt = verify_backtranslation(
                 question,
                 answer_text,
@@ -304,7 +319,10 @@ def run_ask(
         "gated": gated,
         "gate_reason": gate_reason,
     }
-    trace["verify"] = dict(verify, **_backtrans_trace(bt, high_risk=high_risk, chunks_joined=chunks_joined))
+    trace["verify"] = dict(
+        verify,
+        **_backtrans_trace(bt, high_risk=high_risk, src_kind=gate_src, chunks_joined=chunks_joined),
+    )
     trace["grounded"] = grounded
 
     latency_ms = int((time.perf_counter() - t0) * 1000)

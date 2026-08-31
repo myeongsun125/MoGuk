@@ -1014,3 +1014,17 @@ def test_grounded_false_paths_all_report_grounding(monkeypatch, kind):
         "score": None, "passed": False, "gated": True, "gate_reason": "grounding",
     }
     assert result.answer == "" and result.sources == []
+
+
+def test_gate_src_invalid_value_warns_and_falls_back(monkeypatch, caplog):
+    """GATE_SRC 오값 → WARNING 1줄 + question 축 폴백(요청당 1회 판정)."""
+    monkeypatch.setenv("GATE_SRC", "questoin")            # 오타 상정
+    _patch_bt(monkeypatch, vectors=[[1.0, 0.0], [1.0, 0.0], [0.6, 0.8]])
+    with caplog.at_level("WARNING", logger="app.agents.graph"):
+        result, trace = _run(monkeypatch, [_chunk(1, category="safety")])
+
+    warns = [r for r in caplog.records if "GATE_SRC" in r.getMessage()]
+    assert len(warns) == 1
+    assert "questoin" in warns[0].getMessage()
+    assert trace["verify"]["src_kind"] == "question"      # 실효값 기록
+    assert result.verify["score"] == pytest.approx(1.0)   # question 축으로 채점
