@@ -40,33 +40,46 @@ def _base_env(monkeypatch):
 
 # ── M-28c ②: edge role 라우터 분기 (500 이 아니라 릴레이 경유) ──
 
+INVITE_BODY = {"name": "Nguyen", "emp_no": "E-1001", "lang": "vi"}
+
+# (method, url, relay_path, send_body, relay_body, status, payload)
+# send_body 는 클라이언트가 보낸 본문, relay_body 는 큐에 실려야 할 본문 —
+# resolve 는 라우터가 {note} 로 정규화하므로 둘이 다르다(M-28b 본문 정규화 지점).
+# status 축은 M-32b 편입분(201) 때문에 생겼다 — 성공 코드를 200 으로 하드코딩하지 않는다.
 EDGE_CASES = [
-    ("GET", "/api/v1/reports/1", "/api/v1/reports/1", PUBLIC_ROW),
-    ("GET", "/api/v1/admin/reports", "/api/v1/admin/reports", [PUBLIC_ROW]),
+    ("GET", "/api/v1/reports/1", "/api/v1/reports/1", {}, {}, 200, PUBLIC_ROW),
+    ("GET", "/api/v1/admin/reports", "/api/v1/admin/reports", {}, {}, 200, [PUBLIC_ROW]),
     ("GET", "/api/v1/admin/reports?status=submitted",
-     "/api/v1/admin/reports?status=submitted", [PUBLIC_ROW]),
-    ("GET", "/api/v1/admin/reports/1", "/api/v1/admin/reports/1", {"id": 1, "events": []}),
-    ("POST", "/api/v1/admin/reports/1/ack", "/api/v1/admin/reports/1/ack",
+     "/api/v1/admin/reports?status=submitted", {}, {}, 200, [PUBLIC_ROW]),
+    ("GET", "/api/v1/admin/reports/1", "/api/v1/admin/reports/1", {}, {}, 200,
+     {"id": 1, "events": []}),
+    ("POST", "/api/v1/admin/reports/1/ack", "/api/v1/admin/reports/1/ack", {}, {}, 200,
      {"id": 1, "status": "acknowledged"}),
     ("POST", "/api/v1/admin/reports/1/resolve", "/api/v1/admin/reports/1/resolve",
-     {"id": 1, "status": "resolved"}),
+     {}, {"note": None}, 200, {"id": 1, "status": "resolved"}),
+    # M-32b: 초대 발급 — 201 그대로 투과(200 으로 눌리지 않는다), 본문 온전 전달
+    ("POST", "/api/v1/admin/workers/invite", "/api/v1/admin/workers/invite",
+     INVITE_BODY, INVITE_BODY, 201, {"invite_url": "http://localhost/activate?token=t"}),
 ]
 
 
-@pytest.mark.parametrize("method,url,relay_path,payload", EDGE_CASES)
+@pytest.mark.parametrize("method,url,relay_path,send_body,relay_body,status,payload", EDGE_CASES)
 @pytest.mark.asyncio
-async def test_edge_query_paths_go_through_relay_not_500(monkeypatch, method, url, relay_path, payload):
+async def test_edge_query_paths_go_through_relay_not_500(
+    monkeypatch, method, url, relay_path, send_body, relay_body, status, payload
+):
     """edge 에서 500 이 아니라 릴레이 왕복으로 완결된다 — #27 유입 결함 회귀 방지."""
     monkeypatch.setenv("API_ROLE", "edge")
     monkeypatch.setenv("RELAY_HOLD_S", "3")
     monkeypatch.setenv("RELAY_EDGE_WAIT_S", "5")
+    monkeypatch.delenv("DATABASE_URL", raising=False)   # DB 자격 없이도 성립해야 한다
     app = build_app("edge")
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://edge"
     ) as client:
         task = asyncio.create_task(
-            client.get(url) if method == "GET" else client.post(url, json={})
+            client.get(url) if method == "GET" else client.post(url, json=send_body)
         )
 
         pend = await client.get("/internal/relay/pending")
@@ -74,16 +87,18 @@ async def test_edge_query_paths_go_through_relay_not_500(monkeypatch, method, ur
         assert len(items) == 1, items
         assert items[0]["method"] == method
         assert items[0]["path"] == relay_path        # 경로·쿼리 온전 전달 (M-28c ①)
+        assert items[0]["body"] == relay_body        # 본문 온전 전달
+        assert items[0]["identity"] is None          # 관리자 인증 부재(M-15b)
         rid = items[0]["request_id"]
 
         rr = await client.post(
-            f"/internal/relay/{rid}/respond", json={"status_code": 200, "body": payload}
+            f"/internal/relay/{rid}/respond", json={"status_code": status, "body": payload}
         )
         assert rr.status_code == 200
 
         resp = await task
 
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == status, resp.text     # 성공 코드 그대로 투과
     assert resp.json() == payload
 
 
@@ -257,45 +272,7 @@ def test_dispatch_post_branches_unchanged(monkeypatch):
     assert status == 404 and "디스패치 대상 아님" in body["detail"]
 
 
-# ── M-32b: invite edge 릴레이 편입 ─────────────────────────
-# 판정 ①b — EDGE_CASES(성공 코드 200 하드코딩) 무접촉. 201 은 독립 함수로 검증한다.
-
-INVITE_BODY = {"name": "Nguyen", "emp_no": "E-1001", "lang": "vi"}
-
-
-@pytest.mark.asyncio
-async def test_edge_invite_goes_through_relay_with_201(monkeypatch):
-    """edge POST /admin/workers/invite 는 500 이 아니라 릴레이 왕복 — 201 그대로 투과."""
-    monkeypatch.setenv("API_ROLE", "edge")
-    monkeypatch.setenv("RELAY_HOLD_S", "3")
-    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "5")
-    monkeypatch.delenv("DATABASE_URL", raising=False)   # DB 자격 없이도 성립해야 한다
-    app = build_app("edge")
-
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://edge"
-    ) as client:
-        task = asyncio.create_task(client.post("/api/v1/admin/workers/invite", json=INVITE_BODY))
-
-        pend = await client.get("/internal/relay/pending")
-        items = pend.json()["items"]
-        assert len(items) == 1, items
-        assert items[0]["method"] == "POST"
-        assert items[0]["path"] == "/api/v1/admin/workers/invite"
-        assert items[0]["body"] == INVITE_BODY      # 본문 온전 전달
-        assert items[0]["identity"] is None         # 관리자 인증 부재(M-15b)
-        rid = items[0]["request_id"]
-
-        rr = await client.post(
-            f"/internal/relay/{rid}/respond",
-            json={"status_code": 201, "body": {"invite_url": "http://localhost/activate?token=t"}},
-        )
-        assert rr.status_code == 200
-
-        resp = await task
-
-    assert resp.status_code == 201, resp.text        # 200 으로 눌리지 않는다
-    assert resp.json() == {"invite_url": "http://localhost/activate?token=t"}
+# ── M-32b: invite 디스패치 (edge 왕복은 EDGE_CASES 로 흡수) ──
 
 
 def test_dispatch_invite_created(monkeypatch):
