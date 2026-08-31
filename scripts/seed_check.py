@@ -241,13 +241,22 @@ def seed_checks() -> None:
     hr = sum(1 for p in ph if p.get("high_risk") is True)
     row(S, "phrases_10 10건·high_risk≥3", "PASS" if len(ph) == 10 and hr >= 3 else "FAIL", f"{len(ph)}건, high_risk={hr}")
 
-    # 건수 기대값은 _meta.counts 선언을 따른다(오염셋 확장 추종, 하드코딩 폐지).
-    # sentences_30 은 counts 선언이 없는 기준셋(S01~S30 정의)이라 30 을 그대로 쓴다.
-    for name, d in (("sentences_30", se), ("corrupted_30", co)):
+    # 건수 기대값의 출처는 파일명이 아니라 (counts 선언 유무 + 파일별 요구)로 정한다.
+    #   counts_required=True  — _meta.counts 가 단일 출처. 선언이 없으면 기본값을 만들지 않고 FAIL.
+    #   counts_required=False — counts 선언이 없는 고정 기준셋. fixed_n(정의 건수)을 쓰되,
+    #                           나중에 counts 가 선언되면 그때부터 선언을 따른다.
+    # 판정 규칙은 아래 "corrupted type별" 행(_meta.counts 부재 → FAIL)과 동일하다.
+    for name, d, counts_required, fixed_n in (
+        ("sentences_30", se, False, 30),      # S01~S30 정의 — counts 선언 없음
+        ("corrupted_30", co, True, None),     # 확장 대상 — 배분 선언이 단일 출처
+    ):
         keys = list(d.keys())
         row(S, f"{name} dict 키(구조 변경 금지)", "PASS" if len(keys) == 3 else "FAIL", f"{len(keys)}개: {keys}")
         declared = d.get("_meta", {}).get("counts")
-        expected = sum(declared.values()) if declared else 30
+        if counts_required and not declared:
+            row(S, f"{name} items _meta.counts 부재", "FAIL", f"{len(d['items'])}건")
+            continue
+        expected = sum(declared.values()) if declared else fixed_n
         row(S, f"{name} items {expected}건",
             "PASS" if len(d["items"]) == expected else "FAIL", f"{len(d['items'])}건")
     sids = [s["id"] for s in se["items"]]
