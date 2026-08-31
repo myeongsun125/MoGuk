@@ -47,7 +47,10 @@ VALUES (%(actor)s, %(target_type)s, %(target_id)s, %(action)s, %(from_state)s, %
 
 # M-36 병합 조회. 필터·정렬·LIMIT/OFFSET 은 전부 UNION 바깥 = 병합 결과에 적용된다.
 # 정렬은 created_at DESC — 두 테이블의 id 축이 서로 달라 id 정렬은 폐지했다(§3:243).
-# 동률 보조키는 계약에 없어 넣지 않는다(임의 추가 금지 — 판정 대기).
+# 보조키 target_type DESC, id DESC (총괄 확정 0901): created_at 만으로는 같은 초에 기록된
+# 행의 순서가 비결정적이다. 유일키 축(target_type+id)을 그대로 보조키로 써서 정렬을
+# 결정적으로 만든다 — 같은 시각이면 target_type 문자열 역순('report' > 'glossary'),
+# 같은 target_type 안에서는 원본 테이블 id 역순(삽입 역순)이 된다.
 _SELECT = """
 SELECT id, actor, target_type, target_id, action, from_state, to_state, detail, created_at
 FROM (
@@ -61,7 +64,7 @@ FROM (
 ) events
 WHERE (%(date)s::text IS NULL OR (created_at AT TIME ZONE %(tz)s)::date = %(date)s::date)
   AND (%(target_type)s::text IS NULL OR target_type = %(target_type)s)
-ORDER BY created_at DESC
+ORDER BY created_at DESC, target_type DESC, id DESC
 LIMIT %(limit)s OFFSET %(offset)s
 """
 
