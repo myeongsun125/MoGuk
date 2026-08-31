@@ -6,6 +6,11 @@ import "./Report.css";
 
 type SubmitStatus = "idle" | "loading" | "error";
 type ConfirmStatus = "idle" | "loading" | "done" | "error";
+type ConfirmErrorKind = "generic" | "reauth";
+
+function errorStatus(e: unknown): number | undefined {
+  return e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
+}
 
 export default function ReportScreen() {
   const { lang, t } = useLang();
@@ -14,6 +19,7 @@ export default function ReportScreen() {
   const [submitted, setSubmitted] = useState<ReportSubmitResponse | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>("idle");
   const [confirmResponse, setConfirmResponse] = useState<ConfirmResponse | null>(null);
+  const [confirmErrorKind, setConfirmErrorKind] = useState<ConfirmErrorKind>("generic");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -37,7 +43,9 @@ export default function ReportScreen() {
       const res = await confirmReport(submitted.id, { result });
       setConfirmResponse(res);
       setConfirmStatus("done");
-    } catch {
+    } catch (e) {
+      // 401(재인증 필요)과 그 외 오류는 반드시 구분한다 — ★일반 에러와 무구분 처리 금지.
+      setConfirmErrorKind(errorStatus(e) === 401 ? "reauth" : "generic");
       setConfirmStatus("error");
     }
   }
@@ -88,7 +96,12 @@ export default function ReportScreen() {
               >
                 {t("worker.report.confirmNo")}
               </button>
-              {confirmStatus === "error" && (
+              {confirmStatus === "error" && confirmErrorKind === "reauth" && (
+                <p className="error" data-testid="confirm-reauth">
+                  {t("worker.report.confirmReauth")}
+                </p>
+              )}
+              {confirmStatus === "error" && confirmErrorKind === "generic" && (
                 <p className="error" data-testid="confirm-error">
                   {t("worker.report.confirmError")}
                 </p>

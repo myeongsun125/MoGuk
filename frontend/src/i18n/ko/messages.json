@@ -38,5 +38,6 @@
   "admin.glossary.rejectNotePlaceholder": "반려 사유(선택)",
   "admin.glossary.rejectConfirm": "반려 확정",
   "admin.glossary.rejectCancel": "취소",
-  "worker.report.echoLabel": "제출하신 내용"
+  "worker.report.echoLabel": "제출하신 내용",
+  "worker.report.confirmReauth": "초대가 만료됐거나 세션이 유실됐습니다. 관리자에게 재발급을 요청하고 다시 활성화해 주세요."
 }

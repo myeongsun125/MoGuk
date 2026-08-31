@@ -38,5 +38,6 @@
   "admin.glossary.rejectNotePlaceholder": "Lý do từ chối (tuỳ chọn)",
   "admin.glossary.rejectConfirm": "Xác nhận từ chối",
   "admin.glossary.rejectCancel": "Huỷ",
-  "worker.report.echoLabel": "Nội dung bạn đã gửi"
+  "worker.report.echoLabel": "Nội dung bạn đã gửi",
+  "worker.report.confirmReauth": "Lời mời đã hết hạn hoặc phiên đã mất. Vui lòng liên hệ quản trị viên để cấp lại và kích hoạt lại."
 }

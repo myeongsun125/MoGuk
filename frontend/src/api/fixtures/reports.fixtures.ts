@@ -15,14 +15,18 @@ function localTimestamp(): string {
 
 let mockIdSeq = 1001;
 
-// "__local_failed__" 포함 원문으로 요약 실패(G-1a, processing_state=failed) 분기를 재현
-// (ask.ts의 "__gated__" 관례와 동일 — 로컬 스모크용, 계약 필드 아님).
+// "__local_failed__"/"__confirm401__" 포함 원문으로 각각 요약 실패(G-1a)·confirm 401(재인증
+// 필요, #61 이월 ⑤) 분기를 재현(ask.ts의 "__gated__" 관례와 동일 — 로컬 스모크용, 계약 필드 아님).
 const failedReportTexts = new Map<number, string>();
+const confirm401ReportIds = new Set<number>();
 
 export function buildSubmitMock(originalText: string): ReportSubmitResponse {
   const id = mockIdSeq++;
   if (originalText.includes("__local_failed__")) {
     failedReportTexts.set(id, originalText);
+  }
+  if (originalText.includes("__confirm401__")) {
+    confirm401ReportIds.add(id);
   }
   return {
     id,
@@ -32,6 +36,9 @@ export function buildSubmitMock(originalText: string): ReportSubmitResponse {
 }
 
 export function buildConfirmMock(id: number, result: "confirmed" | "corrected"): ConfirmResponse {
+  if (confirm401ReportIds.has(id)) {
+    throw Object.assign(new Error("confirm failed: 401"), { status: 401 });
+  }
   const failedText = failedReportTexts.get(id);
   if (failedText !== undefined) {
     // services/risk_reports.py:429-436 local_failed 분기와 동일 형태(요청 result 무관하게 고정) —
