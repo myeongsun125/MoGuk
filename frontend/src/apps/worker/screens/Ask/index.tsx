@@ -62,14 +62,9 @@ export default function AskScreen() {
               {t("worker.ask.gatedMessage")}
             </p>
           ) : (
-            <>
-              <p className="answer" data-testid="ask-answer">
-                {result.answer}
-              </p>
-              <div className="score-badge" data-testid="ask-score">
-                {t("worker.ask.scoreLabel")}: {result.verify.score.toFixed(2)}
-              </div>
-            </>
+            <p className="answer" data-testid="ask-answer">
+              {result.answer}
+            </p>
           )}
 
           <div className="sources" data-testid="ask-sources">

@@ -20,7 +20,6 @@
   "worker.ask.noSources": "Tidak ada dasar",
   "worker.ask.gatedMessage": "Perlu konfirmasi admin",
   "worker.ask.traceLabel": "ID pelacakan",
-  "worker.ask.scoreLabel": "Skor verifikasi",
   "worker.report.title": "Laporan bahaya",
   "worker.report.placeholder": "Masukkan situasi bahaya",
   "worker.report.submit": "Kirim",

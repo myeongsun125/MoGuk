@@ -10,9 +10,11 @@ export interface AskSource {
 }
 
 export interface AskVerify {
-  score: number;
+  // 되번역 미수행·실패 시 null(grounded=false 전 경로·타임아웃·예산 0·LLM 오류·임베딩 실패·빈 입력).
+  score: number | null;
   passed: boolean;
   gated: boolean;
+  gate_reason: "grounding" | "threshold" | null; // M-10b·M-34, §3:222
 }
 
 export interface AskRequest {

@@ -20,7 +20,6 @@
   "worker.ask.noSources": "Không có căn cứ",
   "worker.ask.gatedMessage": "Cần quản trị viên xác nhận",
   "worker.ask.traceLabel": "Mã theo dõi",
-  "worker.ask.scoreLabel": "Điểm xác minh",
   "worker.report.title": "Báo cáo nguy hiểm",
   "worker.report.placeholder": "Nhập tình huống nguy hiểm",
   "worker.report.submit": "Gửi",
