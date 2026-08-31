@@ -285,8 +285,8 @@ def test_issued_token_is_consumable_by_activate(monkeypatch):
     import datetime
 
     future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=72)
-    act_store = _store(rows=[
-        ("SELECT i.token, i.worker_id", (token, 11, future, None, 11)),
+    act_store = _store(rows=[            # 열 순서: i.token, i.worker_id, expires_at, used_at, w.id, w.lang
+        ("SELECT i.token, i.worker_id", (token, 11, future, None, 11, "vi")),
     ])
     act_store["rowcount"] = 1
 
@@ -299,7 +299,8 @@ def test_issued_token_is_consumable_by_activate(monkeypatch):
 
     out = auth_service.activate(token, "123456")
 
-    assert set(out) == {"jwt", "refresh"}
+    assert set(out) == {"jwt", "refresh", "lang"}          # M-35
+    assert out["lang"] == "vi"                             # 발급 시 lang 이 그대로 왕복
     assert _params_for(act_store, "SELECT i.token, i.worker_id")[0] == {"token": token}
     assert _params_for(act_store, "UPDATE invites SET used_at")[0] == {"token": token}
 

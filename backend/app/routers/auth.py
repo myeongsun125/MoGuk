@@ -1,7 +1,7 @@
 """/auth — 초대 토큰 → PIN → JWT+리프레시 (M-15). [새봄]
 
 skeleton §3:
-  POST /auth/activate {token, pin}  → {jwt, refresh}
+  POST /auth/activate {token, pin}  → {jwt, refresh, lang}
   POST /auth/login    {emp_no, pin} → {jwt, refresh}
   POST /auth/admin/login {email, pw}            — 관리자, V3-2 범위 밖(스텁 유지)
 

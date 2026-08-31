@@ -1,7 +1,8 @@
 """V3-2 인증·하트비트 단위 테스트 — 네트워크·DB 없음(전부 스텁). [새봄]
 
 검증 대상 계약:
-- skeleton §3: POST /auth/activate {token,pin} → {jwt,refresh} · POST /auth/login {emp_no,pin} → 동일
+- skeleton §3: POST /auth/activate {token,pin} → {jwt,refresh,lang}(M-35, lang=workers.lang)
+  · POST /auth/login {emp_no,pin} → {jwt,refresh} (2키 유지)
 - M-15: 일회성 초대 토큰(만료·1회 소진) → PIN 해시만 저장 → JWT+리프레시
 - 001 정본: workers(pin_hash·activated_at) / invites(token PK·expires_at·used_at)
 - 실패 응답 무구분: 계정·토큰 존재 여부가 401 로 드러나지 않는다
@@ -102,9 +103,12 @@ def _base_env(monkeypatch):
     monkeypatch.setattr(auth_service, "PBKDF2_ITERATIONS", 1000)
 
 
-def _invite_store(*, used_at=None, expires_at=None, worker_id=7):
+def _invite_store(*, used_at=None, expires_at=None, worker_id=7, lang="vi"):
+    """_SELECT_INVITE 열 순서 — (i.token, i.worker_id, i.expires_at, i.used_at, w.id, w.lang)."""
     expires_at = NOW + timedelta(days=1) if expires_at is None else expires_at
-    return _store(rows=[("FROM invites", ("tok-1", worker_id, expires_at, used_at, worker_id))])
+    return _store(
+        rows=[("FROM invites", ("tok-1", worker_id, expires_at, used_at, worker_id, lang))]
+    )
 
 
 # ── PIN 해시 (평문 저장 금지) ─────────────────────────────
@@ -149,7 +153,9 @@ def test_activate_consumes_invite_in_one_transaction(monkeypatch):
 
     out = auth_service.activate("tok-1", "4321")
 
-    assert set(out) == {"jwt", "refresh"}
+    assert set(out) == {"jwt", "refresh", "lang"}          # M-35
+    assert out["lang"] == "vi" and out["lang"] in {"vi", "in"}
+    assert isinstance(out["jwt"], str) and isinstance(out["refresh"], str)
     sqls = _sqls(store)
     assert any("UPDATE workers SET pin_hash" in s for s in sqls)
     assert any("UPDATE invites SET used_at" in s for s in sqls)
@@ -331,10 +337,12 @@ def test_protected_endpoint_rejects_refresh_token():
 
 def test_activate_then_login_then_protected(monkeypatch):
     """WORKORDER V3-2 확인 방법: activate → login → JWT 로 보호 엔드포인트 200."""
-    store = _invite_store(worker_id=33)
+    store = _invite_store(worker_id=33, lang="in")
     monkeypatch.setattr(auth_service.tenancy, "connect", fake_connect(store))
     act = client.post("/api/v1/auth/activate", json={"token": "tok-1", "pin": "4321"})
     assert act.status_code == 200
+    assert set(act.json()) == {"jwt", "refresh", "lang"}   # M-35 — 라우터 통과 후에도 3키
+    assert act.json()["lang"] == "in"                      # 001 CHECK vi|in 다른 값도 그대로
 
     pin_hash = _params_for(store, "UPDATE workers SET pin_hash")[0]["pin_hash"]
     monkeypatch.setattr(
@@ -343,6 +351,7 @@ def test_activate_then_login_then_protected(monkeypatch):
     )
     log_in = client.post("/api/v1/auth/login", json={"emp_no": "E-33", "pin": "4321"})
     assert log_in.status_code == 200
+    assert set(log_in.json()) == {"jwt", "refresh"}        # login 은 M-35 대상 아님
 
     me = client.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {log_in.json()['jwt']}"}
@@ -360,7 +369,7 @@ def test_dispatch_supports_auth_paths(monkeypatch):
     status, body = relay_poller.dispatch(
         "POST", "/api/v1/auth/activate", {"token": "tok-1", "pin": "4321"}
     )
-    assert status == 200 and set(body) == {"jwt", "refresh"}
+    assert status == 200 and set(body) == {"jwt", "refresh", "lang"}   # M-35
 
     h = auth_service.hash_pin("1234")
     monkeypatch.setattr(

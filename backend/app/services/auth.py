@@ -56,7 +56,7 @@ TYP_REFRESH = "refresh"
 AUTH_FAILED_MESSAGE = "인증에 실패했습니다."
 
 _SELECT_INVITE = """
-SELECT i.token, i.worker_id, i.expires_at, i.used_at, w.id
+SELECT i.token, i.worker_id, i.expires_at, i.used_at, w.id, w.lang
 FROM invites i JOIN workers w ON w.id = i.worker_id
 WHERE i.token = %(token)s
 """
@@ -201,7 +201,10 @@ def rotate(refresh_token: str) -> dict:
 # ── 저장소 연동 ───────────────────────────────────────────
 
 def activate(token: str, pin: str) -> dict:
-    """초대 토큰 1회 소진 + PIN 해시 저장 → {jwt, refresh}. 단일 트랜잭션."""
+    """초대 토큰 1회 소진 + PIN 해시 저장 → {jwt, refresh, lang}. 단일 트랜잭션.
+
+    lang(M-35) 은 workers.lang(001 CHECK vi|in) 그대로다 — JWT claim 에는 넣지 않는다.
+    """
     tenant = tenancy.tenant_slug()
     with tenancy.connect() as conn:
         with conn.cursor() as cur:
@@ -210,7 +213,7 @@ def activate(token: str, pin: str) -> dict:
             if row is None:
                 _burn_time()
                 raise AuthError("invite not found")
-            _, worker_id, expires_at, used_at, _ = row
+            _, worker_id, expires_at, used_at, _, lang = row
             if used_at is not None:
                 raise AuthError("invite already used")
             if expires_at is not None and expires_at.timestamp() <= time.time():
@@ -222,8 +225,8 @@ def activate(token: str, pin: str) -> dict:
                 raise AuthError("invite already used (race)")
         conn.commit()
 
-    log.info("auth: activate worker_id=%s tenant=%s", worker_id, tenant)
-    return issue_token_pair(worker_id, tenant)
+    log.info("auth: activate worker_id=%s tenant=%s lang=%s", worker_id, tenant, lang)
+    return {**issue_token_pair(worker_id, tenant), "lang": lang}
 
 
 def login(emp_no: str, pin: str) -> dict:
