@@ -302,3 +302,120 @@ def test_issued_token_is_consumable_by_activate(monkeypatch):
     assert set(out) == {"jwt", "refresh"}
     assert _params_for(act_store, "SELECT i.token, i.worker_id")[0] == {"token": token}
     assert _params_for(act_store, "UPDATE invites SET used_at")[0] == {"token": token}
+
+
+# ── M-32b / M-08b ④: 신원·서버 도출 필드 가드 (판정 ②c) ──
+# IDENTITY_FIELDS 11종 중 초대 본문에 섞일 법한 것들을 실물 상수에서 뽑아 쓴다.
+
+GOOD = {"name": "n", "emp_no": "A-9", "lang": "vi"}
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"actor": "admin:1"},
+        {"tenant": "acme"},
+        {"tenant_slug": "acme"},
+        {"admin_id": 1},
+        {"worker_id": 7},
+        {"id": 3},
+        {"status": "activated"},
+        {"actor": "admin:1", "tenant": "acme"},   # 복수 — fields 에 정렬되어 둘 다
+    ],
+)
+def test_identity_fields_in_body_return_400(monkeypatch, extra):
+    """M-08b ④ — 무시가 아니라 400. 저장소는 호출되지 않는다."""
+    def _boom(*a, **k):
+        pytest.fail("가드가 400 을 내야 하는데 저장소를 호출했다")
+
+    monkeypatch.setattr(invites.tenancy, "connect", _boom)
+    r = client.post("/api/v1/admin/workers/invite", json={**GOOD, **extra})
+
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert detail["error"] == "forbidden_fields"
+    assert detail["fields"] == sorted(extra)          # 걸린 필드 전부 회신
+
+
+def test_guard_uses_the_shared_identity_field_set():
+    """가드 대상 집합은 M-08b ④ 단일 상수 — 초대용으로 새로 만들지 않는다."""
+    from app.services.risk_reports import IDENTITY_FIELDS, identity_fields_in
+
+    assert identity_fields_in({**GOOD, "actor": "x"}) == ["actor"]
+    assert "actor" in IDENTITY_FIELDS and "tenant" in IDENTITY_FIELDS
+
+
+def test_clean_body_still_returns_201(monkeypatch):
+    """가드 추가가 정상 경로를 막지 않는다 — 여분 필드 없는 본문은 그대로 201."""
+    store = _store(rows=NEW_WORKER)
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/admin/workers/invite", json=GOOD)
+
+    assert r.status_code == 201, r.text
+    assert set(r.json()) == {"invite_url"}
+
+
+@pytest.mark.asyncio
+async def test_edge_identity_guard_fires_before_relay_enqueue(monkeypatch):
+    """edge 에서도 400 — 릴레이 큐에 적재되지 않는다(가드가 분기보다 앞)."""
+    import asyncio
+
+    import httpx
+
+    from app.main import build_app
+    from app.services import relay
+
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "0.2")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    relay.queue.reset()
+    edge_app = build_app("edge")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=edge_app), base_url="http://edge"
+    ) as edge_client:
+        r = await asyncio.wait_for(
+            edge_client.post("/api/v1/admin/workers/invite", json={**GOOD, "actor": "admin:1"}),
+            timeout=5,
+        )
+
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"]["fields"] == ["actor"]
+    assert relay.queue.snapshot() == []      # 큐 미적재 — 보류·504 로 흘러가지 않는다
+    relay.queue.reset()
+
+
+@pytest.mark.asyncio
+async def test_edge_clean_body_still_enqueues(monkeypatch):
+    """대조군 — 정상 본문은 edge 에서 여전히 큐에 적재된다(가드가 과잉 차단하지 않는다)."""
+    import asyncio
+
+    import httpx
+
+    from app.main import build_app
+    from app.services import relay
+
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "3")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "5")
+    relay.queue.reset()
+    edge_app = build_app("edge")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=edge_app), base_url="http://edge"
+    ) as edge_client:
+        task = asyncio.create_task(
+            edge_client.post("/api/v1/admin/workers/invite", json=GOOD)
+        )
+        pend = await edge_client.get("/internal/relay/pending")
+        items = pend.json()["items"]
+        assert len(items) == 1 and items[0]["body"] == GOOD
+        await edge_client.post(
+            f"/internal/relay/{items[0]['request_id']}/respond",
+            json={"status_code": 201, "body": {"invite_url": "http://localhost/activate?token=t"}},
+        )
+        resp = await task
+
+    assert resp.status_code == 201
+    relay.queue.reset()

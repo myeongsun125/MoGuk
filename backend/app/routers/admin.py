@@ -96,7 +96,7 @@ class InviteRequest(BaseModel):
 
 
 @router.post("/workers/invite", status_code=201)
-async def invite_worker(body: InviteRequest) -> JSONResponse:
+async def invite_worker(body: InviteRequest, request: Request) -> JSONResponse:
     """{name, emp_no, lang} → 201 {invite_url} (M-32).
 
     emp_no 미활성 중복은 재초대(기존 미사용 초대 만료 후 신규 1건), 활성 워커는 409.
@@ -104,6 +104,10 @@ async def invite_worker(body: InviteRequest) -> JSONResponse:
 
     M-32b: edge 는 DB 자격이 없으므로 릴레이 큐 경유(M-28c 동형) — 201·409·422 그대로 투과.
     """
+    # M-08b ④ — 관리자 POST 4종과 동일한 가드. 릴레이 분기보다 앞이라 edge 에서도
+    # 큐에 적재되기 전에 400 이 난다. InviteRequest 는 여분 필드를 조용히 버리므로
+    # 원 본문을 따로 읽어 검사한다(파이단틱은 파싱만, 판정은 이 가드가 한다).
+    _reject_identity_fields(await _json_body(request))
     if role() == "edge":
         return await _relay(INVITE_PATH, "POST", body.model_dump())
     try:
