@@ -1,4 +1,4 @@
-import type { GlossaryTerm } from "./types";
+import type { GlossaryTerm, GlossaryTransitionResult } from "./types";
 import { approveMock, listMock, rejectMock } from "./fixtures/glossary.fixtures";
 
 // Mock 경계 (skeleton-v3 §7). GET/POST /admin/glossary* 는 백엔드 스텁(0830 확인).
@@ -14,7 +14,7 @@ export async function listGlossary(status = "draft"): Promise<GlossaryTerm[]> {
   return (await res.json()) as GlossaryTerm[];
 }
 
-export async function approveGlossary(id: number): Promise<GlossaryTerm> {
+export async function approveGlossary(id: number): Promise<GlossaryTransitionResult> {
   if (USE_MOCK) {
     await delay(150);
     const t = approveMock(id);
@@ -23,10 +23,10 @@ export async function approveGlossary(id: number): Promise<GlossaryTerm> {
   }
   const res = await fetch(`/api/v1/admin/glossary/${id}/approve`, { method: "POST" });
   if (!res.ok) throw new Error(`approve failed: ${res.status}`);
-  return (await res.json()) as GlossaryTerm;
+  return (await res.json()) as GlossaryTransitionResult;
 }
 
-export async function rejectGlossary(id: number): Promise<GlossaryTerm> {
+export async function rejectGlossary(id: number): Promise<GlossaryTransitionResult> {
   if (USE_MOCK) {
     await delay(150);
     const t = rejectMock(id);
@@ -35,7 +35,7 @@ export async function rejectGlossary(id: number): Promise<GlossaryTerm> {
   }
   const res = await fetch(`/api/v1/admin/glossary/${id}/reject`, { method: "POST" });
   if (!res.ok) throw new Error(`reject failed: ${res.status}`);
-  return (await res.json()) as GlossaryTerm;
+  return (await res.json()) as GlossaryTransitionResult;
 }
 
 function delay(ms: number): Promise<void> {

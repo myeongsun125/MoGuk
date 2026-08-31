@@ -175,6 +175,13 @@ export interface GlossaryTerm {
   approved_at: string | null;
 }
 
+// approve/reject 실응답 — 전체 GlossaryTerm이 아니라 {id,status}뿐(approval.py:152 _transition
+// 반환값, §3:238). 목록 갱신은 별도 GET으로 하므로 화면은 이 값을 쓰지 않는다.
+export interface GlossaryTransitionResult {
+  id: number;
+  status: GlossaryStatus;
+}
+
 // 감사 로그 — M-08d(검토 중), GET /admin/events (읽기 전용). 실API 계약 표 확정 전까지
 // 이 필드 목록이 mock 정본(총괄 0830 지정): actor·target_type·target_id·action·
 // from_state·to_state·detail·created_at.
