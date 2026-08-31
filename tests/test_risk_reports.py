@@ -245,6 +245,59 @@ def test_worker_success_updates_snapshot_and_event(monkeypatch):
     assert any("status='done'" in s for s in sqls)
 
 
+def test_summary_done_records_statement_clock_not_transaction_now(monkeypatch):
+    """D-8 — 요약 완료 시각은 clock_timestamp()(문장 시각)다.
+
+    now() 는 트랜잭션 시작 시각이라 process_once 의 단일 트랜잭션 안에서 도는 요약 LLM
+    소요가 통째로 빠진다 — processed_at - created_at 이 0 에 수렴하는 원인.
+    """
+    store = _store(rows=[
+        ("FOR UPDATE SKIP LOCKED", (9, "summarize_report", {"report_id": 77}, 0)),
+        ("SELECT original_text", ("프레스 원문",)),
+    ])
+    monkeypatch.setattr(job_runner.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    _patch_llm_ok(monkeypatch, severity="high")
+
+    assert job_runner.process_once() is True
+
+    upd = [q for q in _sqls(store) if "SET ko_summary" in q][0]
+    assert "processed_at = clock_timestamp()" in upd
+    assert "processed_at = now()" not in upd
+
+    ev_sql = [q for q in _sqls(store) if "INSERT INTO risk_report_events" in q][-1]
+    assert "created_at" in ev_sql and "clock_timestamp()" in ev_sql   # 열 DEFAULT 의존 제거
+    assert _params_for(store, "INSERT INTO risk_report_events")[-1]["action"] == "summary_done"
+
+
+def test_other_event_paths_keep_column_default(monkeypatch):
+    """D-8 범위 밖 — 접수 경로 이벤트는 열 DEFAULT(now()) 그대로다."""
+    store = _store(rows=[("INSERT INTO risk_reports", (77, CREATED_AT)), ("INSERT INTO jobs", (9,))])
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    risk_reports.submit_text_report("프레스 안전덮개가 열려 있습니다", lang="vi")
+
+    ev_sql = [q for q in _sqls(store) if "INSERT INTO risk_report_events" in q][-1]
+    assert "clock_timestamp()" not in ev_sql
+    assert "created_at" not in ev_sql                     # 열 목록에 없음 = DEFAULT 사용
+
+
+def test_summary_failed_leaves_processed_at_null(monkeypatch):
+    """무회귀 — 실패 경로는 processed_at 을 건드리지 않는다(_UPDATE_STATE)."""
+    store = _fail_store(attempts=2)
+    monkeypatch.setattr(job_runner.tenancy, "connect", fake_connect(store))
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    _patch_llm_fail(monkeypatch)
+
+    assert job_runner.process_once() is True
+
+    state_sql = [q for q in _sqls(store) if "SET processing_state" in q]
+    assert state_sql and all("processed_at" not in q for q in state_sql)
+    assert not any("SET ko_summary" in q for q in _sqls(store))
+    ev = _params_for(store, "INSERT INTO risk_report_events")[-1]
+    assert ev["action"] == "summary_failed" and ev["to_state"] == "failed"
+
+
 def test_worker_returns_false_on_empty_queue(monkeypatch):
     store = _store(rows=[("FOR UPDATE SKIP LOCKED", None)])
     monkeypatch.setattr(job_runner.tenancy, "connect", fake_connect(store))

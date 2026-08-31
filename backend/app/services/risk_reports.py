@@ -91,6 +91,14 @@ INSERT INTO risk_report_events (report_id, actor, action, from_state, to_state, 
 VALUES (%(report_id)s, %(actor)s, %(action)s, %(from_state)s, %(to_state)s, %(detail)s)
 """
 
+# D-8: created_at 을 명시 기록하는 변형. 001 의 열 DEFAULT now() 는 트랜잭션 시작 시각이라
+# 요약 완료처럼 긴 트랜잭션 끝에 남는 이벤트에서는 실제 기록 시점과 어긋난다.
+# summary_done 전용 — 접수·전이·확인 경로는 위 _INSERT_EVENT(열 DEFAULT) 그대로다.
+_INSERT_EVENT_CLOCK = """
+INSERT INTO risk_report_events (report_id, actor, action, from_state, to_state, detail, created_at)
+VALUES (%(report_id)s, %(actor)s, %(action)s, %(from_state)s, %(to_state)s, %(detail)s, clock_timestamp())
+"""
+
 _INSERT_JOB = """
 INSERT INTO jobs (kind, payload) VALUES (%(kind)s, %(payload)s::jsonb) RETURNING id
 """
@@ -101,10 +109,13 @@ SELECT id, source, original_text, lang, ko_summary, severity, status,
 FROM risk_reports WHERE id = %(id)s
 """
 
+# D-8: processed_at 은 clock_timestamp()(문장 시각). now() 는 **트랜잭션 시작 시각**이라
+# job_runner.process_once 의 단일 트랜잭션 안에서 도는 요약 LLM 소요가 통째로 빠져
+# processed_at - created_at 이 0 에 수렴한다(총괄 확정 산출식 = 픽업 대기 + 요약).
 _UPDATE_SUMMARY_DONE = """
 UPDATE risk_reports
 SET ko_summary = %(ko_summary)s, severity = %(severity)s,
-    processing_state = %(state)s, processed_at = now()
+    processing_state = %(state)s, processed_at = clock_timestamp()
 WHERE id = %(id)s
 """
 
@@ -168,10 +179,15 @@ def record_event(
     from_state: str | None = None,
     to_state: str | None = None,
     detail: str | None = None,
+    at_clock: bool = False,
 ) -> None:
-    """risk_report_events 에 1행 추가. append-only — 갱신·삭제 경로는 두지 않는다."""
+    """risk_report_events 에 1행 추가. append-only — 갱신·삭제 경로는 두지 않는다.
+
+    at_clock=True 면 created_at 을 clock_timestamp() 로 명시한다(D-8). 기본값은 001 의
+    열 DEFAULT now() 를 그대로 쓴다 — 짧은 트랜잭션에서는 둘이 같고, 기존 경로를 건드리지 않는다.
+    """
     cur.execute(
-        _INSERT_EVENT,
+        _INSERT_EVENT_CLOCK if at_clock else _INSERT_EVENT,
         {
             "report_id": report_id,
             "actor": actor,
@@ -265,6 +281,7 @@ def mark_summary_done(cur, report_id: int, ko_summary: str, severity: str) -> No
         from_state=STATE_RUNNING,
         to_state=STATE_DONE,
         detail=f"severity={severity}",
+        at_clock=True,                      # D-8 — 요약 완료 시각은 문장 시각으로
     )
 
 

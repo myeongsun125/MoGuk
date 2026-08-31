@@ -130,6 +130,7 @@ def _handle_summarize(cur, job: dict) -> None:
         raise LocalSummaryError(f"report_id={report_id} 원문 비어 있음")
 
     risk_reports.mark_running(cur, report_id)
+    # 이월: 요약 LLM(2~3s) 이 process_once 의 단일 트랜잭션을 점유한다 — 구조 변경은 별건.
     ko_summary, severity = summarize_report(original_text)
     risk_reports.mark_summary_done(cur, report_id, ko_summary, severity)
 
