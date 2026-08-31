@@ -11,6 +11,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
      · GET /api/v1/admin/dashboard(KPI 4종+추이) · GET /api/v1/admin/{glossary,unanswered}?status=
      · GET /api/v1/admin/events(M-08d 감사 로그) · POST /api/v1/admin/glossary/{id}/approve|reject
      · POST /api/v1/admin/reports/{id}/ack|resolve  (M-28c ① — method 축 추가).
+     · POST /api/v1/admin/workers/invite(M-32b — 초대 발급, 201/409/422).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -227,6 +228,19 @@ def dispatch(
             return 404, {"detail": "report not found"}
         except TransitionError as exc:
             return 422, {"detail": str(exc)}
+    if method == "POST" and route == "/api/v1/admin/workers/invite":
+        # M-32b: 초대 발급도 core 소유(DB·admin_events). 라우터 재호출 없이 서비스 함수 직접 호출.
+        # 상태코드 3분기는 core 라우터(routers/admin.py invite_worker)와 동일하다.
+        from app.services import invites
+
+        try:
+            return 201, invites.create_invite(
+                body.get("name"), body.get("emp_no"), body.get("lang")
+            )
+        except invites.InvalidInviteRequest as exc:
+            return 422, {"detail": str(exc)}
+        except invites.WorkerAlreadyActive as exc:
+            return 409, {"detail": str(exc)}
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
 
 
