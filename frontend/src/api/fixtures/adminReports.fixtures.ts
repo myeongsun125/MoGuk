@@ -109,7 +109,7 @@ export function getMock(id: number): AdminReportDetail | undefined {
     r.events = [...r.events, mkEvent("original_viewed", null, null)];
     appendEvent({
       actor: "admin:unauthenticated",
-      target_type: "risk_report",
+      target_type: "report", // M-36 확정 계약 — admin_events.py:35 REPORT_TARGET_TYPE, §3:243
       target_id: id,
       action: "original_viewed",
       from_state: null,
@@ -129,7 +129,7 @@ export function ackMock(id: number): { id: number; status: string } | "conflict"
   r.events = [...r.events, mkEvent("report_acknowledged", "submitted", "acknowledged")];
   appendEvent({
     actor: "admin:unauthenticated",
-    target_type: "risk_report",
+    target_type: "report", // M-36 확정 계약 — admin_events.py:35 REPORT_TARGET_TYPE, §3:243
     target_id: id,
     action: "report_acknowledged",
     from_state: "submitted",
@@ -152,7 +152,7 @@ export function resolveMock(
   r.events = [...r.events, mkEvent("report_resolved", "acknowledged", "resolved")];
   appendEvent({
     actor: "admin:unauthenticated",
-    target_type: "risk_report",
+    target_type: "report", // M-36 확정 계약 — admin_events.py:35 REPORT_TARGET_TYPE, §3:243
     target_id: id,
     action: "report_resolved",
     from_state: "acknowledged",
