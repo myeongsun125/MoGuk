@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import risk_reports
+from app.services import auth as auth_service, risk_reports
 from app.workers import job_runner
 
 client = TestClient(app, client=("127.0.0.1", 50000))
@@ -84,11 +84,21 @@ def _params_for(store, needle):
     return [c[1] for c in store["calls"] if needle in c[0]]
 
 
+JWT_SECRET_TEST = "test-secret-for-d4-confirm-auth"
+
+
 @pytest.fixture(autouse=True)
 def _base_env(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@127.0.0.1:1/test")
     monkeypatch.setenv("API_ROLE", "core")
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET_TEST)     # confirm 인증 필수(D-4 A)
     monkeypatch.delenv("TENANT_SLUG", raising=False)
+
+
+def _worker_headers(wid: int = 5) -> dict:
+    """D-4 A — confirm 은 보호 엔드포인트다. 유효 access 토큰을 실제로 발급해 붙인다."""
+    jwt = auth_service.issue_token_pair(wid, "demo")["jwt"]
+    return {"Authorization": f"Bearer {jwt}"}
 
 
 # ── M-08b ①: 결정론 접수 ──────────────────────────────────
@@ -810,14 +820,47 @@ def test_confirm_on_local_failed_echoes_original_only(monkeypatch):
     assert not any(s.strip().upper().startswith("UPDATE") for s in _sqls(store))
 
 
-def test_confirm_endpoint_unauthenticated_actor(monkeypatch):
+def test_confirm_endpoint_requires_authentication(monkeypatch):
+    """D-4 A — 미인증 confirm 은 401. 이벤트도 남기지 않는다(반전, 전 규약은 200 허용)."""
     store = _confirm_store()
     monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
 
     r = client.post("/api/v1/reports/1/confirm", json={"result": "confirmed"})
 
-    assert r.status_code == 200
-    assert _params_for(store, "INSERT INTO risk_report_events")[-1]["actor"] == "worker:unauthenticated"
+    assert r.status_code == 401
+    assert r.headers.get("WWW-Authenticate") == "Bearer"
+    assert not any("INSERT INTO risk_report_events" in q for q in _sqls(store))
+    assert store["commits"] == 0
+
+
+# 헤더 값은 ASCII 만 — httpx 가 비ASCII 헤더를 인코딩 단계에서 거부한다(제품 규약 무관).
+@pytest.mark.parametrize("header", [None, "", "Token abc", "Bearer ", "Bearer not.a.jwt"])
+def test_confirm_rejects_missing_or_bad_bearer(header, monkeypatch):
+    """헤더 부재·접두 오류·위조 전부 401 — require_worker 현행 규약 그대로."""
+    store = _confirm_store()
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+    headers = {} if header is None else {"Authorization": header}
+
+    r = client.post("/api/v1/reports/1/confirm", json={"result": "confirmed"}, headers=headers)
+
+    assert r.status_code == 401
+    assert not any("INSERT INTO risk_report_events" in q for q in _sqls(store))
+
+
+def test_confirm_relay_path_rejects_missing_identity(monkeypatch):
+    """릴레이는 라우터를 거치지 않는다 — identity None 이면 core 가 401 로 끊는다."""
+    from app.workers import relay_poller
+
+    store = _confirm_store()
+    monkeypatch.setattr(risk_reports.tenancy, "connect", fake_connect(store))
+
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/reports/1/confirm", {"result": "confirmed"}, identity=None
+    )
+
+    assert status == 401
+    assert body == {"detail": auth_service.AUTH_FAILED_MESSAGE}      # 사유 무구분
+    assert not any("INSERT INTO risk_report_events" in q for q in _sqls(store))
 
 
 def test_confirm_dispatch_consumes_identity(monkeypatch):
@@ -835,7 +878,10 @@ def test_confirm_dispatch_consumes_identity(monkeypatch):
 
 
 def test_confirm_rejects_unknown_result():
-    assert client.post("/api/v1/reports/1/confirm", json={"result": "maybe"}).status_code == 422
+    r = client.post(
+        "/api/v1/reports/1/confirm", json={"result": "maybe"}, headers=_worker_headers()
+    )
+    assert r.status_code == 422                       # 인증 통과 후 본문 검증에서 걸린다
 
 
 # ── 신원 본문 400 (M-08b ④ — 전이·confirm 전부) ──────────
@@ -854,7 +900,9 @@ def test_identity_fields_rejected_on_transition_and_confirm(field, monkeypatch):
         ("/api/v1/reports/1/confirm", {"result": "confirmed", field: 1}),
     )
     for path, body in cases:
-        r = client.post(path, json=body)
+        # confirm 은 D-4 A 로 인증 필수 — 인증을 통과시킨 뒤에도 400 가드가 걸리는지 본다.
+        headers = _worker_headers() if path.endswith("/confirm") else {}
+        r = client.post(path, json=body, headers=headers)
         assert r.status_code == 400, (path, r.status_code)
         assert r.json()["detail"]["error"] == "forbidden_fields"
         assert field in r.json()["detail"]["fields"]

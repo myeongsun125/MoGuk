@@ -163,8 +163,13 @@ def dispatch(
         )
     if method == "POST" and path.startswith("/api/v1/reports/") and path.endswith("/confirm"):
         # M-08c 확인 루프 — actor 는 identity.wid 에서 도출(M-28b ②)
+        from app.services.auth import AUTH_FAILED_MESSAGE
         from app.services.risk_reports import ReportNotFound, confirm
 
+        if worker_id is None:
+            # D-4 A: confirm 은 인증 필수. 릴레이는 라우터를 거치지 않으므로(서비스 직접 호출)
+            # edge 의 require_worker 401 과 같은 결론을 여기서도 내야 한다. 사유는 구분하지 않는다.
+            return 401, {"detail": AUTH_FAILED_MESSAGE}
         try:
             report_id = int(path.split("/")[4])
         except (IndexError, ValueError):

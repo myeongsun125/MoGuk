@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.routers.auth import optional_identity
+from app.routers.auth import optional_identity, require_worker
 from app.services import risk_reports
 from app.services.relay import queue
 from app.services.system_service import role
@@ -124,9 +124,15 @@ async def confirm_report(
     report_id: int,
     body: ConfirmRequest,
     request: Request,
-    identity: dict | None = Depends(optional_identity),
+    claims: dict = Depends(require_worker),
 ) -> JSONResponse:
-    """M-08c 보고자 확인 루프 — 비차단. actor = worker:<wid>(M-28b identity 소비)."""
+    """M-08c 보고자 확인 루프 — 비차단. actor = worker:<wid>(M-28b identity 소비).
+
+    인증 필수(M-35 D-4 A) — 헤더 부재·위조·만료는 require_worker 가 401 로 끊는다.
+    "비차단"은 접수·관리자 노출이 보고자 확인을 기다리지 않는다는 뜻이고(M-08c ①)
+    확인 요청 자체의 인증 요구와는 무관하다.
+    """
+    identity = {"wid": claims["wid"], "tenant": claims.get("tenant")}
     raw = await request.json()
     bad = risk_reports.identity_fields_in(raw)
     if bad:
