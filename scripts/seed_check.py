@@ -241,18 +241,27 @@ def seed_checks() -> None:
     hr = sum(1 for p in ph if p.get("high_risk") is True)
     row(S, "phrases_10 10건·high_risk≥3", "PASS" if len(ph) == 10 and hr >= 3 else "FAIL", f"{len(ph)}건, high_risk={hr}")
 
+    # 건수 기대값은 _meta.counts 선언을 따른다(오염셋 확장 추종, 하드코딩 폐지).
+    # sentences_30 은 counts 선언이 없는 기준셋(S01~S30 정의)이라 30 을 그대로 쓴다.
     for name, d in (("sentences_30", se), ("corrupted_30", co)):
         keys = list(d.keys())
         row(S, f"{name} dict 키(구조 변경 금지)", "PASS" if len(keys) == 3 else "FAIL", f"{len(keys)}개: {keys}")
-        row(S, f"{name} items 30건", "PASS" if len(d["items"]) == 30 else "FAIL", f"{len(d['items'])}건")
+        declared = d.get("_meta", {}).get("counts")
+        expected = sum(declared.values()) if declared else 30
+        row(S, f"{name} items {expected}건",
+            "PASS" if len(d["items"]) == expected else "FAIL", f"{len(d['items'])}건")
     sids = [s["id"] for s in se["items"]]
     dup_s = sorted({k for k in sids if sids.count(k) > 1})
     row(S, "sentences id 유일", "PASS" if not dup_s else "FAIL", "중복 0" if not dup_s else str(dup_s))
     types: dict[str, int] = {}
     for c in co["items"]:
         types[c["type"]] = types.get(c["type"], 0) + 1
-    ok = types.get("term_swap") == 10 and types.get("negation") == 10 and types.get("number") == 10 and len(types) == 3
-    row(S, "corrupted type별 10/10/10", "PASS" if ok else "FAIL", str(types))
+    # 선언(_meta.counts)과 실배분이 정확히 같아야 한다. 선언이 없으면 기본값을 만들지 않고 FAIL.
+    declared_types = co.get("_meta", {}).get("counts")
+    ok = bool(declared_types) and types == declared_types
+    label = ("corrupted type별 " + "/".join(str(v) for v in declared_types.values())
+             if declared_types else "corrupted type별 _meta.counts 부재")
+    row(S, label, "PASS" if ok else "FAIL", str(types))
     pref = {"C": "term_swap", "N": "negation", "M": "number"}
     bad_pref = [c["id"] for c in co["items"] if pref.get(c["id"][0]) != c["type"]]
     row(S, "corrupted id 접두(C/N/M)↔type", "PASS" if not bad_pref else "FAIL", "전 건 일치" if not bad_pref else str(bad_pref))
@@ -404,8 +413,9 @@ def seed_checks() -> None:
             why = "" if ok else ("숫자 미변경" if na == nb else "숫자 외 텍스트도 변경")
         if not ok:
             bad_c.append(f"{c['id']}({c['base_id']},{t}): {why}")
+    n_c = len(co["items"])
     row(S, "corrupted_vi vs answer_vi type별 프로그램 대조", "PASS" if not bad_c else "FAIL",
-        f"{30-len(bad_c)}/30 type대로" + ("" if not bad_c else "; 불일치: " + "; ".join(bad_c)))
+        f"{n_c-len(bad_c)}/{n_c} type대로" + ("" if not bad_c else "; 불일치: " + "; ".join(bad_c)))
 
     # ---------------- [vi 구조 대조 (§3 보조)] ----------------
     S = "vi 구조 대조(보조)"
