@@ -2,12 +2,40 @@
   min-height: 100vh;
 }
 
-.admin-nav {
+.admin-header {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 20px;
   border-bottom: 1px solid #e5e5e5;
   background: #fff;
+}
+
+.admin-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.admin-lang-toggle {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.admin-lang-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.admin-lang-btn.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
 }
 
 .admin-nav-link {

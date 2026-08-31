@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { approveGlossary, listGlossary, rejectGlossary } from "../../../../api/glossary";
 import type { GlossaryTerm } from "../../../../api/types";
-import { useLang } from "../../../../i18n/LangContext";
+import { useAdminLang } from "../../../../i18n/AdminLangContext";
 import "./Glossary.css";
 
 export default function AdminGlossaryScreen() {
-  const { t } = useLang();
+  const { t } = useAdminLang();
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
