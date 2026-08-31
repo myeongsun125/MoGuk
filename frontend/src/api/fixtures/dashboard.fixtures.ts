@@ -25,6 +25,8 @@ export function buildDashboardMock(): DashboardSummary {
     reports_today_hourly: hours.map((hour, i) => ({ hour, count: sample[i % sample.length] })),
     generated_at: `${dateStr}T${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`,
     timezone: "Asia/Seoul",
+    per_worker: PER_WORKER_MOCK,
+    per_module: PER_MODULE_MOCK,
   };
 }
 

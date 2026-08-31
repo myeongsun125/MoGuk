@@ -82,6 +82,37 @@ export interface TransitionResult {
   status: ReportStatus;
 }
 
+// 워커 위험보고 제출/확인 — skeleton-v3 §3, backend/app/routers/reports.py. PR-3(워커 플로우).
+export interface ReportSubmitRequest {
+  original_text: string;
+  lang: string;
+  source: "voice" | "text";
+}
+
+export interface ReportSubmitResponse {
+  id: number;
+  status: ReportStatus;
+  created_at: string;
+}
+
+export type ConfirmResult = "confirmed" | "corrected";
+
+export interface ConfirmRequest {
+  result: ConfirmResult;
+  corrected_text?: string;
+}
+
+// 실API 응답은 result 분기별로 형태가 다르다(services/risk_reports.py:410-465 confirm()) —
+// confirmed=reporter_confirmed만, corrected=requeued_job_id만, local_failed=원문+안내만.
+export interface ConfirmResponse {
+  id: number;
+  result: ConfirmResult | "local_failed";
+  reporter_confirmed?: boolean;
+  requeued_job_id?: number;
+  original_text?: string;
+  message?: string;
+}
+
 // 대시보드 — skeleton-v3 §3 GET /admin/dashboard (B). #45 실API 계약 그대로(0830 머지).
 // per_worker/per_module 은 이 API 응답에 없음(§3 "V5" 명시) — 별도 상수 mock(아래)로 분리.
 export type ComprehensionLabel = "red" | "yellow" | "green";
@@ -111,6 +142,9 @@ export interface DashboardSummary {
   reports_today_hourly: HourlyTrendPoint[]; // 오늘 시간대별 보고 건수, 00시~현재 zero-fill
   generated_at: string;
   timezone: string;
+  // 학습 KPI(V5) — 실API 미반환(admin.py:76 이월). 응답에 없으면 화면이 보조 섹션을 숨긴다(P8 결손 수정).
+  per_worker?: PerWorkerRow[];
+  per_module?: PerModuleRow[];
 }
 
 // 보조 영역 — 학습 KPI(V5), /admin/dashboard 응답에 없어 상수 mock으로 별도 관리.

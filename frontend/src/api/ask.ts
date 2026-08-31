@@ -1,5 +1,6 @@
 import type { AskRequest, AskResponse } from "./types";
 import { ASK_FIXTURE_GATED, ASK_FIXTURE_GROUNDED } from "./fixtures/ask.fixtures";
+import { getToken } from "../auth/AuthContext";
 
 // Mock 경계 단일 진입점 (skeleton-v3 §7). 실연동(SB V2-2) cutover 시 이 파일만 교체.
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
@@ -8,9 +9,13 @@ export async function askQuestion(req: AskRequest): Promise<AskResponse> {
   if (USE_MOCK) {
     return mockAsk(req);
   }
+  const token = getToken();
   const res = await fetch("/api/v1/ask", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(req),
   });
   if (!res.ok) {

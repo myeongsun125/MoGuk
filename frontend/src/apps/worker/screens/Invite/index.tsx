@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLang } from "../../../../i18n/LangContext";
+import { useAuth } from "../../../../auth/AuthContext";
 import { activate } from "../../../../api/auth";
 import type { Lang } from "../../../../api/types";
 import "./Invite.css";
@@ -16,6 +17,7 @@ export default function InviteScreen() {
   const [params] = useSearchParams();
   const token = params.get("token");
   const { lang, setLang, t } = useLang();
+  const { setToken } = useAuth();
   const [pin, setPin] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const navigate = useNavigate();
@@ -25,7 +27,8 @@ export default function InviteScreen() {
     if (!token) return;
     setStatus("loading");
     try {
-      await activate(token, pin);
+      const res = await activate(token, pin);
+      setToken(res.jwt, res.refresh);
       navigate("/ask");
     } catch {
       setStatus("error");

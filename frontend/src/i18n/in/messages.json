@@ -20,5 +20,18 @@
   "worker.ask.noSources": "Tidak ada dasar",
   "worker.ask.gatedMessage": "Perlu konfirmasi admin",
   "worker.ask.traceLabel": "ID pelacakan",
-  "worker.ask.scoreLabel": "Skor verifikasi"
+  "worker.ask.scoreLabel": "Skor verifikasi",
+  "worker.report.title": "Laporan bahaya",
+  "worker.report.placeholder": "Masukkan situasi bahaya",
+  "worker.report.submit": "Kirim",
+  "worker.report.submitting": "Mengirim...",
+  "worker.report.error": "Gagal mengirim. Silakan coba lagi.",
+  "worker.report.acceptedLabel": "Diterima",
+  "worker.report.confirmPrompt": "Apakah ringkasan ini benar?",
+  "worker.report.confirmYes": "Benar",
+  "worker.report.confirmNo": "Tidak benar",
+  "worker.report.confirmError": "Konfirmasi gagal. Silakan coba lagi.",
+  "worker.report.confirmedDone": "Terima kasih atas konfirmasinya.",
+  "worker.report.correctedDone": "Permintaan koreksi telah diterima.",
+  "worker.report.summaryFailed": "Pembuatan ringkasan gagal. Laporan telah diterima dengan normal dan admin akan memeriksa teks asli secara langsung."
 }
