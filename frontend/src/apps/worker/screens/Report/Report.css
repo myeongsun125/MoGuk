@@ -78,9 +78,21 @@
 }
 
 .confirm-failed {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 12px;
   border-radius: 8px;
   background: #fff4e5;
   color: #9c5700;
+}
+
+.confirm-failed p {
+  margin: 0;
+}
+
+.confirm-echo {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  white-space: pre-wrap;
 }

@@ -37,5 +37,7 @@
   "worker.nav.report": "Laporan bahaya",
   "admin.glossary.rejectNotePlaceholder": "Alasan penolakan (opsional)",
   "admin.glossary.rejectConfirm": "Konfirmasi penolakan",
-  "admin.glossary.rejectCancel": "Batal"
+  "admin.glossary.rejectCancel": "Batal",
+  "worker.report.echoLabel": "Isi yang Anda kirim",
+  "worker.report.confirmReauth": "Undangan telah kedaluwarsa atau sesi hilang. Silakan hubungi admin untuk penerbitan ulang dan aktifkan kembali."
 }

@@ -37,7 +37,8 @@ export async function confirmReport(id: number, body: ConfirmRequest): Promise<C
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`confirm failed: ${res.status}`);
+    // status를 실어 보낸다 — 화면이 401(재인증 필요)과 그 외 오류를 구분해야 한다(#61 이월 ⑤).
+    throw Object.assign(new Error(`confirm failed: ${res.status}`), { status: res.status });
   }
   return (await res.json()) as ConfirmResponse;
 }

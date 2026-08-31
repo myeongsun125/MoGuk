@@ -6,6 +6,11 @@ import "./Report.css";
 
 type SubmitStatus = "idle" | "loading" | "error";
 type ConfirmStatus = "idle" | "loading" | "done" | "error";
+type ConfirmErrorKind = "generic" | "reauth";
+
+function errorStatus(e: unknown): number | undefined {
+  return e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
+}
 
 export default function ReportScreen() {
   const { lang, t } = useLang();
@@ -13,7 +18,8 @@ export default function ReportScreen() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [submitted, setSubmitted] = useState<ReportSubmitResponse | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>("idle");
-  const [confirmResult, setConfirmResult] = useState<ConfirmResponse["result"] | null>(null);
+  const [confirmResponse, setConfirmResponse] = useState<ConfirmResponse | null>(null);
+  const [confirmErrorKind, setConfirmErrorKind] = useState<ConfirmErrorKind>("generic");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -23,7 +29,7 @@ export default function ReportScreen() {
       const res = await submitReport({ original_text: text, lang, source: "text" });
       setSubmitted(res);
       setConfirmStatus("idle");
-      setConfirmResult(null);
+      setConfirmResponse(null);
       setStatus("idle");
     } catch {
       setStatus("error");
@@ -35,9 +41,11 @@ export default function ReportScreen() {
     setConfirmStatus("loading");
     try {
       const res = await confirmReport(submitted.id, { result });
-      setConfirmResult(res.result);
+      setConfirmResponse(res);
       setConfirmStatus("done");
-    } catch {
+    } catch (e) {
+      // 401(재인증 필요)과 그 외 오류는 반드시 구분한다 — ★일반 에러와 무구분 처리 금지.
+      setConfirmErrorKind(errorStatus(e) === 401 ? "reauth" : "generic");
       setConfirmStatus("error");
     }
   }
@@ -88,7 +96,12 @@ export default function ReportScreen() {
               >
                 {t("worker.report.confirmNo")}
               </button>
-              {confirmStatus === "error" && (
+              {confirmStatus === "error" && confirmErrorKind === "reauth" && (
+                <p className="error" data-testid="confirm-reauth">
+                  {t("worker.report.confirmReauth")}
+                </p>
+              )}
+              {confirmStatus === "error" && confirmErrorKind === "generic" && (
                 <p className="error" data-testid="confirm-error">
                   {t("worker.report.confirmError")}
                 </p>
@@ -96,15 +109,20 @@ export default function ReportScreen() {
             </div>
           )}
 
-          {confirmStatus === "done" && confirmResult === "local_failed" && (
-            <p className="confirm-failed" data-testid="confirm-failed">
-              {t("worker.report.summaryFailed")}
-            </p>
+          {confirmStatus === "done" && confirmResponse?.result === "local_failed" && (
+            <div className="confirm-failed" data-testid="confirm-failed">
+              <p>{confirmResponse.message ?? t("worker.report.summaryFailed")}</p>
+              {confirmResponse.original_text && (
+                <p className="confirm-echo" data-testid="confirm-failed-echo">
+                  {t("worker.report.echoLabel")}: {confirmResponse.original_text}
+                </p>
+              )}
+            </div>
           )}
 
-          {confirmStatus === "done" && confirmResult !== "local_failed" && (
+          {confirmStatus === "done" && confirmResponse && confirmResponse.result !== "local_failed" && (
             <p className="confirm-done" data-testid="confirm-done">
-              {confirmResult === "confirmed"
+              {confirmResponse.result === "confirmed"
                 ? t("worker.report.confirmedDone")
                 : t("worker.report.correctedDone")}
             </p>
