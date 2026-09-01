@@ -108,14 +108,15 @@ def test_invite_creates_worker_and_returns_url(monkeypatch):
 
     assert r.status_code == 201
     body = r.json()
-    assert set(body) == {"invite_url"}
+    assert set(body) == {"invite_url", "worker_id"}    # §3:236 (M-39 파트2) — worker_id 추가
+    assert body["worker_id"] == 11                     # INSERT RETURNING id 실값
     m = re.fullmatch(r"http://localhost/activate\?token=([A-Za-z0-9_-]+)", body["invite_url"])
     assert m, body["invite_url"]
     assert len(m.group(1)) >= 40                       # token_urlsafe(32) → 43자
     assert store["commits"] == 1 and store["connects"] == 1
 
     w = _params_for(store, "INSERT INTO workers")[0]
-    assert w == {"name": "응웬반아", "emp_no": "A-001", "lang": "vi"}
+    assert w == {"name": "응웬반아", "emp_no": "A-001", "lang": "vi", "phone": None}
     assert "invited_at" in [s for s in _sqls(store) if "INSERT INTO workers" in s][0]
 
 
@@ -354,7 +355,7 @@ def test_clean_body_still_returns_201(monkeypatch):
     r = client.post("/api/v1/admin/workers/invite", json=GOOD)
 
     assert r.status_code == 201, r.text
-    assert set(r.json()) == {"invite_url"}
+    assert set(r.json()) == {"invite_url", "worker_id"}    # §3:236 (M-39 파트2)
 
 
 @pytest.mark.asyncio
@@ -411,7 +412,8 @@ async def test_edge_clean_body_still_enqueues(monkeypatch):
         )
         pend = await edge_client.get("/internal/relay/pending")
         items = pend.json()["items"]
-        assert len(items) == 1 and items[0]["body"] == GOOD
+        # model_dump 는 미지정 phone 을 None 으로 실어 보낸다(M-39 파트2) — core 가 NULL 저장
+        assert len(items) == 1 and items[0]["body"] == {**GOOD, "phone": None}
         await edge_client.post(
             f"/internal/relay/{items[0]['request_id']}/respond",
             json={"status_code": 201, "body": {"invite_url": "http://localhost/activate?token=t"}},
@@ -420,3 +422,73 @@ async def test_edge_clean_body_still_enqueues(monkeypatch):
 
     assert resp.status_code == 201
     relay.queue.reset()
+
+
+# ── M-39 파트2: phone 선택 필드 + worker_id 응답 (§3:236) ──
+
+def test_invite_with_phone_stores_it(monkeypatch):
+    store = _store(rows=NEW_WORKER)
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/admin/workers/invite",
+                    json={"name": "n", "emp_no": "P-001", "lang": "vi", "phone": "010-1234-5678"})
+
+    assert r.status_code == 201, r.text
+    assert r.json()["worker_id"] == 11
+    assert _params_for(store, "INSERT INTO workers")[0]["phone"] == "010-1234-5678"
+
+
+def test_invite_without_phone_stores_null(monkeypatch):
+    store = _store(rows=NEW_WORKER)
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/admin/workers/invite",
+                    json={"name": "n", "emp_no": "P-002", "lang": "vi"})
+
+    assert r.status_code == 201, r.text
+    assert _params_for(store, "INSERT INTO workers")[0]["phone"] is None
+    assert not any("UPDATE workers SET phone" in s for s in _sqls(store))
+
+
+@pytest.mark.parametrize("intl", ["+84 912 345 678", "+62 812-3456-7890"])
+def test_intl_phone_stored_verbatim(monkeypatch, intl):
+    """국제표기 +84·+62 — 정규화·변형 없이 문자열 그대로 저장(계약: 형식 검증 없음)."""
+    store = _store(rows=NEW_WORKER)
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    client.post("/api/v1/admin/workers/invite",
+                json={"name": "n", "emp_no": "P-003", "lang": "in", "phone": intl})
+
+    assert _params_for(store, "INSERT INTO workers")[0]["phone"] == intl
+
+
+def test_reinvite_response_worker_id_matches_existing(monkeypatch):
+    store = _store(rows=PENDING_WORKER)                       # 기존 워커 id=7
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/admin/workers/invite",
+                    json={"name": "n", "emp_no": "P-004", "lang": "vi"})
+
+    assert r.status_code == 201
+    assert r.json()["worker_id"] == 7
+
+
+def test_reinvite_with_phone_updates_existing_worker(monkeypatch):
+    store = _store(rows=PENDING_WORKER)
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    client.post("/api/v1/admin/workers/invite",
+                json={"name": "n", "emp_no": "P-005", "lang": "vi", "phone": "+84 912 345 678"})
+
+    assert _params_for(store, "UPDATE workers SET phone")[0] == {"id": 7, "phone": "+84 912 345 678"}
+
+
+def test_reinvite_without_phone_leaves_phone_untouched(monkeypatch):
+    """미지정 재초대가 기존 phone 을 지우지 않는다 — UPDATE 자체가 없어야 한다."""
+    store = _store(rows=PENDING_WORKER)
+    monkeypatch.setattr(invites.tenancy, "connect", fake_connect(store))
+
+    client.post("/api/v1/admin/workers/invite",
+                json={"name": "n", "emp_no": "P-006", "lang": "vi"})
+
+    assert not any("UPDATE workers SET phone" in s for s in _sqls(store))

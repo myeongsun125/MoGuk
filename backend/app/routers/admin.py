@@ -96,11 +96,12 @@ class InviteRequest(BaseModel):
     name: str
     emp_no: str
     lang: str
+    phone: str | None = None       # M-39 파트2 선택 필드 — 형식 검증 없음(계약), 그대로 저장
 
 
 @router.post("/workers/invite", status_code=201)
 async def invite_worker(body: InviteRequest, request: Request) -> JSONResponse:
-    """{name, emp_no, lang} → 201 {invite_url} (M-32).
+    """{name, emp_no, lang, phone?} → 201 {invite_url, worker_id} (M-32 · §3:236 M-39 파트2).
 
     emp_no 미활성 중복은 재초대(기존 미사용 초대 만료 후 신규 1건), 활성 워커는 409.
     발급마다 admin_events 1행(action='worker_invited').
@@ -115,7 +116,7 @@ async def invite_worker(body: InviteRequest, request: Request) -> JSONResponse:
         return await _relay(INVITE_PATH, "POST", body.model_dump())
     try:
         result = await asyncio.to_thread(
-            invites.create_invite, body.name, body.emp_no, body.lang
+            invites.create_invite, body.name, body.emp_no, body.lang, body.phone
         )
     except invites.InvalidInviteRequest as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None

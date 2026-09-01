@@ -256,7 +256,7 @@ def dispatch(
 
         try:
             return 201, invites.create_invite(
-                body.get("name"), body.get("emp_no"), body.get("lang")
+                body.get("name"), body.get("emp_no"), body.get("lang"), body.get("phone")
             )
         except invites.InvalidInviteRequest as exc:
             return 422, {"detail": str(exc)}
