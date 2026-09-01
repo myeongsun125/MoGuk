@@ -1,10 +1,32 @@
 import { useState, type FormEvent } from "react";
 import { useLang } from "../../../../i18n/LangContext";
 import { askQuestion } from "../../../../api/ask";
-import type { AskResponse } from "../../../../api/types";
+import type { AskResponse, AskSource } from "../../../../api/types";
 import "./Ask.css";
 
 type Status = "idle" | "loading" | "error";
+
+type SourceGroup = {
+  document_id: number;
+  title: string;
+  category: string;
+  chunkIds: number[];
+};
+
+// 같은 document_id 청크를 1칩으로 묶는다 — ★dedup(버리기)이 아니라 표시 묶음이므로
+// 청크 id는 chunkIds에 그대로 유지한다(현재는 title 속성 상세로 노출).
+function groupSources(sources: AskSource[]): SourceGroup[] {
+  const groups = new Map<number, SourceGroup>();
+  for (const s of sources) {
+    const g = groups.get(s.document_id);
+    if (g) {
+      g.chunkIds.push(s.chunk_id);
+    } else {
+      groups.set(s.document_id, { document_id: s.document_id, title: s.title, category: s.category, chunkIds: [s.chunk_id] });
+    }
+  }
+  return Array.from(groups.values());
+}
 
 export default function AskScreen() {
   const { lang, t } = useLang();
@@ -74,13 +96,14 @@ export default function AskScreen() {
                 {t("worker.ask.noSources")}
               </span>
             ) : (
-              result.sources.map((s) => (
+              groupSources(result.sources).map((g) => (
                 <span
-                  key={`${s.document_id}-${s.chunk_id}`}
-                  className={s.category === "safety" ? "badge badge-safety" : "badge"}
+                  key={g.document_id}
+                  className={g.category === "safety" ? "badge badge-safety" : "badge"}
                   data-testid="source-badge"
+                  title={`${g.title} · ${g.category} (chunk ${g.chunkIds.join(", ")})`}
                 >
-                  {s.title} · {s.category}
+                  {g.chunkIds.length > 1 ? `${g.title} ×${g.chunkIds.length}` : `${g.title} · ${g.category}`}
                 </span>
               ))
             )}

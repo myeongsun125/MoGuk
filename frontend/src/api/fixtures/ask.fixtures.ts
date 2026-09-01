@@ -20,3 +20,18 @@ export const ASK_FIXTURE_GATED: AskResponse = {
   verify: { score: null, passed: false, gated: true, gate_reason: "grounding" },
   trace_id: "mock-trace-0002",
 };
+
+// 동일 document_id 청크 다건 + 별도 문서 1건 — 출처 칩 묶음(document_id 기준 1칩·"제목 ×N")
+// 회귀용 고정 픽스처.
+export const ASK_FIXTURE_MULTISOURCE: AskResponse = {
+  answer:
+    "Trước khi vận hành máy ép, hãy kiểm tra nút dừng khẩn cấp và đảm bảo tấm chắn an toàn đã đóng.",
+  sources: [
+    { document_id: 1, chunk_id: 12, title: "프레스 작업 안전수칙", category: "safety" },
+    { document_id: 1, chunk_id: 15, title: "프레스 작업 안전수칙", category: "safety" },
+    { document_id: 1, chunk_id: 21, title: "프레스 작업 안전수칙", category: "safety" },
+    { document_id: 2, chunk_id: 4, title: "지게차 운행 매뉴얼", category: "general" },
+  ],
+  verify: { score: 0.9, passed: true, gated: false, gate_reason: null },
+  trace_id: "mock-trace-0003",
+};
