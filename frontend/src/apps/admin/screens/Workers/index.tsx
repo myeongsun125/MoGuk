@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import QRCode from "qrcode";
-import { inviteWorker } from "../../../../api/adminWorkers";
+import { inviteWorker, sendInvite } from "../../../../api/adminWorkers";
 import type { WorkerInviteLang, WorkerInviteResult } from "../../../../api/types";
 import { useAdminLang } from "../../../../i18n/AdminLangContext";
 import "./Workers.css";
 
 type Status = "idle" | "loading" | "error";
 type ErrorKind = "duplicate" | "invalid" | "generic";
+type SendStatus = "idle" | "loading" | "error";
 
 function errorStatus(e: unknown): number | undefined {
   return e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
@@ -23,6 +24,9 @@ export default function AdminWorkersScreen() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
   const [result, setResult] = useState<WorkerInviteResult | null>(null);
+  const [sendStatus, setSendStatus] = useState<SendStatus>("idle");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -56,6 +60,47 @@ export default function AdminWorkersScreen() {
     setEmpNo("");
     setPhone("");
     setStatus("idle");
+    setSendStatus("idle");
+    setShareUrl(null);
+    setCopied(false);
+  }
+
+  // ⑤ SB #87 파트1 확정: {channel:'kakao_link'} → {share_url}. worker_id는 파트2 전 실
+  // 백엔드가 아직 안 채우므로 result.worker_id 없으면 버튼 자체가 disabled(아래 렌더).
+  async function handleSendKakao() {
+    if (!result?.worker_id) return;
+    setSendStatus("loading");
+    setCopied(false);
+    setShareUrl(null);
+    try {
+      const { share_url } = await sendInvite(result.worker_id, "kakao_link");
+      let nativeShared = false;
+      if (typeof navigator.share === "function") {
+        try {
+          await navigator.share({ url: share_url });
+          nativeShared = true;
+        } catch (e) {
+          // 사용자가 공유 시트를 취소한 것은 에러가 아니다 — 그대로 종료(클립보드 폴백 없음).
+          if (e instanceof Error && e.name === "AbortError") {
+            nativeShared = true;
+          }
+        }
+      }
+      if (!nativeShared) {
+        // navigator.share 미지원이거나 취소가 아닌 사유로 실패 — 링크를 화면에 항상 노출하고
+        // 클립보드 복사까지 시도한다(복사도 실패하면 노출된 텍스트로 수동 복사).
+        setShareUrl(share_url);
+        try {
+          await navigator.clipboard.writeText(share_url);
+          setCopied(true);
+        } catch {
+          // 복사 실패 — shareUrl 텍스트 노출만으로 수동 복사 유도.
+        }
+      }
+      setSendStatus("idle");
+    } catch {
+      setSendStatus("error");
+    }
   }
 
   function handleSaveImage() {
@@ -148,11 +193,35 @@ export default function AdminWorkersScreen() {
             <button type="button" data-testid="invite-save-image" onClick={handleSaveImage}>
               이미지 저장
             </button>
-            <button type="button" data-testid="invite-send" disabled title={t("admin.workers.sendComingSoon")}>
-              카톡/문자로 보내기
+            <button
+              type="button"
+              data-testid="invite-send"
+              disabled={!result.worker_id || sendStatus === "loading"}
+              onClick={handleSendKakao}
+            >
+              {sendStatus === "loading" ? t("admin.workers.submitting") : t("admin.workers.sendKakao")}
             </button>
           </div>
-          <p className="hint">{t("admin.workers.sendComingSoon")}</p>
+
+          {!result.worker_id && (
+            <p className="hint" data-testid="send-no-worker-id">
+              실백엔드가 아직 worker_id를 내려주지 않습니다(SB #87 파트2 예정) — 발급 응답에
+              worker_id가 있어야 발송 버튼이 활성화됩니다.
+            </p>
+          )}
+          {sendStatus === "error" && (
+            <p className="error" data-testid="send-error">
+              {t("admin.workers.sendError")}
+            </p>
+          )}
+          {copied && (
+            <p data-testid="send-copied">{t("admin.workers.sendCopied")}</p>
+          )}
+          {shareUrl && (
+            <p className="share-url-text" data-testid="share-url-text">
+              {shareUrl}
+            </p>
+          )}
 
           <button type="button" data-testid="invite-new" onClick={handleReset}>
             새 근로자 등록

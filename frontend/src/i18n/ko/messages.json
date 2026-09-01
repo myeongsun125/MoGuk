@@ -54,5 +54,7 @@
   "admin.workers.errorDuplicate": "이미 활성화된 사번입니다. 사번을 확인해 주세요.",
   "admin.workers.errorInvalid": "이름·사번·언어를 다시 확인해 주세요.",
   "admin.workers.errorGeneric": "초대 발급에 실패했습니다. 다시 시도해 주세요.",
-  "admin.workers.sendComingSoon": "발송 API 연결 예정"
+  "admin.workers.sendKakao": "카톡으로 보내기",
+  "admin.workers.sendCopied": "링크가 복사되었습니다",
+  "admin.workers.sendError": "공유에 실패했습니다. 아래 링크를 복사해 주세요"
 }

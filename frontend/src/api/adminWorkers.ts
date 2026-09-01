@@ -1,5 +1,5 @@
-import type { WorkerInviteRequest, WorkerInviteResult } from "./types";
-import { inviteMock } from "./fixtures/adminWorkers.fixtures";
+import type { SendInviteResult, WorkerInviteRequest, WorkerInviteResult } from "./types";
+import { inviteMock, sendInviteMock } from "./fixtures/adminWorkers.fixtures";
 
 // Mock 경계 (skeleton-v3 §7). glossary.ts·adminUnanswered.ts 구조 템플릿 — 어드민 API는
 // IP 화이트리스트로 보호되어 Bearer를 붙이지 않는다.
@@ -23,6 +23,27 @@ export async function inviteWorker(body: WorkerInviteRequest): Promise<WorkerInv
     throw Object.assign(new Error(`invite failed: ${res.status}`), { status: res.status });
   }
   return (await res.json()) as WorkerInviteResult;
+}
+
+// {id}=worker_id(경로), body {channel} — SB #87 파트1 확정. Bearer 미부착(invite와 동일).
+// 에러는 status를 Error에 실어 던진다(inviteWorker와 동일 관례).
+export async function sendInvite(
+  workerId: number,
+  channel: "kakao_link" = "kakao_link",
+): Promise<SendInviteResult> {
+  if (USE_MOCK) {
+    await delay(150);
+    return sendInviteMock(workerId, channel);
+  }
+  const res = await fetch(`/api/v1/admin/workers/${workerId}/send-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel }),
+  });
+  if (!res.ok) {
+    throw Object.assign(new Error(`send-invite failed: ${res.status}`), { status: res.status });
+  }
+  return (await res.json()) as SendInviteResult;
 }
 
 function delay(ms: number): Promise<void> {

@@ -54,5 +54,7 @@
   "admin.workers.errorDuplicate": "Mã số nhân viên này đã được kích hoạt. Vui lòng kiểm tra lại.",
   "admin.workers.errorInvalid": "Vui lòng kiểm tra lại tên, mã số nhân viên và ngôn ngữ.",
   "admin.workers.errorGeneric": "Cấp lời mời thất bại. Vui lòng thử lại.",
-  "admin.workers.sendComingSoon": "Sẽ kết nối API gửi tin"
+  "admin.workers.sendKakao": "Gửi qua KakaoTalk",
+  "admin.workers.sendCopied": "Đã sao chép liên kết",
+  "admin.workers.sendError": "Chia sẻ thất bại. Vui lòng sao chép liên kết bên dưới"
 }

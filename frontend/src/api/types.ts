@@ -245,6 +245,15 @@ export interface WorkerInviteRequest {
 }
 
 // invites.py:137 create_invite 반환 그대로 — 201 성공 시 이 한 필드뿐.
+// worker_id는 §3 계약 밖(SB #87 파트2 전) — 그 전까지 실백엔드는 안 채운다. mock은
+// ⑤ 카톡 발송 버튼 활성화 조건으로 쓰기 위해 지금부터 채운다(optional로 방어적 처리).
 export interface WorkerInviteResult {
   invite_url: string;
+  worker_id?: number;
+}
+
+// 카톡 발송 — POST /admin/workers/{id}/send-invite (SB #87 파트1 확정, {id}=worker_id).
+// body {channel:'kakao_link'} → 이 응답. 어드민 API 관례대로 Bearer 미부착.
+export interface SendInviteResult {
+  share_url: string;
 }

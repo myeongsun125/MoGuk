@@ -85,6 +85,16 @@
   border-radius: 8px;
 }
 
+.share-url-text {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f4f4f4;
+  font-size: 0.8rem;
+  color: #444;
+  word-break: break-all;
+}
+
 .invite-actions {
   display: flex;
   gap: 8px;
