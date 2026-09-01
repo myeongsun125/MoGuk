@@ -257,3 +257,29 @@ export interface WorkerInviteResult {
 export interface SendInviteResult {
   share_url: string;
 }
+
+// 퀴즈(learn) — data/seed/quiz/quiz_learning_1.json·quiz_safety_1.json 실물 구조 그대로
+// 전사(★q_in·choices_in·explain_vi/in 없음 — 시드가 ko+vi만 있음, in은 화면에서 ko 폴백).
+// GET 문항 경로·응답 키는 SB 미확정 — 지금은 mock fixture만, 실경로 배선은 api/learn.ts에
+// TODO 1줄로 남긴다.
+export interface QuizItem {
+  q_ko: string;
+  q_vi: string;
+  choices: string[];
+  choices_vi: string[];
+  answer_idx: number;
+  explain_ko: string;
+  source?: string;
+  src?: string;
+  quote?: string;
+}
+
+// POST /learn/quiz/{set_id}/submit body {answers:number[]} → 이 응답(learn.py:13-15 주석,
+// M-01 tenant threshold 판정). label 값 enum은 SB 미확정 — mock에서 "red"|"yellow"|"green"
+// 3색으로 임시 정의(관리자 Dashboard의 ComprehensionLabel과 동일 색 관례 재사용), 실값 오면
+// 화면의 색 매핑 함수 1곳만 교체하면 된다. 타입은 string으로 넓게 둔다(미확정 계약 보수적 처리).
+export interface QuizSubmitResult {
+  score: number;
+  passed: boolean;
+  label: string;
+}

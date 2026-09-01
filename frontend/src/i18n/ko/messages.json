@@ -35,6 +35,7 @@
   "worker.report.summaryFailed": "요약 생성에 실패했습니다. 신고는 정상 접수되었으며 관리자가 원문을 직접 확인합니다.",
   "worker.nav.ask": "질의응답",
   "worker.nav.report": "위험보고",
+  "worker.nav.quiz": "퀴즈",
   "admin.glossary.rejectNotePlaceholder": "반려 사유(선택)",
   "admin.glossary.rejectConfirm": "반려 확정",
   "admin.glossary.rejectCancel": "취소",
@@ -57,5 +58,18 @@
   "admin.workers.sendKakao": "카톡으로 보내기",
   "admin.workers.sendCopied": "링크가 복사되었습니다",
   "admin.workers.sendError": "공유에 실패했습니다. 아래 링크를 복사해 주세요",
-  "admin.workers.linkRefreshed": "새 링크로 갱신됨(이전 QR 무효)"
+  "admin.workers.linkRefreshed": "새 링크로 갱신됨(이전 QR 무효)",
+  "worker.quiz.title": "안전 퀴즈",
+  "worker.quiz.loadingItems": "문항을 불러오는 중...",
+  "worker.quiz.loadError": "문항을 불러오지 못했습니다. 다시 시도해 주세요.",
+  "worker.quiz.retry": "다시 시도",
+  "worker.quiz.submit": "제출",
+  "worker.quiz.submitting": "제출 중...",
+  "worker.quiz.submitError": "제출에 실패했습니다. 다시 시도해 주세요.",
+  "worker.quiz.scoreLabel": "점수",
+  "worker.quiz.passed": "통과",
+  "worker.quiz.failed": "미통과",
+  "worker.quiz.resultTitle": "결과",
+  "worker.quiz.termHint": "용어 힌트",
+  "worker.quiz.termHintComingSoon": "준비 중"
 }
