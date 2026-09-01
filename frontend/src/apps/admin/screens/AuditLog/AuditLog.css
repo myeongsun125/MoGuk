@@ -36,6 +36,14 @@
   color: #666;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* flex 자식 기본 min-width:auto 때문에 내부 표 폭만큼 부모가 밀리는 것을 방지 —
+     이래야 좁은 화면에서 페이지가 아니라 이 래퍼 안에서만 가로 스크롤된다. */
+  min-width: 0;
+}
+
 .event-table {
   width: 100%;
   border-collapse: collapse;

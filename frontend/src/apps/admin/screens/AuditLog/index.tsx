@@ -59,43 +59,45 @@ export default function AdminAuditLogScreen() {
       {loading && <p>불러오는 중...</p>}
       {error && <p className="error">{error}</p>}
 
-      <table className="event-table" data-testid="event-table">
-        <thead>
-          <tr>
-            <th>시각</th>
-            <th>행위자</th>
-            <th>대상</th>
-            <th>action</th>
-            <th>전→후</th>
-            <th>비고</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((ev) => (
-            // M-36: id는 target_type별 시퀀스(admin_events·risk_report_events)라 유일하지
-            // 않다 — target_type+id로 합성해야 병합 시 충돌하지 않는다.
-            <tr key={`${ev.target_type}-${ev.id}`} data-testid="event-row">
-              <td className="col-time">{formatKst(ev.created_at)}</td>
-              <td>{ev.actor ?? "-"}</td>
-              <td>
-                {ev.target_type} #{ev.target_id}
-              </td>
-              <td className="col-action">{ev.action}</td>
-              <td>
-                {ev.from_state || ev.to_state ? `${ev.from_state ?? "-"} → ${ev.to_state ?? "-"}` : "-"}
-              </td>
-              <td className="col-detail">{ev.detail ?? "-"}</td>
-            </tr>
-          ))}
-          {!loading && events.length === 0 && (
+      <div className="table-scroll">
+        <table className="event-table" data-testid="event-table">
+          <thead>
             <tr>
-              <td colSpan={6} className="empty-row">
-                해당 날짜 기록이 없습니다.
-              </td>
+              <th>시각</th>
+              <th>행위자</th>
+              <th>대상</th>
+              <th>action</th>
+              <th>전→후</th>
+              <th>비고</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {events.map((ev) => (
+              // M-36: id는 target_type별 시퀀스(admin_events·risk_report_events)라 유일하지
+              // 않다 — target_type+id로 합성해야 병합 시 충돌하지 않는다.
+              <tr key={`${ev.target_type}-${ev.id}`} data-testid="event-row">
+                <td className="col-time">{formatKst(ev.created_at)}</td>
+                <td>{ev.actor ?? "-"}</td>
+                <td>
+                  {ev.target_type} #{ev.target_id}
+                </td>
+                <td className="col-action">{ev.action}</td>
+                <td>
+                  {ev.from_state || ev.to_state ? `${ev.from_state ?? "-"} → ${ev.to_state ?? "-"}` : "-"}
+                </td>
+                <td className="col-detail">{ev.detail ?? "-"}</td>
+              </tr>
+            ))}
+            {!loading && events.length === 0 && (
+              <tr>
+                <td colSpan={6} className="empty-row">
+                  해당 날짜 기록이 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

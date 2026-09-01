@@ -103,6 +103,14 @@
   border-radius: 999px;
   background: #eef2ff;
   color: #3730a3;
+  /* 칩 폭은 px 상·하한 없이 순수 비율로만 — 100%(컨테이너 이내)·60vw(넓은 화면 캡) 모두 비율 단위 */
+  max-width: min(100%, 60vw);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .badge-safety {

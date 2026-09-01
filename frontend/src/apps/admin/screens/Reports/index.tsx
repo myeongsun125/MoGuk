@@ -175,15 +175,17 @@ export default function AdminReportsScreen() {
           )}
 
           <h3>이력</h3>
-          <ul className="event-list" data-testid="event-list">
-            {detail.events.map((ev) => (
-              <li key={ev.id}>
-                <span className="ev-action">{ev.action}</span>
-                <span className="ev-actor">{ev.actor ?? "-"}</span>
-                <span className="ev-time">{formatKst(ev.created_at)}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="table-scroll">
+            <ul className="event-list" data-testid="event-list">
+              {detail.events.map((ev) => (
+                <li key={ev.id}>
+                  <span className="ev-action">{ev.action}</span>
+                  <span className="ev-actor">{ev.actor ?? "-"}</span>
+                  <span className="ev-time">{formatKst(ev.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </div>
