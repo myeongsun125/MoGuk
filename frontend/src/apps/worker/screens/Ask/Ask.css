@@ -103,8 +103,8 @@
   border-radius: 999px;
   background: #eef2ff;
   color: #3730a3;
-  /* 칩 폭은 px 고정이 아니라 컨테이너 비율로 — 좁은 화면에서 칩이 넘치지 않도록 */
-  max-width: clamp(120px, 45vw, 260px);
+  /* 칩 폭은 px 상·하한 없이 순수 비율로만 — 100%(컨테이너 이내)·60vw(넓은 화면 캡) 모두 비율 단위 */
+  max-width: min(100%, 60vw);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
