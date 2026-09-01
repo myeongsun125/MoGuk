@@ -39,5 +39,11 @@
   "admin.glossary.rejectConfirm": "Xác nhận từ chối",
   "admin.glossary.rejectCancel": "Huỷ",
   "worker.report.echoLabel": "Nội dung bạn đã gửi",
-  "worker.report.confirmReauth": "Lời mời đã hết hạn hoặc phiên đã mất. Vui lòng liên hệ quản trị viên để cấp lại và kích hoạt lại."
+  "worker.report.confirmReauth": "Lời mời đã hết hạn hoặc phiên đã mất. Vui lòng liên hệ quản trị viên để cấp lại và kích hoạt lại.",
+  "admin.unanswered.answerPlaceholder": "Nhập câu trả lời",
+  "admin.unanswered.answerSubmit": "Gửi câu trả lời",
+  "admin.unanswered.answerSubmitting": "Đang gửi...",
+  "admin.unanswered.answerError": "Gửi câu trả lời thất bại. Vui lòng thử lại.",
+  "admin.unanswered.answerErrorNotFound": "Không tìm thấy câu hỏi này. Vui lòng làm mới danh sách.",
+  "admin.unanswered.answerErrorConflict": "Câu hỏi đã được xử lý hoặc nội dung trả lời trống. Vui lòng làm mới và thử lại."
 }

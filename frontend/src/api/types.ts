@@ -188,6 +188,34 @@ export interface GlossaryTransitionResult {
   status: GlossaryStatus;
 }
 
+// 무근거 질의 큐(M-05·M-05a) — GET /admin/unanswered?status= (기본 open). 필드는
+// approval.py UNANSWERED_KEYS(001 unanswered_queue + questions 조인) 전사, JH #74 확인.
+export type UnansweredStatus = "open" | "answered";
+
+export interface UnansweredItem {
+  id: number;
+  question_id: number;
+  status: UnansweredStatus | string;
+  question: string | null;
+  lang: string | null;
+  question_created_at: string;
+  admin_answer: string | null;
+  answered_at: string | null;
+}
+
+// POST /admin/unanswered/{question_id}/answer 응답 — #74 착륙(approval.py:205-268 answer_unanswered,
+// admin.py:203-220) 코드로 대조 확정. id는 unanswered_queue.id(=목록 item.id와 동축, 경로파라미터인
+// question_id와는 다른 축). ingest_job_id는 jobs.id(001:126 `id serial` → number).
+export interface AnswerResult {
+  id: number;
+  status: "answered";
+  answered_at: string;
+  ingest_job_id: number;
+}
+// 에러: text 누락/공백 422(InvalidAnswer)·open 아님 422(TransitionError)·대상 없음 404
+// (UnansweredNotFound) — 셋 다 detail 있는 HTTPException, adminUnanswered.ts가 status를
+// Error에 실어 던진다(reports.ts confirm 401 관례와 동일).
+
 // 감사 로그 — M-08d(검토 중), GET /admin/events (읽기 전용). 실API 계약 표 확정 전까지
 // 이 필드 목록이 mock 정본(총괄 0830 지정): actor·target_type·target_id·action·
 // from_state·to_state·detail·created_at.

@@ -8,6 +8,7 @@ const LINKS = [
   { to: "/admin/dashboard", label: "대시보드" },
   { to: "/admin/glossary", label: "승인큐" },
   { to: "/admin/events", label: "감사 로그" },
+  { to: "/admin/unanswered", label: "무근거 질의" },
 ];
 
 // endonym(자기표기) 고정 상수 — WorkerLayout과 동일 관례(#61). i18n 대상 아님.
