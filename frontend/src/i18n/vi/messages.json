@@ -45,5 +45,14 @@
   "admin.unanswered.answerSubmitting": "Đang gửi...",
   "admin.unanswered.answerError": "Gửi câu trả lời thất bại. Vui lòng thử lại.",
   "admin.unanswered.answerErrorNotFound": "Không tìm thấy câu hỏi này. Vui lòng làm mới danh sách.",
-  "admin.unanswered.answerErrorConflict": "Câu hỏi đã được xử lý hoặc nội dung trả lời trống. Vui lòng làm mới và thử lại."
+  "admin.unanswered.answerErrorConflict": "Câu hỏi đã được xử lý hoặc nội dung trả lời trống. Vui lòng làm mới và thử lại.",
+  "admin.workers.namePlaceholder": "Nhập tên",
+  "admin.workers.empNoPlaceholder": "Nhập mã số nhân viên",
+  "admin.workers.phonePlaceholder": "Nhập số điện thoại",
+  "admin.workers.submit": "Cấp lời mời",
+  "admin.workers.submitting": "Đang cấp...",
+  "admin.workers.errorDuplicate": "Mã số nhân viên này đã được kích hoạt. Vui lòng kiểm tra lại.",
+  "admin.workers.errorInvalid": "Vui lòng kiểm tra lại tên, mã số nhân viên và ngôn ngữ.",
+  "admin.workers.errorGeneric": "Cấp lời mời thất bại. Vui lòng thử lại.",
+  "admin.workers.sendComingSoon": "Sẽ kết nối API gửi tin"
 }

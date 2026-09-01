@@ -45,5 +45,14 @@
   "admin.unanswered.answerSubmitting": "Mengirim...",
   "admin.unanswered.answerError": "Gagal mengirim jawaban. Silakan coba lagi.",
   "admin.unanswered.answerErrorNotFound": "Pertanyaan tidak ditemukan. Silakan segarkan daftar.",
-  "admin.unanswered.answerErrorConflict": "Sudah diproses atau jawaban kosong. Silakan segarkan dan coba lagi."
+  "admin.unanswered.answerErrorConflict": "Sudah diproses atau jawaban kosong. Silakan segarkan dan coba lagi.",
+  "admin.workers.namePlaceholder": "Masukkan nama",
+  "admin.workers.empNoPlaceholder": "Masukkan nomor pegawai",
+  "admin.workers.phonePlaceholder": "Masukkan nomor telepon",
+  "admin.workers.submit": "Terbitkan undangan",
+  "admin.workers.submitting": "Menerbitkan...",
+  "admin.workers.errorDuplicate": "Nomor pegawai ini sudah aktif. Silakan periksa kembali.",
+  "admin.workers.errorInvalid": "Silakan periksa kembali nama, nomor pegawai, dan bahasa.",
+  "admin.workers.errorGeneric": "Gagal menerbitkan undangan. Silakan coba lagi.",
+  "admin.workers.sendComingSoon": "API pengiriman akan segera terhubung"
 }
