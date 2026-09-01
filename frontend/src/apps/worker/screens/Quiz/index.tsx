@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLang } from "../../../../i18n/LangContext";
-import { getQuizItems, submitQuiz } from "../../../../api/learn";
-import type { QuizItem, QuizSubmitResult } from "../../../../api/types";
+import { getQuizSet, submitQuiz } from "../../../../api/learn";
+import type { QuizSet, QuizSubmitResult } from "../../../../api/types";
 import "./Quiz.css";
 
-// GET 문항 경로가 SB 미확정이라 set_id는 이 화면의 임시 고정값(mock 매핑,
-// api/fixtures/learn.fixtures.ts QUIZ_SETS[1]=learning_1) — 실경로 확정되면
-// 세트 선택 UI(모듈별 목록 등)로 대체될 수 있다.
+// §3 M-38 확정 계약: GET /learn/quiz/{set_id}?lang=이 q·choices·term_hints를 이미
+// localize해 내려준다 — 세트 선택 UI는 아직 없어 이 화면의 임시 고정값(mock 매핑,
+// api/fixtures/learn.fixtures.ts QUIZ_SET_META[1]=learning_1).
 const SET_ID = 1;
 
 type LoadStatus = "loading" | "loaded" | "error";
@@ -18,18 +18,9 @@ const LABEL_CLASS: Record<string, string> = {
   green: "badge-label-green",
 };
 
-// q_in·choices_in 시드 콘텐츠가 없다(★vi만 있음) — in은 ko로 폴백한다.
-// TODO(MS): in 퀴즈 콘텐츠 시드 부재
-function pickQuestion(item: QuizItem, lang: string): string {
-  return lang === "vi" ? item.q_vi : item.q_ko;
-}
-function pickChoices(item: QuizItem, lang: string): string[] {
-  return lang === "vi" ? item.choices_vi : item.choices;
-}
-
 export default function QuizScreen() {
   const { lang, t } = useLang();
-  const [items, setItems] = useState<QuizItem[]>([]);
+  const [quizSet, setQuizSet] = useState<QuizSet | null>(null);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>("loading");
   const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle");
@@ -38,9 +29,11 @@ export default function QuizScreen() {
   async function load() {
     setLoadStatus("loading");
     try {
-      const data = await getQuizItems(SET_ID);
-      setItems(data);
-      setAnswers(new Array(data.length).fill(null));
+      const data = await getQuizSet(SET_ID, lang);
+      setQuizSet(data);
+      setAnswers(new Array(data.items.length).fill(null));
+      setSubmitStatus("idle");
+      setResult(null);
       setLoadStatus("loaded");
     } catch {
       setLoadStatus("error");
@@ -49,8 +42,9 @@ export default function QuizScreen() {
 
   useEffect(() => {
     load();
+    // lang이 바뀌면 서버가 다시 localize한 문항을 새로 받아야 한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [lang]);
 
   function selectAnswer(itemIdx: number, choiceIdx: number) {
     setAnswers((a) => a.map((v, i) => (i === itemIdx ? choiceIdx : v)));
@@ -85,20 +79,20 @@ export default function QuizScreen() {
         </div>
       )}
 
-      {loadStatus === "loaded" && (
+      {loadStatus === "loaded" && quizSet && (
         <>
+          {quizSet.status === "draft" && (
+            <p className="quiz-draft-banner" data-testid="quiz-draft-banner">
+              {t("worker.quiz.draftLabel")}
+            </p>
+          )}
+
           <ul className="quiz-item-list" data-testid="quiz-item-list">
-            {items.map((item, itemIdx) => (
-              <li key={itemIdx} className="quiz-item" data-testid="quiz-item">
-                <div className="quiz-item-head">
-                  <p className="quiz-question">{pickQuestion(item, lang)}</p>
-                  {/* 용어 힌트 — 자리만, 데이터 연결은 후속 */}
-                  <button type="button" className="term-hint" data-testid="term-hint" disabled>
-                    {t("worker.quiz.termHint")} ({t("worker.quiz.termHintComingSoon")})
-                  </button>
-                </div>
+            {quizSet.items.map((item, itemIdx) => (
+              <li key={item.id} className="quiz-item" data-testid="quiz-item">
+                <p className="quiz-question">{item.q}</p>
                 <div className="quiz-choices" role="radiogroup">
-                  {pickChoices(item, lang).map((choice, choiceIdx) => (
+                  {item.choices.map((choice, choiceIdx) => (
                     <label key={choiceIdx} className="quiz-choice">
                       <input
                         type="radio"
@@ -112,6 +106,15 @@ export default function QuizScreen() {
                     </label>
                   ))}
                 </div>
+                {item.term_hints.length > 0 && (
+                  <div className="quiz-term-hints" data-testid="quiz-term-hints">
+                    {item.term_hints.map((hint, hintIdx) => (
+                      <span key={hintIdx} className="term-hint-chip" data-testid="term-hint-chip">
+                        {t("worker.quiz.termLabel")}: {hint.term_ko} → {hint.term_lang}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

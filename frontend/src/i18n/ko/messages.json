@@ -70,6 +70,6 @@
   "worker.quiz.passed": "통과",
   "worker.quiz.failed": "미통과",
   "worker.quiz.resultTitle": "결과",
-  "worker.quiz.termHint": "용어 힌트",
-  "worker.quiz.termHintComingSoon": "준비 중"
+  "worker.quiz.draftLabel": "검수 전 문항입니다(원어민 검수 예정)",
+  "worker.quiz.termLabel": "용어"
 }

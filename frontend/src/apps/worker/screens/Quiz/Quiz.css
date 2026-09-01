@@ -37,28 +37,33 @@
   border: 1px solid #e5e5e5;
 }
 
-.quiz-item-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .quiz-question {
   margin: 0;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.term-hint {
-  flex-shrink: 0;
-  padding: 4px 10px;
+.quiz-draft-banner {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff4e5;
+  color: #9c5700;
+  font-size: 0.85rem;
+}
+
+.quiz-term-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.term-hint-chip {
+  padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid #ccc;
   background: #f4f4f4;
-  color: #999;
-  font-size: 0.75rem;
-  cursor: not-allowed;
+  color: #666;
+  font-size: 0.78rem;
 }
 
 .quiz-choices {

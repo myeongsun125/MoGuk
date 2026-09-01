@@ -70,6 +70,6 @@
   "worker.quiz.passed": "Đạt",
   "worker.quiz.failed": "Chưa đạt",
   "worker.quiz.resultTitle": "Kết quả",
-  "worker.quiz.termHint": "Gợi ý thuật ngữ",
-  "worker.quiz.termHintComingSoon": "Sắp ra mắt"
+  "worker.quiz.draftLabel": "Câu hỏi chưa kiểm duyệt (sẽ được người bản ngữ kiểm duyệt)",
+  "worker.quiz.termLabel": "Thuật ngữ"
 }

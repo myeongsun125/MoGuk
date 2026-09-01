@@ -70,6 +70,6 @@
   "worker.quiz.passed": "Lulus",
   "worker.quiz.failed": "Belum lulus",
   "worker.quiz.resultTitle": "Hasil",
-  "worker.quiz.termHint": "Petunjuk istilah",
-  "worker.quiz.termHintComingSoon": "Segera hadir"
+  "worker.quiz.draftLabel": "Soal belum diperiksa (akan diperiksa oleh penutur asli)",
+  "worker.quiz.termLabel": "Istilah"
 }

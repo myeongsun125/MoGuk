@@ -258,20 +258,27 @@ export interface SendInviteResult {
   share_url: string;
 }
 
-// 퀴즈(learn) — data/seed/quiz/quiz_learning_1.json·quiz_safety_1.json 실물 구조 그대로
-// 전사(★q_in·choices_in·explain_vi/in 없음 — 시드가 ko+vi만 있음, in은 화면에서 ko 폴백).
-// GET 문항 경로·응답 키는 SB 미확정 — 지금은 mock fixture만, 실경로 배선은 api/learn.ts에
-// TODO 1줄로 남긴다.
+// 퀴즈(learn) — §3 M-38 확정 계약. GET /learn/quiz/{set_id}?lang= 응답이 이 shape.
+// 서버가 요청 lang 기준으로 q·choices를 이미 localize해 내려주므로 클라는 그대로 렌더한다
+// (q_ko/q_vi 선택·in→ko 폴백 로직은 서버 책임으로 이동 — 클라에는 없음).
+export interface QuizTermHint {
+  term_ko: string;
+  term_lang: string;
+}
+
 export interface QuizItem {
-  q_ko: string;
-  q_vi: string;
+  id: number;
+  q: string;
   choices: string[];
-  choices_vi: string[];
-  answer_idx: number;
-  explain_ko: string;
-  source?: string;
-  src?: string;
-  quote?: string;
+  term_hints: QuizTermHint[];
+}
+
+export interface QuizSet {
+  set_id: number;
+  module: string;
+  title: string;
+  status: string;
+  items: QuizItem[];
 }
 
 // POST /learn/quiz/{set_id}/submit body {answers:number[]} → 이 응답(learn.py:13-15 주석,
