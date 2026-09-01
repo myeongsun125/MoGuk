@@ -44,6 +44,10 @@ class WorkerAlreadyActive(Exception):
     """이미 활성화된 워커 — 라우터가 409 로 변환."""
 
 
+class WorkerNotFound(Exception):
+    """대상 워커 없음 — 라우터가 404 로 변환 (send-invite 파트1)."""
+
+
 class InvalidInviteRequest(Exception):
     """emp_no 미지정·lang 값 이탈 등 요청 형식 위반 — 라우터가 422 로 변환."""
 
@@ -63,6 +67,11 @@ def new_token() -> str:
 
 # emp_no 는 UNIQUE — 동시 재초대 경합을 막기 위해 행 잠금 후 분기한다.
 _SELECT_WORKER = "SELECT id, activated_at FROM workers WHERE emp_no = %(emp_no)s FOR UPDATE"
+
+# send-invite(파트1)는 worker id 로 특정 — 같은 이유로 행 잠금.
+_SELECT_WORKER_BY_ID = (
+    "SELECT id, emp_no, activated_at FROM workers WHERE id = %(id)s FOR UPDATE"
+)
 
 _INSERT_WORKER = """
 INSERT INTO workers (name, emp_no, lang, invited_at)
@@ -135,3 +144,41 @@ def create_invite(name: str | None, emp_no: str | None, lang: str | None) -> dic
     log.info("invite: 발급 worker_id=%s emp_no=%s 재초대=%s ttl_h=%s",
              worker_id, emp_no, reinvite, INVITE_TTL_H)
     return {"invite_url": build_invite_url(token)}
+
+
+def send_invite(worker_id: int) -> dict:
+    """기존 워커 초대 재발급 → {"share_url": …} (send-invite 파트1 — channel 검증은 라우터).
+
+    발급 규칙은 create_invite 재초대 분기와 동일: 미사용 초대 즉시 만료 → invited_at 갱신
+    (해석 1) → 신규 1건(TTL 72h) → admin_events 1행. URL 은 build_invite_url 그대로 —
+    invite_url 과 동일한 형태다. 활성 워커는 기존 규칙대로 409 소재(WorkerAlreadyActive).
+    """
+    token = new_token()
+
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_WORKER_BY_ID, {"id": worker_id})
+            row = cur.fetchone()
+            if row is None:
+                raise WorkerNotFound(f"worker_id={worker_id} 는 존재하지 않습니다")
+            _, emp_no, activated_at = row
+            if activated_at is not None:
+                raise WorkerAlreadyActive(f"worker_id={worker_id} 는 이미 활성화된 워커입니다")
+
+            cur.execute(_EXPIRE_PENDING, {"worker_id": worker_id})
+            cur.execute(_TOUCH_INVITED_AT, {"id": worker_id})       # 해석 1
+            cur.execute(_INSERT_INVITE, {"token": token, "worker_id": worker_id, "ttl_h": INVITE_TTL_H})
+
+            admin_events.record(
+                cur,
+                actor=ADMIN_ACTOR_UNAUTHENTICATED,
+                target_type=TARGET_WORKER,
+                target_id=worker_id,
+                action=EV_WORKER_INVITED,
+                detail=emp_no,
+            )
+        conn.commit()
+
+    log.info("invite: send-invite 재발급 worker_id=%s emp_no=%s ttl_h=%s",
+             worker_id, emp_no, INVITE_TTL_H)
+    return {"share_url": build_invite_url(token)}
