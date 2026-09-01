@@ -18,6 +18,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# KO 부정어 사전 단일 출처 = backend/app/agents/neg_lexicon.py (D13-A).
+# seed_check 는 정의를 갖지 않고 import 로만 소비한다 — 정의 복제 금지.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+from app.agents.neg_lexicon import KO_NEG_LEXICON, ko_neg  # noqa: E402,F401
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -139,17 +144,6 @@ VI_NEG_LEXICON = ("không", "đừng", "chẳng", "chưa")
 
 def vi_neg(s: str) -> int:
     return len(re.findall(r"\b(" + "|".join(VI_NEG_LEXICON) + r")\b", s, flags=re.I))
-
-
-# ko 사전 (2026-08-29 총괄 확정): 장형 부정(-지 않다/-지 못하다)·금지형(-지 말다/-여서는 안 되다)·
-# 존재 부정(없다)·계사 부정(아니다) 포함. 단형 안/못, 명사 '금지', '모르다' 제외.
-KO_NEG_LEXICON = re.compile(
-    r"(지\s?않|지\s?못|지\s?마|지\s?말|(?:어|아|여|해|워|라|서)서는\s?(?:안|아니)\s?(?:되|됩)"
-    r"|없(?=다|습|어|으|는|이|음|을|고|지)|아니(?=다|ㅂ|에|야|고|며|라|오)|아닙|아닌)")
-
-
-def ko_neg(s: str) -> int:
-    return len(KO_NEG_LEXICON.findall(s))
 
 
 def strip_numbers(s: str) -> str:
