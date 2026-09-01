@@ -19,6 +19,7 @@ import logging
 
 from app.services import tenancy
 from app.services.crypto import open_text, seal_text
+from app.services.pii_mask import mask_pii
 
 log = logging.getLogger(__name__)
 
@@ -381,7 +382,10 @@ def list_reports(status: str | None = None) -> list[dict]:
         with conn.cursor() as cur:
             cur.execute(_LIST_REPORTS, {"status": status})
             rows = cur.fetchall()
-    return [_row(_LIST_KEYS, r) for r in rows]
+    out = [_row(_LIST_KEYS, r) for r in rows]
+    for item in out:
+        item["ko_summary"] = mask_pii(item["ko_summary"])  # 표시 계층 PII 마스킹 — 저장값 무접촉
+    return out
 
 
 def get_report_detail(report_id: int) -> dict:
@@ -397,6 +401,9 @@ def get_report_detail(report_id: int) -> dict:
                 raise ReportNotFound(f"report_id={report_id}")
             detail = _row(_DETAIL_KEYS, row)
             detail["original_text"] = open_text(detail["original_text"])   # M-19 이중 읽기
+            # 표시 계층 PII 마스킹 — 응답 조립 시점만. 저장값·events.detail 무접촉
+            detail["original_text"] = mask_pii(detail["original_text"])
+            detail["ko_summary"] = mask_pii(detail["ko_summary"])
 
             # 원문 열람 감사 (M-08a) — events append 만, 컬럼 무변경
             record_event(
