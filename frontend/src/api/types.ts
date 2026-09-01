@@ -230,3 +230,21 @@ export interface AdminEvent {
   detail: string | null;
   created_at: string;
 }
+
+// 근로자 초대 발급 — POST /admin/workers/invite (M-32), admin.py:93-121·invites.py:38,102-137
+// 코드로 대조 확정. 본문은 반드시 이 3필드만(★phone 등 그 외 필드 전송 금지 — InviteRequest가
+// 선언 안 한 필드는 파이단틱이 조용히 버리지만, _reject_identity_fields 가드가 별도로 원본
+// 본문을 검사해 금지 필드가 섞이면 400을 낸다. phone은 이 계약에 아예 없는 필드라 화면
+// 상태로만 들고 있고 절대 본문에 싣지 않는다).
+export type WorkerInviteLang = "vi" | "in"; // 001 workers.lang CHECK 집합(ko 제외 — invites.py:38)
+
+export interface WorkerInviteRequest {
+  name: string;
+  emp_no: string;
+  lang: WorkerInviteLang;
+}
+
+// invites.py:137 create_invite 반환 그대로 — 201 성공 시 이 한 필드뿐.
+export interface WorkerInviteResult {
+  invite_url: string;
+}

@@ -12,15 +12,18 @@
     "shot:admin-bc": "node scripts/shot-admin-bc.mjs",
     "shot:admin-events": "node scripts/shot-admin-events.mjs",
     "shot:admin-unanswered": "node scripts/shot-admin-unanswered.mjs",
+    "shot:admin-workers": "node scripts/shot-admin-workers.mjs",
     "rehearse": "node scripts/rehearse.mjs",
     "postinstall": "playwright install chromium"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
