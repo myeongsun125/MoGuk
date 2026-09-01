@@ -218,7 +218,8 @@ POST /auth/refresh         {refresh}                       → {jwt, refresh}   
 GET  /auth/me              (Authorization: Bearer <jwt>)   → {worker_id, tenant, typ}   # 보호 엔드포인트 대표 — 토큰 클레임만 반환(DB 미접근)
 # /auth/* 실패는 전부 401 + 동일 메시지 — 계정·토큰 존재 여부를 응답으로 구분하지 않는다
 GET  /learn/cards?module=
-POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}
+GET  /learn/quiz/{set_id}                                  → {set_id, module, title, status, items[{id, q, choices[], term_hints[{term_ko, term_lang}]}]}   # 근로자 lang 해석 vi→q_vi·choices_vi / in→q_in·choices_in / 부재 시 ko, answer_idx 미노출, status draft면 화면 라벨 "검수 전 문항" (M-38)
+POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}   # score 0~100, passed=score≥tenant_settings.threshold_pass(90), label red<80/yellow<90/green, quiz_attempts INSERT(detail=answers·정오) (M-38)
 POST /ask                  {question, lang}                → {answer, sources[], verify:{score, passed, gated, gate_reason}, trace_id} | edge 보류 상한 30s 초과 시 504 (M-28a)   # 응답 언어 = 질의 lang (M-03b). verify: score = 되번역↔원질문 bge-m3 코사인 0~1(되번역 미수행·실패 시 null — grounded=false 전 경로·타임아웃·예산 0·LLM 오류·임베딩 실패·빈 입력) · passed = score ≥ τ(env, 가값 0.80, 실측 후 env 조정; grounded=true에서 score null이면 fail-open passed=true) · gated = 무근거 OR (안전 카테고리 AND passed=false) (M-10) · gate_reason = "grounding"|"threshold"|null (M-10b 비파괴 확장, M-34)
 POST /ask/voice            multipart(audio≤60s, lang)      → 동일 | 폴백 안내 응답
 POST /reports              {original_text, lang, source?='text'} → 202 {id, status, created_at}   # M-08b ④. 테넌트·reporter 는 서버 도출 — 본문 수신 금지(400). voice 는 V5(STT) 전까지 501 | edge 보류 상한 30s 초과 시 504 (M-28a)
@@ -231,8 +232,9 @@ GET  /speaking/phrases     / POST /speaking/records         multipart(audio)
 관리자:
 ```
 POST /auth/admin/login     {email, pw}
-GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,acknowledged,resolved}, unanswered_open, citation_rate:{answered,with_sources,rate}, reports_today_hourly[{hour,count}], generated_at, timezone}   # KPI 4종+추이. citation_rate 분모=답변 방출(gated 제외)·분자=sources 존재. 추이=오늘(Asia/Seoul) 시간대별, 00시~현재 zero-fill. 학습 KPI(avg_comprehension·completion_rate·per_worker·per_module)는 V5
-POST /admin/workers/invite {name, emp_no, lang}            → {invite_url}
+GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,acknowledged,resolved}, unanswered_open, citation_rate:{answered,with_sources,rate}, reports_today_hourly[{hour,count}], generated_at, timezone}   # KPI 4종+추이. citation_rate 분모=답변 방출(gated 제외)·분자=sources 존재. 추이=오늘(Asia/Seoul) 시간대별, 00시~현재 zero-fill. 학습 KPI: per_worker[{worker_id, quiz_set_id, score, label, created_at}]·per_module[{module, n, avg_score}] (v_comprehension, M-38)
+POST /admin/workers/invite {name, emp_no, lang, phone?}     → {invite_url, worker_id}   # phone 선택(M-39)
+POST /admin/workers/{id}/send-invite {channel:'kakao_link'} → {share_url}   # kakao_link=invite_url 공유 URL, sms 발송은 로드맵 (M-39)
 POST /admin/documents      multipart                        → 202 (ingest job)
 GET  /admin/glossary?status=draft → [{id, term_ko, term_vi, term_in, note, status, source_question_id, approved_by, approved_at}]   # 001 정본 필드 전사. status CHECK('draft','approved','rejected'), 기본 필터 draft(?status= 빈 값 = 전체). glossary 에 created_at 컬럼 없음 — 정렬 id
 POST /admin/glossary/{id}/approve → {id, status:'approved'} / reject {note?} → {id, status:'rejected'}   # draft 에서만(그 외 422·대상 없음 404). 전이마다 admin_events 1행(M-08d). approved_by 는 integer FK 라 NULL 유지(M-15b), approve 만 approved_at 갱신. reject 사유는 admin_events.detail 에 보존 — glossary.note(용어 설명) 무접촉. 신원 필드 본문 수신 금지(400)
@@ -381,3 +383,6 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-08d | admin_events 신설 — 관리자 행위 범용 감사 (2026-08-30, 명선 확정 / SB 상신)<br>결정: ① append-only 테이블 admin_events를 §2 계약 목록에 추가(24번째) — actor text·target_type·target_id·action·from_state·to_state·detail·created_at. risk_report_events(M-08a) 규약의 범용판. ② 승인큐 glossary 전이(approve/reject)의 감사 수용처 — 이후 위험보고 외 관리자 전이도 이 테이블. ③ 조회 API GET /admin/events — 날짜·target_type 필터·limit/offset, 읽기 전용, edge 분기 M-28c 패턴, admin IP 제한 뒤 경로, §3 동기 등재. ④ actor는 M-15b 동일('admin:unauthenticated' 고정·교체 단일 지점). UPDATE/DELETE 경로 0. 001 CREATE는 본 PR 위임(001 수정 금지 명시 해제 1건).<br>R6: 승인큐 전이 이벤트 기록 확정(0830)에 수용처 부재 — access_logs는 admin_id integer FK·from/to 축 부재로 M-08a·M-15b 기준 불일치(SB 대조 0830). A안(access_logs 유용)은 actor 미기록으로 감사 일관성 훼손 기각. 영향: SB(구현), MS(EC2 재적용), JH(감사 로그 화면 소비) | 확정 (2026-08-30, 명선 확정) |
 | M-32a | 초대 만료 임박 표시 (M-32 ⑥ 파생) — 관리자 초대 화면(P4 나)과 함께 JH 구현: invited_at+72h 기준 임박 임계·문구는 JH 제안 후 확정. 리허설 전 P4 가 강등으로 미착수 | 이월 (2026-08-31 — 본선 후 P4 나와 함께, JH) |
 | M-32b | invite edge 릴레이 경유 — 결정 본문은 M-32 ⑦(M-28c 동형 확장), 구현 #53(admin.py·relay_poller). 본 행은 색인 | 확정 (2026-08-31, 명선 — M-32 ⑦) |
+| M-38 | 퀴즈 최소 구현 (2026-09-02, 명선 확정) — 문항 GET·채점·quiz_attempts·학습 KPI, 시드 draft 라벨·q_in 기계번역 초안, 시드 실물 키(q_ko·q_vi·choices·choices_vi·answer_idx·explain_ko + q_in·choices_in) 준수. 영향: SB(구현)·JH(화면)·MS(시드·§3) | 확정 (2026-09-02, 명선) |
+| M-39 | QR 발송 (2026-09-02, 명선 확정) — workers.phone append(CREATE+ALTER IF NOT EXISTS), send-invite kakao_link 공유 URL, sms는 로드맵. 영향: SB·JH·BG(001 재적용) | 확정 (2026-09-02, 명선) |
+| M-40 | PII 마스킹 표시 계층 (2026-09-02, 명선 확정) — 관리자 응답 조립부 연락처만, 이름·사번 제외, env PII_MASK 기본 on, events detail·resolution_note 포함, 원본 무손실. 영향: SB·BG(env) | 확정 (2026-09-02, 명선) |

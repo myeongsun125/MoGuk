@@ -18,8 +18,10 @@ CREATE TABLE IF NOT EXISTS admins (
 
 CREATE TABLE IF NOT EXISTS workers (
   id serial PRIMARY KEY, name text NOT NULL, emp_no text UNIQUE,
+  phone text,
   lang text NOT NULL CHECK (lang IN ('vi','in')),
   pin_hash text, invited_at timestamptz, activated_at timestamptz);
+ALTER TABLE workers ADD COLUMN IF NOT EXISTS phone text;
 
 CREATE TABLE IF NOT EXISTS invites (
   token text PRIMARY KEY, worker_id int REFERENCES workers(id),
@@ -53,7 +55,7 @@ CREATE TABLE IF NOT EXISTS quiz_sets (
   safety_course_id int);
 CREATE TABLE IF NOT EXISTS quiz_items (
   id serial PRIMARY KEY, quiz_set_id int REFERENCES quiz_sets(id) ON DELETE CASCADE,
-  body jsonb NOT NULL);   -- {"q_ko","q_vi","q_in","choices":[..],"answer_idx","explain"}
+  body jsonb NOT NULL);   -- {"q_ko","q_vi","q_in","choices","choices_vi","choices_in","answer_idx","explain_ko"}
 CREATE TABLE IF NOT EXISTS quiz_attempts (
   id serial PRIMARY KEY, worker_id int REFERENCES workers(id),
   quiz_set_id int REFERENCES quiz_sets(id),
