@@ -27,14 +27,18 @@ export default function AdminWorkersScreen() {
   const [sendStatus, setSendStatus] = useState<SendStatus>("idle");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // 화면에 실제로 보여줄 "현재 활성 링크" — 최초엔 invite_url, 발송 성공 시 share_url로 교체.
+  // QR·표시 URL 텍스트 둘 다 이 값 하나만 기준으로 렌더한다(출처 이원화 방지).
+  const [currentLink, setCurrentLink] = useState<string | null>(null);
+  const [linkRefreshed, setLinkRefreshed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!result || !canvasRef.current) return;
-    QRCode.toCanvas(canvasRef.current, result.invite_url, { width: 220, margin: 1 }).catch((e) => {
+    if (!currentLink || !canvasRef.current) return;
+    QRCode.toCanvas(canvasRef.current, currentLink, { width: 220, margin: 1 }).catch((e) => {
       console.error("QR render failed", e);
     });
-  }, [result]);
+  }, [currentLink]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -46,6 +50,7 @@ export default function AdminWorkersScreen() {
       // ★본문은 반드시 이 3필드만 — phone 미포함. trim()도 하지 않는다(서버 판정 그대로 반영).
       const res = await inviteWorker({ name, emp_no: empNo, lang });
       setResult(res);
+      setCurrentLink(res.invite_url);
       setStatus("idle");
     } catch (err) {
       const s = errorStatus(err);
@@ -63,6 +68,8 @@ export default function AdminWorkersScreen() {
     setSendStatus("idle");
     setShareUrl(null);
     setCopied(false);
+    setCurrentLink(null);
+    setLinkRefreshed(false);
   }
 
   // ⑤ SB #87 파트1 확정: {channel:'kakao_link'} → {share_url}. worker_id는 파트2 전 실
@@ -74,6 +81,11 @@ export default function AdminWorkersScreen() {
     setShareUrl(null);
     try {
       const { share_url } = await sendInvite(result.worker_id, "kakao_link");
+      // 발송 API가 성공한 시점에 서버 쪽 유효 링크는 이미 share_url로 교체됐다
+      // (send_invite: 미사용 초대 즉시 만료 → 신규 발급) — 공유 성사 여부와 무관하게
+      // 화면의 QR·URL도 즉시 이 값으로 갱신해야 한다(안 그러면 화면엔 무효 QR이 남는다).
+      setCurrentLink(share_url);
+      setLinkRefreshed(true);
       let nativeShared = false;
       if (typeof navigator.share === "function") {
         try {
@@ -184,7 +196,7 @@ export default function AdminWorkersScreen() {
       {result && (
         <div className="invite-result" data-testid="invite-result">
           <p className="invite-url" data-testid="invite-url">
-            {result.invite_url}
+            {currentLink}
           </p>
 
           <canvas ref={canvasRef} data-testid="invite-qr-canvas" />
@@ -212,6 +224,11 @@ export default function AdminWorkersScreen() {
           {sendStatus === "error" && (
             <p className="error" data-testid="send-error">
               {t("admin.workers.sendError")}
+            </p>
+          )}
+          {linkRefreshed && (
+            <p className="hint" data-testid="link-refreshed">
+              {t("admin.workers.linkRefreshed")}
             </p>
           )}
           {copied && (
