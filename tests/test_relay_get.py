@@ -62,6 +62,10 @@ EDGE_CASES = [
     ("POST", "/api/v1/admin/workers/invite", "/api/v1/admin/workers/invite",
      INVITE_BODY, {**INVITE_BODY, "phone": None}, 201,
      {"invite_url": "http://localhost/activate?token=t"}),
+    # M-38: 퀴즈 GET — lang 쿼리스트링 온전 전달. submit 은 인증 필수(총괄 판정 0902)라
+    # 이 미인증 왕복 하네스에서 빠지고 아래 전용 테스트 2건이 대신한다.
+    ("GET", "/api/v1/learn/quiz/3?lang=vi", "/api/v1/learn/quiz/3?lang=vi", {}, {}, 200,
+     {"set_id": 3, "module": "learning", "title": "t", "status": "draft", "items": []}),
 ]
 
 
@@ -312,6 +316,142 @@ def test_dispatch_invite_error_mapping(monkeypatch, exc, expected):
     status, body = relay_poller.dispatch("POST", "/api/v1/admin/workers/invite", INVITE_BODY)
     assert status == expected
     assert body == {"detail": "사유"}
+
+
+# ── M-38: 퀴즈 디스패치 (edge 왕복은 EDGE_CASES 로 흡수) ──
+
+def test_dispatch_quiz_get_passes_lang_and_worker_id(monkeypatch):
+    """GET 디스패치 — set_id·lang 쿼리·identity.wid 가 서비스 인자로 전달된다."""
+    seen = {}
+
+    def fake_get(set_id, lang=None, worker_id=None):
+        seen.update(set_id=set_id, lang=lang, worker_id=worker_id)
+        return {"set_id": set_id, "items": []}
+
+    monkeypatch.setattr("app.services.quiz.get_quiz", fake_get)
+    status, body = relay_poller.dispatch(
+        "GET", "/api/v1/learn/quiz/3?lang=vi", {}, None, {"wid": 9, "tenant": "axis_demo"}
+    )
+    assert (status, body) == (200, {"set_id": 3, "items": []})
+    assert seen == {"set_id": 3, "lang": "vi", "worker_id": 9}
+
+
+def test_dispatch_quiz_get_unauthenticated_no_lang(monkeypatch):
+    """미인증·lang 미지정 — 서비스에 (None, None) 그대로 넘어간다(ko 폴백은 서비스 몫)."""
+    seen = {}
+
+    def fake_get(set_id, lang=None, worker_id=None):
+        seen.update(lang=lang, worker_id=worker_id)
+        return {"set_id": set_id, "items": []}
+
+    monkeypatch.setattr("app.services.quiz.get_quiz", fake_get)
+    status, _ = relay_poller.dispatch("GET", "/api/v1/learn/quiz/3", {})
+    assert status == 200
+    assert seen == {"lang": None, "worker_id": None}
+
+
+def test_dispatch_quiz_get_404(monkeypatch):
+    from app.services import quiz
+
+    def boom(*a, **k):
+        raise quiz.QuizSetNotFound("nope")
+
+    monkeypatch.setattr("app.services.quiz.get_quiz", boom)
+    status, body = relay_poller.dispatch("GET", "/api/v1/learn/quiz/999", {})
+    assert status == 404 and body == {"detail": "quiz set not found"}
+
+
+def test_dispatch_quiz_submit_passes_answers_and_worker_id(monkeypatch):
+    seen = {}
+
+    def fake_submit(set_id, answers, worker_id=None):
+        seen.update(set_id=set_id, answers=answers, worker_id=worker_id)
+        return {"score": 100, "passed": True, "label": "green"}
+
+    monkeypatch.setattr("app.services.quiz.submit_quiz", fake_submit)
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/learn/quiz/3/submit", {"answers": [2, 0]}, None, {"wid": 9}
+    )
+    assert (status, body) == (200, {"score": 100, "passed": True, "label": "green"})
+    assert seen == {"set_id": 3, "answers": [2, 0], "worker_id": 9}
+
+
+def test_dispatch_quiz_submit_unauthenticated_401(monkeypatch):
+    """총괄 판정 0902 — 릴레이 경로도 익명 submit 401(confirm M-37 동형), 서비스 미호출."""
+    def _boom(*a, **k):
+        pytest.fail("익명인데 채점 서비스를 호출했다")
+
+    monkeypatch.setattr("app.services.quiz.submit_quiz", _boom)
+    from app.services.auth import AUTH_FAILED_MESSAGE
+
+    status, body = relay_poller.dispatch("POST", "/api/v1/learn/quiz/3/submit", {"answers": [0]})
+    assert status == 401
+    assert body == {"detail": AUTH_FAILED_MESSAGE}
+
+
+@pytest.mark.parametrize("exc,expected", [("QuizSetNotFound", 404), ("InvalidAnswers", 422)])
+def test_dispatch_quiz_submit_error_mapping(monkeypatch, exc, expected):
+    """예외→상태코드 분기가 core 라우터와 동일하다 (404·422) — 인증 identity 동반."""
+    from app.services import quiz
+
+    def boom(*a, **k):
+        raise getattr(quiz, exc)("사유")
+
+    monkeypatch.setattr("app.services.quiz.submit_quiz", boom)
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/learn/quiz/3/submit", {"answers": []}, None, {"wid": 9}
+    )
+    assert status == expected
+    if expected == 422:
+        assert body == {"detail": "사유"}
+
+
+@pytest.mark.asyncio
+async def test_edge_submit_authenticated_goes_through_relay(monkeypatch):
+    """인증 submit — identity {wid, tenant} 로 큐 적재·본문 온전 전달·응답 투과."""
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_HOLD_S", "3")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "5")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-for-m38")
+    from app.services import auth as auth_service
+
+    token = auth_service.issue_token_pair(41, "axis_demo")["jwt"]
+    app = build_app("edge")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://edge"
+    ) as client:
+        task = asyncio.create_task(client.post(
+            "/api/v1/learn/quiz/3/submit", json={"answers": [1, 0]},
+            headers={"Authorization": f"Bearer {token}"},
+        ))
+        pend = await client.get("/internal/relay/pending")
+        items = pend.json()["items"]
+        assert len(items) == 1
+        assert items[0]["path"] == "/api/v1/learn/quiz/3/submit"
+        assert items[0]["body"] == {"answers": [1, 0]}
+        assert items[0]["identity"] == {"wid": 41, "tenant": "axis_demo"}
+        await client.post(f"/internal/relay/{items[0]['request_id']}/respond",
+                          json={"status_code": 200,
+                                "body": {"score": 50, "passed": False, "label": "red"}})
+        resp = await task
+
+    assert resp.status_code == 200
+    assert resp.json() == {"score": 50, "passed": False, "label": "red"}
+
+
+@pytest.mark.asyncio
+async def test_edge_submit_anonymous_401_no_enqueue(monkeypatch):
+    """익명 submit 은 edge 라우터에서 401 — 릴레이 큐에 적재조차 되지 않는다."""
+    monkeypatch.setenv("API_ROLE", "edge")
+    monkeypatch.setenv("RELAY_EDGE_WAIT_S", "0.2")
+    app = build_app("edge")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://edge"
+    ) as client:
+        r = await client.post("/api/v1/learn/quiz/3/submit", json={"answers": [1, 0]})
+
+    assert r.status_code == 401, r.text
+    assert relay.queue.snapshot() == []
 
 
 # ── M-28c ③: 무접촉 단정 ──────────────────────────────────

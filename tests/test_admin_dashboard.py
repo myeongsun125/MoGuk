@@ -48,6 +48,10 @@ class FakeCursor:
     def fetchall(self):
         if "GROUP BY status" in self._last:
             return self.store.get("status_rows", [])
+        if "JOIN quiz_sets" in self._last:                       # M-38 per_module
+            return self.store.get("per_module_rows", [])
+        if "FROM v_comprehension" in self._last:                 # M-38 per_worker
+            return self.store.get("per_worker_rows", [])
         return self.store.get("trend_rows", [])
 
     def fetchone(self):
@@ -57,6 +61,10 @@ class FakeCursor:
             return self.store.get("citation", (0, 0))
         if "now() AT TIME ZONE" in self._last:
             return (self.store.get("now_local", "2026-08-30 17:00:00"),)
+        if "quiz_attempts" in self._last:                        # M-38 completion
+            return self.store.get("completion", (0, 0))
+        if "avg(score)" in self._last:                           # M-38 avg_comprehension
+            return (self.store.get("avg_comprehension"),)
         return (0,)
 
 
@@ -362,8 +370,14 @@ def _top_level_keys(line: str) -> list[str]:
 
 
 def test_skeleton_contract_matches_implementation_keys():
+    """§3:235 중괄호 = 기존 7키(무변경 확인). 학습 KPI 4키(M-38)는 말미 추가분 —
+    per_worker·per_module 는 §3 주석부에 등재, completion_rate·avg_comprehension 은
+    총괄 지시(0902) 선반영으로 §3 등재는 MS 몫(보고 상신)."""
     line = _skeleton_dashboard_line()
-    assert tuple(_top_level_keys(line)) == dash.RESPONSE_KEYS
+    assert tuple(_top_level_keys(line)) == dash.RESPONSE_KEYS[:7]
+    assert dash.RESPONSE_KEYS[7:] == (
+        "per_worker", "per_module", "completion_rate", "avg_comprehension"
+    )
 
 
 def test_skeleton_contract_documents_nested_keys_and_tz():
@@ -372,3 +386,107 @@ def test_skeleton_contract_documents_nested_keys_and_tz():
         assert k in line, k
     assert dash.DASHBOARD_TZ in line
     assert "gated 제외" in line          # D 분모 정의 명시
+    # M-38 — 학습 KPI 문면(§3:235 주석부)과 구현 키 정합
+    assert "per_worker" in line and "per_module" in line and "v_comprehension" in line
+    for k in dash.PER_WORKER_KEYS + dash.PER_MODULE_KEYS:
+        assert k in line, k
+
+
+# ── M-38 학습 KPI — per_worker·per_module·completion_rate·avg_comprehension ──
+
+import datetime as _dt
+from decimal import Decimal
+
+_AT = _dt.datetime(2026, 9, 2, 1, 0, tzinfo=_dt.timezone.utc)
+
+
+def _kpi_store(**kw):
+    base = dict(status_rows=[], unanswered=0, citation=(0, 0), trend_rows=[],
+                now_local="2026-09-02 03:00:00")
+    base.update(kw)
+    return _store(**base)
+
+
+def test_per_worker_rows_shape_and_view_label_passthrough(monkeypatch):
+    """v_comprehension 행 그대로 — 라벨은 뷰 계산값을 재계산 없이 투과."""
+    store = _kpi_store(per_worker_rows=[
+        (2, 3, Decimal("100"), "green", _AT),
+        (3, 3, Decimal("66.7"), "red", _AT),
+    ])
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
+
+    out = dash.get_dashboard()
+
+    assert out["per_worker"] == [
+        {"worker_id": 2, "quiz_set_id": 3, "score": 100, "label": "green",
+         "created_at": "2026-09-02T01:00:00+00:00"},
+        {"worker_id": 3, "quiz_set_id": 3, "score": 66.7, "label": "red",
+         "created_at": "2026-09-02T01:00:00+00:00"},
+    ]
+    assert all(tuple(r) == dash.PER_WORKER_KEYS for r in out["per_worker"])
+    # 라벨 경계는 뷰(001:69) 소유 — 대시보드 SQL 이 재계산하지 않는다
+    assert "CASE WHEN" not in dash._SQL_PER_WORKER
+
+
+def test_per_module_aggregates_with_rounding(monkeypatch):
+    store = _kpi_store(per_module_rows=[
+        ("learning", 2, Decimal("83.35")), ("safety", 1, Decimal("100")),
+    ])
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
+
+    out = dash.get_dashboard()
+
+    assert out["per_module"] == [
+        {"module": "learning", "n": 2, "avg_score": 83.3},   # round(…, 1)
+        {"module": "safety", "n": 1, "avg_score": 100.0},
+    ]
+    assert "JOIN quiz_sets" in dash._SQL_PER_MODULE and "v_comprehension" in dash._SQL_PER_MODULE
+
+
+def test_completion_rate_counts_and_ratio(monkeypatch):
+    store = _kpi_store(completion=(3, 8))
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
+
+    out = dash.get_dashboard()
+
+    assert out["completion_rate"] == {
+        "workers_attempted": 3, "workers_activated": 8, "rate": 0.375,
+    }
+    sql = [s for s in _sqls(store) if "quiz_attempts" in s][0]
+    assert "DISTINCT worker_id" in sql                     # 시도 근로자 수(시도 횟수 아님)
+    assert "activated_at IS NOT NULL" in sql               # 분모 = 활성 근로자
+
+
+def test_completion_rate_zero_activated_is_null(monkeypatch):
+    store = _kpi_store(completion=(0, 0))
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
+
+    out = dash.get_dashboard()
+
+    assert out["completion_rate"] == {
+        "workers_attempted": 0, "workers_activated": 0, "rate": None,
+    }
+
+
+def test_avg_comprehension_value_and_null(monkeypatch):
+    store = _kpi_store(avg_comprehension=Decimal("82.54"))
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
+    assert dash.get_dashboard()["avg_comprehension"] == 82.5
+
+    empty = _kpi_store()                                   # 데이터 없음 → null
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(empty))
+    assert dash.get_dashboard()["avg_comprehension"] is None
+
+
+def test_learn_kpi_keys_are_appended_not_renamed(monkeypatch):
+    """기존 7키 순서 그대로 + 신설 4키는 말미 — 제거·개명 없음(총괄 지시)."""
+    store = _kpi_store()
+    monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
+
+    out = dash.get_dashboard()
+
+    assert tuple(out) == dash.RESPONSE_KEYS
+    assert dash.RESPONSE_KEYS[:7] == (
+        "open_reports", "reports_by_status", "unanswered_open", "citation_rate",
+        "reports_today_hourly", "generated_at", "timezone",
+    )

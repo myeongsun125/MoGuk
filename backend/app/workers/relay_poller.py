@@ -13,6 +13,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
      · POST /api/v1/admin/reports/{id}/ack|resolve  (M-28c ① — method 축 추가).
      · POST /api/v1/admin/workers/invite(M-32b — 초대 발급, 201/409/422).
      · POST /api/v1/admin/unanswered/{id}/answer(M-05a — 답변 전이 + ingest_answer job).
+     · GET /api/v1/learn/quiz/{id}?lang= · POST /api/v1/learn/quiz/{id}/submit (M-38).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -58,10 +59,11 @@ def _path_id(route: str, idx: int, segments: int | None = None) -> int | None:
         return None
 
 
-def _dispatch_get(route: str, query: dict) -> tuple[int, object]:
+def _dispatch_get(route: str, query: dict, worker_id: int | None = None) -> tuple[int, object]:
     """M-28c ①: §3 공개면 GET 조회 디스패치. edge 는 DB 자격이 없어 여기로 넘어온다.
 
     미등록 경로는 기존과 동일하게 404 로 떨어진다.
+    worker_id(M-28b identity) 는 퀴즈 lang 도출에만 쓰인다 — 기존 경로 무접촉.
     """
     from app.services.risk_reports import (
         ReportNotFound,
@@ -114,6 +116,19 @@ def _dispatch_get(route: str, query: dict) -> tuple[int, object]:
         except ReportNotFound:
             return 404, {"detail": "report not found"}
 
+    if route.startswith("/api/v1/learn/quiz/"):
+        # M-38 — lang 은 쿼리, 미지정 시 identity 근로자 lang 은 core(서비스)가 도출.
+        from app.services import quiz
+
+        set_id = _path_id(route, 5, segments=6)
+        if set_id is None:
+            return 404, {"detail": f"relay: 잘못된 set_id 경로 {route}"}
+        lang = (query.get("lang") or [None])[0]
+        try:
+            return 200, quiz.get_quiz(set_id, lang, worker_id)
+        except quiz.QuizSetNotFound:
+            return 404, {"detail": "quiz set not found"}
+
     return 404, {"detail": f"relay: 디스패치 대상 아님 GET {route}"}
 
 
@@ -137,7 +152,7 @@ def dispatch(
     route, query = split.path, parse_qs(split.query)
 
     if method == "GET":
-        return _dispatch_get(route, query)
+        return _dispatch_get(route, query, worker_id)
 
     if method == "POST" and path == "/api/v1/ask":
         from app.agents.graph import run_ask
@@ -278,6 +293,26 @@ def dispatch(
             return 404, {"detail": "worker not found"}
         except invites.WorkerAlreadyActive as exc:
             return 409, {"detail": str(exc)}
+    if method == "POST" and route.startswith("/api/v1/learn/quiz/") and route.endswith(
+        "/submit"
+    ):
+        # M-38 채점 — worker_id 는 identity 에서(M-28b 소비). 상태코드 3분기 core 라우터 동일.
+        from app.services.auth import AUTH_FAILED_MESSAGE
+        from app.services import quiz
+
+        if worker_id is None:
+            # 총괄 판정 0902: submit 은 인증 필수 — 릴레이는 라우터 의존성을 거치지
+            # 않으므로(서비스 직접 호출) confirm(M-37)과 동형으로 여기서도 401 을 낸다.
+            return 401, {"detail": AUTH_FAILED_MESSAGE}
+        set_id = _path_id(route, 5, segments=7)
+        if set_id is None:
+            return 404, {"detail": f"relay: 잘못된 set_id 경로 {route}"}
+        try:
+            return 200, quiz.submit_quiz(set_id, body.get("answers"), worker_id)
+        except quiz.QuizSetNotFound:
+            return 404, {"detail": "quiz set not found"}
+        except quiz.InvalidAnswers as exc:
+            return 422, {"detail": str(exc)}
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
 
 

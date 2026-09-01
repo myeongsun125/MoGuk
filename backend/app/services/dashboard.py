@@ -34,6 +34,7 @@ DASHBOARD_TZ = "Asia/Seoul"
 STATUS_KEYS = ("submitted", "acknowledged", "resolved")   # 001 CHECK 집합과 동일
 
 # §3 등재 문안·PR 계약 표와 3중 대조되는 응답 최상위 키.
+# M-38 학습 KPI 4키는 말미에 추가만 한다 — 기존 키 제거·개명 금지(총괄 지시 0902).
 RESPONSE_KEYS = (
     "open_reports",
     "reports_by_status",
@@ -42,9 +43,16 @@ RESPONSE_KEYS = (
     "reports_today_hourly",
     "generated_at",
     "timezone",
+    "per_worker",
+    "per_module",
+    "completion_rate",
+    "avg_comprehension",
 )
 CITATION_KEYS = ("answered", "with_sources", "rate")
 TREND_KEYS = ("hour", "count")
+PER_WORKER_KEYS = ("worker_id", "quiz_set_id", "score", "label", "created_at")
+PER_MODULE_KEYS = ("module", "n", "avg_score")
+COMPLETION_KEYS = ("workers_attempted", "workers_activated", "rate")
 
 # A·B — 한 번의 GROUP BY (A = submitted 칸)
 _SQL_STATUS = "SELECT status, count(*) FROM risk_reports GROUP BY status"
@@ -76,6 +84,35 @@ ORDER BY 1
 """
 
 _SQL_NOW = "SELECT to_char(now() AT TIME ZONE %(tz)s, 'YYYY-MM-DD HH24:MI:SS')"
+
+# ── 학습 KPI (M-38) — 라벨 경계(80/90)는 v_comprehension 뷰(001:69)에 하드코딩. 무접촉. ──
+
+_SQL_PER_WORKER = """
+SELECT worker_id, quiz_set_id, score, label, created_at
+FROM v_comprehension ORDER BY worker_id, quiz_set_id
+"""
+
+_SQL_PER_MODULE = """
+SELECT qs.module, count(*), avg(v.score)
+FROM v_comprehension v JOIN quiz_sets qs ON qs.id = v.quiz_set_id
+GROUP BY qs.module ORDER BY qs.module
+"""
+
+# 분모 = 활성 근로자(activated_at 존재), 분자 = 시도 근로자(quiz_attempts DISTINCT worker_id)
+_SQL_COMPLETION = """
+SELECT (SELECT count(DISTINCT worker_id) FROM quiz_attempts WHERE worker_id IS NOT NULL),
+       (SELECT count(*) FROM workers WHERE activated_at IS NOT NULL)
+"""
+
+_SQL_AVG_COMPREHENSION = "SELECT avg(score) FROM v_comprehension"
+
+
+def _num(value):
+    """DB numeric → JSON 수 — 정수값은 int, 아니면 float."""
+    if value is None:
+        return None
+    f = float(value)
+    return int(f) if f.is_integer() else f
 
 
 def _bucket_label(day: str, hour: int) -> str:
@@ -115,6 +152,26 @@ def get_dashboard() -> dict:
             cur.execute(_SQL_TREND, {"tz": DASHBOARD_TZ})
             trend = _hourly_series(cur.fetchall(), now_local)
 
+            # 학습 KPI (M-38) — 전부 SELECT, 라벨은 뷰 계산값 그대로
+            cur.execute(_SQL_PER_WORKER)
+            per_worker = [
+                {"worker_id": w, "quiz_set_id": s, "score": _num(sc), "label": lb,
+                 "created_at": at.isoformat() if hasattr(at, "isoformat") else at}
+                for w, s, sc, lb, at in cur.fetchall()
+            ]
+            cur.execute(_SQL_PER_MODULE)
+            per_module = [
+                {"module": m, "n": int(n), "avg_score": round(float(avg), 1)}
+                for m, n, avg in cur.fetchall()
+            ]
+            cur.execute(_SQL_COMPLETION)
+            attempted, activated = (int(x or 0) for x in cur.fetchone())
+            cur.execute(_SQL_AVG_COMPREHENSION)
+            avg_row = cur.fetchone()
+            avg_comprehension = (
+                round(float(avg_row[0]), 1) if avg_row and avg_row[0] is not None else None
+            )
+
     rate = round(with_sources / answered, 4) if answered else None
     if rate is not None and rate < 1.0:
         # 게이트 설계상 100% 가 기대값 — 미만이면 결함 신호다. 수치는 그대로 내보낸다.
@@ -130,4 +187,13 @@ def get_dashboard() -> dict:
         "reports_today_hourly": trend,
         "generated_at": now_local.replace(" ", "T"),
         "timezone": DASHBOARD_TZ,
+        # M-38 학습 KPI — 추가만(기존 키 무변경). completion 분모 0 이면 rate null.
+        "per_worker": per_worker,
+        "per_module": per_module,
+        "completion_rate": {
+            "workers_attempted": attempted,
+            "workers_activated": activated,
+            "rate": round(attempted / activated, 4) if activated else None,
+        },
+        "avg_comprehension": avg_comprehension,
     }
