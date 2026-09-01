@@ -62,6 +62,12 @@ EDGE_CASES = [
     ("POST", "/api/v1/admin/workers/invite", "/api/v1/admin/workers/invite",
      INVITE_BODY, {**INVITE_BODY, "phone": None}, 201,
      {"invite_url": "http://localhost/activate?token=t"}),
+    # M-38: 퀴즈 — lang 쿼리스트링 온전 전달, submit 본문 온전 전달
+    ("GET", "/api/v1/learn/quiz/3?lang=vi", "/api/v1/learn/quiz/3?lang=vi", {}, {}, 200,
+     {"set_id": 3, "module": "learning", "title": "t", "status": "draft", "items": []}),
+    ("POST", "/api/v1/learn/quiz/3/submit", "/api/v1/learn/quiz/3/submit",
+     {"answers": [1, 0]}, {"answers": [1, 0]}, 200,
+     {"score": 50, "passed": False, "label": "red"}),
 ]
 
 
@@ -312,6 +318,79 @@ def test_dispatch_invite_error_mapping(monkeypatch, exc, expected):
     status, body = relay_poller.dispatch("POST", "/api/v1/admin/workers/invite", INVITE_BODY)
     assert status == expected
     assert body == {"detail": "사유"}
+
+
+# ── M-38: 퀴즈 디스패치 (edge 왕복은 EDGE_CASES 로 흡수) ──
+
+def test_dispatch_quiz_get_passes_lang_and_worker_id(monkeypatch):
+    """GET 디스패치 — set_id·lang 쿼리·identity.wid 가 서비스 인자로 전달된다."""
+    seen = {}
+
+    def fake_get(set_id, lang=None, worker_id=None):
+        seen.update(set_id=set_id, lang=lang, worker_id=worker_id)
+        return {"set_id": set_id, "items": []}
+
+    monkeypatch.setattr("app.services.quiz.get_quiz", fake_get)
+    status, body = relay_poller.dispatch(
+        "GET", "/api/v1/learn/quiz/3?lang=vi", {}, None, {"wid": 9, "tenant": "axis_demo"}
+    )
+    assert (status, body) == (200, {"set_id": 3, "items": []})
+    assert seen == {"set_id": 3, "lang": "vi", "worker_id": 9}
+
+
+def test_dispatch_quiz_get_unauthenticated_no_lang(monkeypatch):
+    """미인증·lang 미지정 — 서비스에 (None, None) 그대로 넘어간다(ko 폴백은 서비스 몫)."""
+    seen = {}
+
+    def fake_get(set_id, lang=None, worker_id=None):
+        seen.update(lang=lang, worker_id=worker_id)
+        return {"set_id": set_id, "items": []}
+
+    monkeypatch.setattr("app.services.quiz.get_quiz", fake_get)
+    status, _ = relay_poller.dispatch("GET", "/api/v1/learn/quiz/3", {})
+    assert status == 200
+    assert seen == {"lang": None, "worker_id": None}
+
+
+def test_dispatch_quiz_get_404(monkeypatch):
+    from app.services import quiz
+
+    def boom(*a, **k):
+        raise quiz.QuizSetNotFound("nope")
+
+    monkeypatch.setattr("app.services.quiz.get_quiz", boom)
+    status, body = relay_poller.dispatch("GET", "/api/v1/learn/quiz/999", {})
+    assert status == 404 and body == {"detail": "quiz set not found"}
+
+
+def test_dispatch_quiz_submit_passes_answers_and_worker_id(monkeypatch):
+    seen = {}
+
+    def fake_submit(set_id, answers, worker_id=None):
+        seen.update(set_id=set_id, answers=answers, worker_id=worker_id)
+        return {"score": 100, "passed": True, "label": "green"}
+
+    monkeypatch.setattr("app.services.quiz.submit_quiz", fake_submit)
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/learn/quiz/3/submit", {"answers": [2, 0]}, None, {"wid": 9}
+    )
+    assert (status, body) == (200, {"score": 100, "passed": True, "label": "green"})
+    assert seen == {"set_id": 3, "answers": [2, 0], "worker_id": 9}
+
+
+@pytest.mark.parametrize("exc,expected", [("QuizSetNotFound", 404), ("InvalidAnswers", 422)])
+def test_dispatch_quiz_submit_error_mapping(monkeypatch, exc, expected):
+    """예외→상태코드 분기가 core 라우터와 동일하다 (404·422)."""
+    from app.services import quiz
+
+    def boom(*a, **k):
+        raise getattr(quiz, exc)("사유")
+
+    monkeypatch.setattr("app.services.quiz.submit_quiz", boom)
+    status, body = relay_poller.dispatch("POST", "/api/v1/learn/quiz/3/submit", {"answers": []})
+    assert status == expected
+    if expected == 422:
+        assert body == {"detail": "사유"}
 
 
 # ── M-28c ③: 무접촉 단정 ──────────────────────────────────
