@@ -194,9 +194,10 @@ def _backtrans_budget_s(t0: float) -> float:
 def _rule_trace(src_text: str, back_text: str) -> dict:
     """C-lite (a): 규칙 축 실측(숫자 대조·부정어 극성). 게이트 판정에는 관여하지 않는다.
 
-    비교축은 게이트 src(src_kind 가 고른 쪽)와 되번역문이다.
-    주의: src_kind='question' 이면 src 가 질의 lang(vi/in)일 수 있다 — ko 사전인
-    neg 축은 그때 src 히트가 0으로 잡히므로 delta 를 언어와 함께 읽어야 한다.
+    비교축은 근거 청크 결합문(ko, M-34 ② score_aux 계산 텍스트)과 되번역문이다 —
+    실측(src_text=ko 원문)과 동일 의미. 게이트 src(src_kind)와는 무관하게 고정한다:
+    src_kind='question' 이면 src 가 질의 lang(vi/in)일 수 있어 ko 사전인 neg 축이
+    구조적으로 0 히트가 되기 때문이다.
     """
     ns, nb = ko_neg(src_text or ""), ko_neg(back_text or "")
     return {
@@ -224,6 +225,8 @@ def _backtrans_trace(
             base, back_text=None, back_ms=None, timed_out=None, error=None,
             score_question=None, score_chunks=None, num=None, neg=None,
         )
+    # src_text = 근거 청크 결합문(ko). 부재면 ko 대조축이 없으므로 규칙 축은 기록하지 않는다.
+    rules = _rule_trace(src_text, bt.back_text or "") if src_text else {"num": None, "neg": None}
     return dict(
         base,
         back_text=bt.back_text or None,
@@ -232,7 +235,7 @@ def _backtrans_trace(
         error=bt.error,
         score_question=bt.score_src,
         score_chunks=bt.score_aux,
-        **_rule_trace(src_text, bt.back_text or ""),
+        **rules,
     )
 
 
@@ -348,7 +351,7 @@ def run_ask(
             high_risk=high_risk,
             src_kind=gate_src,
             chunks_joined=chunks_joined,
-            src_text=chunks_joined if gate_src == "chunks" else question,
+            src_text=chunks_joined,          # 규칙 축은 항상 ko 결합문 대조 (게이트 src 와 무관)
         ),
     )
     trace["grounded"] = grounded

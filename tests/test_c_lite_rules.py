@@ -1,6 +1,7 @@
 """C-lite (a) 규칙 축 — 숫자 대조·부정어 극성 단위 + trace 키. [새봄]
 
 (a) 규칙 단위·trace 키: 인라인 케이스만 쓴다 — fixture·env·네트워크 무관.
+    규칙 축 비교 src 는 근거 청크 결합문(ko) 고정 — ④c.
 (b) SSOT 재현: 판정 CSV 는 레포 밖(C:\IT\moguk-measure\2026-09-01\c-lite\)이
     단일 출처다. env C_LITE_JUDGED_CSV 로 경로를 준 실행에서만 돌고,
     미설정이면 skip 한다 — CSV 를 레포로 반입하지 않는다.
@@ -97,11 +98,15 @@ def _bt(back_text):
                   back_text=back_text, back_ms=12)
 
 
+KO_CHUNKS = "금형 간격을 8 mm 이하로 하십시오."
+
+
 def test_trace_keys_present():
+    # ④c: 규칙 축 비교 src 는 게이트 src 가 아니라 근거 청크 결합문(ko) 고정
     t = graph_mod._backtrans_trace(
         _bt("금형 간격을 80mm 이하로 유지하세요."),
-        high_risk=True, src_kind="question", chunks_joined="",
-        src_text="금형 간격을 8 mm 이하로 하십시오.",
+        high_risk=True, src_kind="question", chunks_joined=KO_CHUNKS,
+        src_text=KO_CHUNKS,
     )
     assert t["num"] == {"mismatch": True, "src_only": ["8"], "back_only": ["80"]}
     assert t["neg"] == {"src": 0, "back": 0, "delta": 0, "hit": False}
@@ -112,9 +117,10 @@ def test_trace_keys_present():
 
 
 def test_trace_neg_delta():
+    ko = "손을 넣지 마십시오."
     t = graph_mod._backtrans_trace(
         _bt("손을 넣으세요."), high_risk=False, src_kind="question",
-        src_text="손을 넣지 마십시오.",
+        chunks_joined=ko, src_text=ko,
     )
     assert t["neg"] == {"src": 1, "back": 0, "delta": -1, "hit": True}
     assert t["num"]["mismatch"] is False
@@ -124,6 +130,16 @@ def test_trace_keys_none_when_no_backtranslation():
     t = graph_mod._backtrans_trace(None, high_risk=False, src_kind="question")
     assert t["num"] is None and t["neg"] is None
     assert t["back_text"] is None
+
+
+def test_trace_keys_none_without_chunks():
+    """④c: 근거 결합문이 없으면 ko 대조축이 없으므로 규칙 축을 기록하지 않는다."""
+    t = graph_mod._backtrans_trace(
+        _bt("금형 간격을 80mm 이하로 유지하세요."),
+        high_risk=True, src_kind="question", chunks_joined="", src_text="",
+    )
+    assert t["num"] is None and t["neg"] is None
+    assert t["back_text"] == "금형 간격을 80mm 이하로 유지하세요."   # 기존 키는 그대로
 
 
 # ---------------------------------------------------------------- (b) SSOT 재현
