@@ -17,6 +17,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from app.agents.neg_lexicon import ko_neg
+from app.agents.num_compare import num_compare
 from app.agents.retrieve import Chunk, retrieve
 from app.agents.verify import Verify, is_high_risk, verify_backtranslation
 from app.models import Worker
@@ -189,8 +191,28 @@ def _backtrans_budget_s(t0: float) -> float:
     return min(cap, left)
 
 
+def _rule_trace(src_text: str, back_text: str) -> dict:
+    """C-lite (a): 규칙 축 실측(숫자 대조·부정어 극성). 게이트 판정에는 관여하지 않는다.
+
+    비교축은 근거 청크 결합문(ko, M-34 ② score_aux 계산 텍스트)과 되번역문이다 —
+    실측(src_text=ko 원문)과 동일 의미. 게이트 src(src_kind)와는 무관하게 고정한다:
+    src_kind='question' 이면 src 가 질의 lang(vi/in)일 수 있어 ko 사전인 neg 축이
+    구조적으로 0 히트가 되기 때문이다.
+    """
+    ns, nb = ko_neg(src_text or ""), ko_neg(back_text or "")
+    return {
+        "num": num_compare(src_text or "", back_text or ""),
+        "neg": {"src": ns, "back": nb, "delta": nb - ns, "hit": abs(nb - ns) >= 1},
+    }
+
+
 def _backtrans_trace(
-    bt: Verify | None, *, high_risk: bool, src_kind: str, chunks_joined: str = ""
+    bt: Verify | None,
+    *,
+    high_risk: bool,
+    src_kind: str,
+    chunks_joined: str = "",
+    src_text: str = "",
 ) -> dict:
     """trace.verify 실측 — §3 응답(4키) 밖으로는 나가지 않는다."""
     base = {
@@ -201,8 +223,10 @@ def _backtrans_trace(
     if bt is None:
         return dict(
             base, back_text=None, back_ms=None, timed_out=None, error=None,
-            score_question=None, score_chunks=None,
+            score_question=None, score_chunks=None, num=None, neg=None,
         )
+    # src_text = 근거 청크 결합문(ko). 부재면 ko 대조축이 없으므로 규칙 축은 기록하지 않는다.
+    rules = _rule_trace(src_text, bt.back_text or "") if src_text else {"num": None, "neg": None}
     return dict(
         base,
         back_text=bt.back_text or None,
@@ -211,6 +235,7 @@ def _backtrans_trace(
         error=bt.error,
         score_question=bt.score_src,
         score_chunks=bt.score_aux,
+        **rules,
     )
 
 
@@ -321,7 +346,13 @@ def run_ask(
     }
     trace["verify"] = dict(
         verify,
-        **_backtrans_trace(bt, high_risk=high_risk, src_kind=gate_src, chunks_joined=chunks_joined),
+        **_backtrans_trace(
+            bt,
+            high_risk=high_risk,
+            src_kind=gate_src,
+            chunks_joined=chunks_joined,
+            src_text=chunks_joined,          # 규칙 축은 항상 ko 결합문 대조 (게이트 src 와 무관)
+        ),
     )
     trace["grounded"] = grounded
 
