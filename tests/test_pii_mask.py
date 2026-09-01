@@ -101,7 +101,10 @@ class Cursor:
 
     def fetchall(self):
         sql = self.store["calls"][-1][0]
-        return self.store["rows"] if "FROM risk_reports" in sql else []
+        for needle, rows in self.store["rows_by"]:
+            if needle in sql:
+                return rows
+        return []
 
 
 class Conn:
@@ -125,18 +128,30 @@ def _patch(monkeypatch, store):
     monkeypatch.setattr(risk_reports.tenancy, "connect", _connect)
 
 
-def _store(returns, rows=None):
-    return {"calls": [], "returns": returns, "rows": rows or [], "commits": 0}
+def _store(returns, rows_by=None):
+    return {"calls": [], "returns": returns, "rows_by": rows_by or [], "commits": 0}
 
 
 ORIGINAL = "연락처 010-1234-5678 문의"
 SUMMARY = "보고자 +84 912 345 678 연락 요망"
+CORRECTED = "정정: 제 번호는 010-1234-5678 아니라 010-9999-8888 입니다"
+NOTE = "보고자 010 1111 2222 회신 완료, 틈새 20mm 재측정"
+SAFE = "게이트 τ 0.45, 인용률 3/3, 지연 320ms, 틈새 20mm — 2026-09-02 head 7427b14"
 
 
-def _detail_row():
+def _detail_row(note=None):
     # _DETAIL_KEYS 16개 순서대로 — original_text 는 평문 행(M-19 이중 읽기 마커 없음)
     return (7, "text", ORIGINAL, "vi", SUMMARY, "high", "submitted", "done",
-            False, None, None, None, None, None, AT, AT)
+            False, None, None, None, None, note, AT, AT)
+
+
+def _events_rows(detail_text):
+    # _EVENT_KEYS 7개 순서대로 — 정정 이벤트 + 무관 이벤트(무접촉 대조용)
+    return [
+        (1, "system", risk_reports.EV_SUBMITTED, None, "submitted",
+         "job=5 kind=summarize_report", AT),
+        (2, "worker:5", risk_reports.EV_REPORTER_CORRECTED, None, None, detail_text, AT),
+    ]
 
 
 def test_admin_detail_masks_display_fields(monkeypatch):
@@ -153,7 +168,9 @@ def test_admin_detail_masks_display_fields(monkeypatch):
 
 
 def test_admin_list_masks_ko_summary(monkeypatch):
-    store = _store([], rows=[(7, "호출 010 9876 5432 요청", "high", "submitted", "done", False, AT)])
+    store = _store([], rows_by=[
+        ("FROM risk_reports", [(7, "호출 010 9876 5432 요청", "high", "submitted", "done", False, AT)]),
+    ])
     _patch(monkeypatch, store)
 
     out = risk_reports.list_reports()
@@ -163,9 +180,70 @@ def test_admin_list_masks_ko_summary(monkeypatch):
 
 def test_admin_list_none_summary_passthrough(monkeypatch):
     """요약 생성 전(ko_summary NULL) 행 — 마스킹이 None 을 건드리지 않는다."""
-    store = _store([], rows=[(8, None, None, "submitted", "queued", False, AT)])
+    store = _store([], rows_by=[
+        ("FROM risk_reports", [(8, None, None, "submitted", "queued", False, AT)]),
+    ])
     _patch(monkeypatch, store)
 
     out = risk_reports.list_reports()
 
     assert out[0]["ko_summary"] is None
+
+
+# ── 범위 확대(총괄 승인 0902) — events[].detail 정정 원문 · resolution_note ──
+
+def test_admin_detail_masks_corrected_event_detail(monkeypatch):
+    store = _store(
+        [("SELECT id, source, original_text", _detail_row())],
+        rows_by=[("FROM risk_report_events", _events_rows(CORRECTED))],
+    )
+    _patch(monkeypatch, store)
+
+    out = risk_reports.get_report_detail(7)
+
+    ev = {e["action"]: e for e in out["events"]}
+    assert ev[risk_reports.EV_REPORTER_CORRECTED]["detail"] == \
+        "정정: 제 번호는 010-****-5678 아니라 010-****-8888 입니다"
+    # 정정 이벤트 외 detail 은 무접촉
+    assert ev[risk_reports.EV_SUBMITTED]["detail"] == "job=5 kind=summarize_report"
+
+
+def test_admin_detail_masks_resolution_note(monkeypatch):
+    store = _store([("SELECT id, source, original_text", _detail_row(note=NOTE))])
+    _patch(monkeypatch, store)
+
+    out = risk_reports.get_report_detail(7)
+
+    # 연락처만 가리고 치수(20mm)는 그대로
+    assert out["resolution_note"] == "보고자 010 **** 2222 회신 완료, 틈새 20mm 재측정"
+
+
+def test_admin_detail_new_fields_off_verbatim(monkeypatch):
+    """PII_MASK=off — 확대 2지점 모두 원문 그대로."""
+    monkeypatch.setenv(MASK_ENV, "off")
+    store = _store(
+        [("SELECT id, source, original_text", _detail_row(note=NOTE))],
+        rows_by=[("FROM risk_report_events", _events_rows(CORRECTED))],
+    )
+    _patch(monkeypatch, store)
+
+    out = risk_reports.get_report_detail(7)
+
+    assert out["resolution_note"] == NOTE
+    ev = {e["action"]: e for e in out["events"]}
+    assert ev[risk_reports.EV_REPORTER_CORRECTED]["detail"] == CORRECTED
+
+
+def test_admin_detail_new_fields_no_false_positive(monkeypatch):
+    """오탐 금지 6건이 확대 2지점에서도 유지된다."""
+    store = _store(
+        [("SELECT id, source, original_text", _detail_row(note=SAFE))],
+        rows_by=[("FROM risk_report_events", _events_rows(SAFE))],
+    )
+    _patch(monkeypatch, store)
+
+    out = risk_reports.get_report_detail(7)
+
+    assert out["resolution_note"] == SAFE
+    ev = {e["action"]: e for e in out["events"]}
+    assert ev[risk_reports.EV_REPORTER_CORRECTED]["detail"] == SAFE

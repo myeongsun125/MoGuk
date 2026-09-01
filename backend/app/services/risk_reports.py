@@ -401,9 +401,10 @@ def get_report_detail(report_id: int) -> dict:
                 raise ReportNotFound(f"report_id={report_id}")
             detail = _row(_DETAIL_KEYS, row)
             detail["original_text"] = open_text(detail["original_text"])   # M-19 이중 읽기
-            # 표시 계층 PII 마스킹 — 응답 조립 시점만. 저장값·events.detail 무접촉
+            # 표시 계층 PII 마스킹 — 응답 조립 시점만, 저장값 무접촉 (범위 확대 총괄 승인 0902)
             detail["original_text"] = mask_pii(detail["original_text"])
             detail["ko_summary"] = mask_pii(detail["ko_summary"])
+            detail["resolution_note"] = mask_pii(detail["resolution_note"])
 
             # 원문 열람 감사 (M-08a) — events append 만, 컬럼 무변경
             record_event(
@@ -414,7 +415,11 @@ def get_report_detail(report_id: int) -> dict:
                 detail="admin detail view",
             )
             cur.execute(_SELECT_EVENTS, {"id": report_id})
-            detail["events"] = [_row(_EVENT_KEYS, r) for r in cur.fetchall()]
+            events = [_row(_EVENT_KEYS, r) for r in cur.fetchall()]
+            for ev in events:
+                if ev["action"] == EV_REPORTER_CORRECTED:
+                    ev["detail"] = mask_pii(ev["detail"])  # 정정 원문(001 detail text) — 표시만, 행 무접촉
+            detail["events"] = events
         conn.commit()
     return detail
 
