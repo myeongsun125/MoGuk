@@ -23,6 +23,7 @@ import time
 
 from app.agents.retrieve import to_vector_literal
 from app.services import approval, risk_reports, tenancy
+from app.services.crypto import open_text
 from app.services.llm_adapter import complete, embed
 
 log = logging.getLogger(__name__)
@@ -130,7 +131,7 @@ def _handle_summarize(cur, job: dict) -> None:
     row = cur.fetchone()
     if row is None:
         raise LocalSummaryError(f"report_id={report_id} 없음")
-    original_text = row[0]
+    original_text = open_text(row[0])          # M-19 이중 읽기 — 복호 후 요약 LLM 에 넘긴다
     if not original_text:
         raise LocalSummaryError(f"report_id={report_id} 원문 비어 있음")
 

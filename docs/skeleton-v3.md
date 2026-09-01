@@ -341,7 +341,7 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-17 | 외부 = 저비용 LLM API, 용어사전 주입 번역 전용, 실패 시 로컬 폴백 | 확정 |
 | M-17a | 외부 API 벤더 = OpenAI gpt-4o-mini, timeout 8s, external→local 폴백 (키는 배포 env로만, 레포 커밋 금지) | 확정 (2026-08-25, PR #4 대조 — 레포 '미결' 상태였음) |
 | M-18 | STT = faster-whisper 전용 컨테이너(core_net), 동기 15s 폴백 / 비동기 jobs | 확정 |
-| M-19 | 암호화 = AES-GCM 저장 시 암호화 + HTTPS. 브라우저 복호화(E2E)는 로드맵 | 확정 |
+| M-19 | 암호화 = AES-GCM 저장 시 암호화 + HTTPS. 브라우저 복호화(E2E)는 로드맵 | 확정 → 구현(2026-09-01): original_text 1컬럼·enc1 마커·이중 읽기, questions 이월 |
 | M-20 | 본선 D-day 확정 시 워크플로우 일정 조정 | 미결·외부 → 종결(2026-09-01, 명선 — 본선 9/2–9/3 확정·일정 반영 완료) |
 | M-21 | [본선 후 메모] 근로자별 관리 페이지: 임계값 상향/완화 + LLM 자연어 난이도 조절, 관리자 고위험 오버라이드 | 이월 |
 | M-22 | edge-api 는 내부 DB 자격증명·호스트명을 갖지 않고 core_net 에 가입하지 않는다(연결 불가가 정답). edge `/health` = self + core 릴레이 도달성(core-api → edge-api outbound 하트비트 `POST /internal/core-heartbeat` 신선도)만, DB 체크 없음. core_net `internal: true` | 확정 (2026-08-23, PR #3) |

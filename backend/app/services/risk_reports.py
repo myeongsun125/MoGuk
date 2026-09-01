@@ -18,6 +18,7 @@ import json
 import logging
 
 from app.services import tenancy
+from app.services.crypto import open_text, seal_text
 
 log = logging.getLogger(__name__)
 
@@ -224,7 +225,8 @@ def submit_text_report(
                 {
                     "worker_id": worker_id,
                     "source": source,
-                    "original_text": original_text,
+                    # M-19: 저장 시 봉인. 키가 없으면 CryptoKeyError 로 접수가 실패한다(평문 폴백 없음).
+                    "original_text": seal_text(original_text),
                     "lang": lang,
                     "status": STATUS_SUBMITTED,
                     "processing_state": STATE_QUEUED,
@@ -265,7 +267,9 @@ def get_report(report_id: int) -> dict | None:
         "id", "source", "original_text", "lang", "ko_summary", "severity",
         "status", "processing_state", "reporter_confirmed", "created_at", "processed_at",
     )
-    return dict(zip(keys, row))
+    out = dict(zip(keys, row))
+    out["original_text"] = open_text(out["original_text"])     # M-19 이중 읽기
+    return out
 
 
 def mark_summary_done(cur, report_id: int, ko_summary: str, severity: str) -> None:
@@ -392,6 +396,7 @@ def get_report_detail(report_id: int) -> dict:
             if row is None:
                 raise ReportNotFound(f"report_id={report_id}")
             detail = _row(_DETAIL_KEYS, row)
+            detail["original_text"] = open_text(detail["original_text"])   # M-19 이중 읽기
 
             # 원문 열람 감사 (M-08a) — events append 만, 컬럼 무변경
             record_event(
@@ -442,6 +447,7 @@ def confirm(
             if row is None:
                 raise ReportNotFound(f"report_id={report_id}")
             processing_state, original_text = row
+            original_text = open_text(original_text)           # M-19 이중 읽기
 
             if processing_state == STATE_FAILED:
                 # M-08c ③ — 상태 변경·이벤트 없이 안내만
