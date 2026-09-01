@@ -93,6 +93,7 @@ services:
       BACKTRANS_TIMEOUT_S: ${BACKTRANS_TIMEOUT_S:-10.0}
       GATE_SRC: ${GATE_SRC:-question}
       BASE_URL: ${BASE_URL:-http://localhost}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
     depends_on:
       postgres:
         condition: service_healthy
@@ -173,6 +174,11 @@ services:
     environment:
       ADMIN_ALLOW_IPS: ${ADMIN_ALLOW_IPS:-127.0.0.1}
       SITE_ADDRESS: "${SITE_ADDRESS:-:80}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     ports:
       - "80:80"
       - "443:443"
