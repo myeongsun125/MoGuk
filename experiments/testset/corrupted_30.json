@@ -1,6 +1,6 @@
 {
   "_schema": {
-    "id": "string (C01~C10 term_swap / N01~N10 negation / M01~M10 number)",
+    "id": "string (C01~C30 term_swap / N01~N20 negation / M01~M10 number)",
     "base_id": "string (sentences_30.json items[].id)",
     "type": "term_swap | negation | number",
     "corrupted_vi": "string (의도적으로 오염된 번역, draft)",
@@ -10,7 +10,11 @@
   "_meta": {
     "draft": true,
     "review_note": "07 재생성(2026-08-29). corrupted_vi 전부 초안 — 정답(answer_vi) 확정 시 함께 재검수",
-    "counts": {"term_swap": 10, "negation": 10, "number": 10},
+    "counts": {"term_swap": 30, "negation": 20, "number": 10},
+    "expansion_2026-08-31": "30건 → 60건 확장(총괄 판정 (a)). 추가분 = term_swap 20(C11~C30) + negation 10(N11~N20). 기존 30건(C01~C10·N01~N10·M01~M10)은 원문 무수정 보존.",
+    "number_limit": "number 는 10건(전체의 10%)이 상한이다. rules.number(숫자만 변경)를 지키려면 base 의 answer_vi 에 숫자 토큰이 있어야 하는데 해당 문장은 S06·S07·S20~S23·S27·S29·S30 의 9개뿐이고 M01~M10 이 이미 전부 소진했다(M10 은 S06 재사용). number 유형 검출률은 표본 10건 기준으로만 읽고, 유형 간 비교 시 표본 불균형(term_swap 30 / negation 20 / number 10)을 함께 밝힌다.",
+    "negation_base_pool": "negation base 는 safety:true 20문장을 전량 소진했다 — N01~N10 이 S01·S02·S04·S05·S16·S17·S18·S19·S24·S25, N11~N20 이 S03·S10·S11·S12·S13·S14·S15·S26·S27·S28. 추가 배정 여지 없음.",
+    "term_swap_exception": "S30 은 answer_vi 에 terms[] 의 term_vi(프레스=máy dập)가 나타나지 않아 rules.term_swap 대조를 통과할 수 없다. 20건째는 S23 의 두 번째 용어축으로 대체했다(C26 프레스축 / C30 금형축).",
     "rules": {
       "term_swap": "base terms[] 의 glossary term_vi 를 다른 glossary 용어의 vi 로 치환. 수치·부정어 개수 불변",
       "negation": "D13-A — base 는 safety:true 문장. vi 부정어(không/đừng/chẳng/chưa) 삽입 또는 제거 1개(|Δ|=1)만. 반의어·양태 치환 금지. 수치 불변",
@@ -49,6 +53,36 @@
     {"id": "M07", "base_id": "S27", "type": "number", "corrupted_vi": "Nếu thời gian dừng khẩn cấp vượt quá giá trị định mức (3200 ms), tính năng của thiết bị bảo vệ không còn được duy trì nên phải ngừng sử dụng và bảo dưỡng.", "note": "320 → 3200. 급정지 시간 허용치 10배 → 브레이크 불량 프레스 계속 사용.", "draft": true},
     {"id": "M08", "base_id": "S29", "type": "number", "corrupted_vi": "Để một phần cơ thể người lao động không lọt vào giữa khuôn, hãy giữ khe hở khuôn ở điểm chết trên từ 80 mm trở xuống.", "note": "8 → 80. 금형 간격 기준 10배 → 손가락 진입 가능.", "draft": true},
     {"id": "M09", "base_id": "S30", "type": "number", "corrupted_vi": "Kiểm tra hằng ngày được thực hiện mỗi 80 giờ, chia thành trước và sau khi khởi động mô tơ chính.", "note": "8 → 80. 일상 점검 주기 10배.", "draft": true},
-    {"id": "M10", "base_id": "S06", "type": "number", "corrupted_vi": "Phôi phải được kẹp vào chấu cặp từ 2 mm trở lên thì mới làm việc an toàn.", "note": "20 → 2. 물림 깊이 부족 → 공작물 이탈·비래.", "draft": true}
+    {"id": "M10", "base_id": "S06", "type": "number", "corrupted_vi": "Phôi phải được kẹp vào chấu cặp từ 2 mm trở lên thì mới làm việc an toàn.", "note": "20 → 2. 물림 깊이 부족 → 공작물 이탈·비래.", "draft": true},
+    {"id": "C11", "base_id": "S01", "type": "term_swap", "corrupted_vi": "Tuyệt đối không chạm tay vào các bộ phận đang quay hoặc dịch chuyển như ụ động, trục vít, phôi và dụng cụ.", "note": "척(mâm cặp) → 심압대(ụ động). 회전부 예시에서 척이 빠지고 비회전 부위로 바뀌어 척 접촉 금지가 사라진다.", "draft": true},
+    {"id": "C12", "base_id": "S02", "type": "term_swap", "corrupted_vi": "Không đeo găng tay khi làm việc trên máy dập.", "note": "선반(máy tiện) → 프레스(máy dập). 장갑 금지 대상이 프레스로 바뀌어 선반 말림 위험 경고가 사라진다.", "draft": true},
+    {"id": "C13", "base_id": "S04", "type": "term_swap", "corrupted_vi": "Dung dịch làm mát rất nóng và sắc nên tuyệt đối không cầm bằng tay trần.", "note": "칩(phoi) → 절삭유(dung dịch làm mát). 맨손 금지의 위험원이 바뀌어 칩 베임·화상 경고가 사라진다.", "draft": true},
+    {"id": "C14", "base_id": "S05", "type": "term_swap", "corrupted_vi": "Phải tắt công tắc và lùi đài dao ra xa rồi mới gá phôi.", "note": "바이트(dao tiện) → 공구대(đài dao). 공작물 설치 전 충분히 떼어야 할 대상이 바뀐다.", "draft": true},
+    {"id": "C15", "base_id": "S06", "type": "term_swap", "corrupted_vi": "Phôi phải được kẹp vào mũi tâm từ 20 mm trở lên thì mới làm việc an toàn.", "note": "척 조(chấu cặp) → 센터(mũi tâm). 물림 깊이 기준의 적용 부위가 바뀌어 공작물 이탈을 막지 못한다.", "draft": true},
+    {"id": "C16", "base_id": "S07", "type": "term_swap", "corrupted_vi": "Chiều dài nhô ra của tốc kẹp bằng 1~1.5 lần chiều cao thân dao.", "note": "바이트(dao tiện) → 돌리개(tốc kẹp). 돌출 길이 제한 대상이 바뀌어 바이트 진동·파손을 막지 못한다.", "draft": true},
+    {"id": "C17", "base_id": "S08", "type": "term_swap", "corrupted_vi": "Sau khi gá phôi xong, hãy tháo ngay đài dao và các loại cờ lê ra.", "note": "척 핸들(tay quay mâm cặp) → 공구대(đài dao). C02 와 다른 치환 대상 — 척 핸들 방치에 의한 비래 위험이 남는다.", "draft": true},
+    {"id": "C18", "base_id": "S09", "type": "term_swap", "corrupted_vi": "Sau khi gia công thô xong, điều chỉnh vị trí bộ bẻ phoi rồi gia công tinh trong khi cấp dung dịch làm mát.", "note": "바이트(dao tiện) → 칩 브레이커(bộ bẻ phoi). C04 와 다른 치환 대상 — 정삭 전 조정 대상이 바뀐다.", "draft": true},
+    {"id": "C19", "base_id": "S16", "type": "term_swap", "corrupted_vi": "Không cho tay vào giữa bàn máy dập và khuôn dưới.", "note": "상형(khuôn trên) → 볼스터(bàn máy dập). 손 넣기 금지 구간이 상·하형 사이에서 벗어나 끼임을 막지 못한다.", "draft": true},
+    {"id": "C20", "base_id": "S17", "type": "term_swap", "corrupted_vi": "Khi thay bàn máy dập, phải lắp khối chèn an toàn.", "note": "금형(khuôn) → 볼스터(bàn máy dập). C06 과 다른 치환 대상 — 안전블록 삽입 시점이 금형 교체와 무관해진다.", "draft": true},
+    {"id": "C21", "base_id": "S18", "type": "term_swap", "corrupted_vi": "Không được dùng băng dính cố định nút của thiết bị bảo vệ kiểu tấm chắn để thao tác bằng một tay.", "note": "양수조작식 방호장치 → 가드식 방호장치(thiết bị bảo vệ kiểu tấm chắn). 양수조작 버튼 무효화 금지가 사라진다.", "draft": true},
+    {"id": "C22", "base_id": "S19", "type": "term_swap", "corrupted_vi": "Không che hoặc dịch chuyển thiết bị bảo vệ kiểu tấm chắn.", "note": "광전자식 방호장치 → 가드식 방호장치. C07 과 다른 치환 대상 — 광전자식 무효화가 방치된다.", "draft": true},
+    {"id": "C23", "base_id": "S20", "type": "term_swap", "corrupted_vi": "Xử lý đầu trượt dưới trước, đầu trượt nặng từ 25 kg trở lên phải dùng thiết bị vận chuyển cơ giới.", "note": "금형(khuôn) → 슬라이드(đầu trượt). 취급 순서·동력운반기 기준의 대상이 바뀌어 금형 취급 재해를 막지 못한다.", "draft": true},
+    {"id": "C24", "base_id": "S21", "type": "term_swap", "corrupted_vi": "Khi dùng công tắc chân của máy tiện, sau mỗi 1 lần dập phải nhấc chân khỏi công tắc.", "note": "프레스(máy dập) → 선반(máy tiện). 발 스위치 규칙의 적용 기계가 바뀌어 프레스 연속 행정을 막지 못한다.", "draft": true},
+    {"id": "C25", "base_id": "S22", "type": "term_swap", "corrupted_vi": "Bu lông cố định khối chèn an toàn sau khi siết phải để lại khoảng 3~4 ren ngắn.", "note": "금형(khuôn) → 안전블록(khối chèn an toàn). 고정볼트 나사산 잔존 기준의 대상이 바뀐다.", "draft": true},
+    {"id": "C26", "base_id": "S23", "type": "term_swap", "corrupted_vi": "Chiều sâu rãnh T của máy tiện để lắp khuôn phải bằng ít nhất 2 lần đường kính bu lông lắp.", "note": "프레스(máy dập) → 선반(máy tiện). T홈 안길이 기준의 적용 기계가 바뀐다.", "draft": true},
+    {"id": "C27", "base_id": "S24", "type": "term_swap", "corrupted_vi": "Khi bảo dưỡng, vệ sinh, tra dầu, kiểm tra, sửa chữa, thay thế hoặc điều chỉnh, hãy dừng vận hành bánh đà.", "note": "프레스(máy dập) → 플라이휠(bánh đà). 비정형 작업 시 정지 대상이 바뀌어 프레스 운전정지가 빠진다.", "draft": true},
+    {"id": "C28", "base_id": "S25", "type": "term_swap", "corrupted_vi": "Không dùng tay giữ trục khuỷu để dừng nó lại.", "note": "플라이휠(bánh đà) → 크랭크축(trục khuỷu). 손으로 잡기 금지 대상이 바뀐다.", "draft": true},
+    {"id": "C29", "base_id": "S29", "type": "term_swap", "corrupted_vi": "Để một phần cơ thể người lao động không lọt vào giữa bàn máy dập, hãy giữ khe hở bàn máy dập ở điểm chết trên từ 8 mm trở xuống.", "note": "금형(khuôn) → 볼스터(bàn máy dập). 8 mm 간격 기준의 적용 부위가 바뀌어 금형 사이 신체 진입을 막지 못한다.", "draft": true},
+    {"id": "C30", "base_id": "S23", "type": "term_swap", "corrupted_vi": "Chiều sâu rãnh T của máy dập để lắp đầu trượt phải bằng ít nhất 2 lần đường kính bu lông lắp.", "note": "금형(khuôn) → 슬라이드(đầu trượt). C26 과 다른 용어축 — S30 은 answer_vi 에 프레스 term_vi 가 없어 치환 불가라 S23 두 번째 축으로 대체.", "draft": true},
+    {"id": "N11", "base_id": "S03", "type": "negation", "corrupted_vi": "Trong khi làm việc không cần đeo kính bảo hộ.", "note": "không 삽입(Δ+1). 보안경 착용 필수 → 불필요. 칩 비산 시 실명 위험.", "draft": true},
+    {"id": "N12", "base_id": "S10", "type": "negation", "corrupted_vi": "Có thể quay trục chính vượt quá số vòng quay cho phép của mâm cặp, dụng cụ và đồ gá phôi.", "note": "không 제거(Δ-1). 허용 회전수 초과 금지 → 허용. 공작물·척 비래.", "draft": true},
+    {"id": "N13", "base_id": "S11", "type": "negation", "corrupted_vi": "Khi bảo dưỡng, vệ sinh không cần ngắt nguồn điện, chỉ gắn thiết bị khóa vào bộ khởi động và đặt biển báo.", "note": "không 삽입(Δ+1). 전원 차단 필수 → 불필요. LOTO 의 전원 차단 단계가 빠진다.", "draft": true},
+    {"id": "N14", "base_id": "S12", "type": "negation", "corrupted_vi": "Có thể tháo dỡ hoặc ngừng sử dụng thiết bị bảo vệ đã lắp trên máy.", "note": "không 제거(Δ-1). 방호장치 해체·사용정지 금지 → 허용.", "draft": true},
+    {"id": "N15", "base_id": "S13", "type": "negation", "corrupted_vi": "Khi thấy nguy hiểm, không cần hô to để báo và nhấn nút dừng khẩn cấp.", "note": "không 삽입(Δ+1). 위험 발견 시 통보·비상정지 → 불필요. 초동 대응이 사라진다.", "draft": true},
+    {"id": "N16", "base_id": "S14", "type": "negation", "corrupted_vi": "Khi phoi bay ra, không cần đeo kính bảo hộ và lắp tấm chắn trước khi sử dụng.", "note": "không 삽입(Δ+1). 칩 비산 시 보안경·방호판 → 불필요.", "draft": true},
+    {"id": "N17", "base_id": "S15", "type": "negation", "corrupted_vi": "Thay dung dịch làm mát tan trong nước theo định kỳ và hãy dùng phụ gia chống thối.", "note": "không 제거(Δ-1). 부패 방지 첨가제 사용 금지 → 사용 지시. 유해물질 노출.", "draft": true},
+    {"id": "N18", "base_id": "S26", "type": "negation", "corrupted_vi": "Có thể để máy dập dừng trong trạng thái ly hợp vẫn đang kết nối.", "note": "không 제거(Δ-1). 클러치 연결 상태 정지 금지 → 허용. 불시 기동 위험.", "draft": true},
+    {"id": "N19", "base_id": "S27", "type": "negation", "corrupted_vi": "Nếu thời gian dừng khẩn cấp vượt quá giá trị định mức (320 ms), tính năng của thiết bị bảo vệ không còn được duy trì nên không cần ngừng sử dụng và bảo dưỡng.", "note": "không 삽입(Δ+1, 1→2). 성능 미달 시 사용중지·정비 → 불필요. 수치(320) 불변.", "draft": true},
+    {"id": "N20", "base_id": "S28", "type": "negation", "corrupted_vi": "Có thể tiếp cận khi chưa xác nhận đầu trượt đã dừng hẳn ở điểm chết trên.", "note": "chưa 삽입(Δ+1). 상사점 정지 확인 후 접근 → 미확인 접근 허용. 슬라이드 하강 끼임 직결.", "draft": true}
   ]
 }
