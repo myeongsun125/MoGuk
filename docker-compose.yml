@@ -95,6 +95,7 @@ services:
       GLOSSARY_INJECT_BACKTRANS: ${GLOSSARY_INJECT_BACKTRANS:-on}
       GLOSSARY_INJECT_ANSWER: ${GLOSSARY_INJECT_ANSWER:-off}
       GLOSSARY_STATUS: ${GLOSSARY_STATUS:-approved,draft}
+      PII_MASK: ${PII_MASK:-on}
       BASE_URL: ${BASE_URL:-http://localhost}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
     depends_on:
