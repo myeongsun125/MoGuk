@@ -319,6 +319,7 @@ def run_ask(
                 aux_src=chunks_joined,
                 gate_on="aux" if gate_src == "chunks" else "src",
                 timeout_s=_backtrans_budget_s(t0),
+                lang=lang,               # 용어집 주입 src 축(총괄 확정 0901)
             )
     else:
         trace["route"] = {"tier": None, "model": None, "ms": 0, "error": "no_chunks"}
