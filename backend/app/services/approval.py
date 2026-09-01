@@ -241,6 +241,21 @@ def answer_unanswered(question_id: int, text: str | None) -> dict:
                 },
             )
             job_id = cur.fetchone()[0]
+
+            # detail 은 001:164 상 text 컬럼이라 JSON 문자열로 싣는다.
+            # ingested_doc_id 는 적재 job 이 끝나야 정해지므로 전이 시점에는 null 이다.
+            admin_events.record(
+                cur,
+                actor=ADMIN_ACTOR_UNAUTHENTICATED,
+                target_type=TARGET_UNANSWERED,
+                target_id=question_id,
+                action=EV_UNANSWERED_ANSWERED,
+                from_state=current,
+                to_state=UNANSWERED_TO_STATE,
+                detail=json.dumps(
+                    {"ingested_doc_id": None, "text_len": len(body)}, ensure_ascii=False
+                ),
+            )
         conn.commit()
     log.info(
         "unanswered: 답변 question_id=%s queue_id=%s job=%s", question_id, queue_id, job_id
