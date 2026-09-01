@@ -169,7 +169,7 @@ CREATE TABLE risk_report_events (                   -- M-08a 이력·감사 (app
 CREATE INDEX risk_report_events_report_idx ON risk_report_events(report_id, id);
 
 CREATE TABLE jobs (                                 -- M-18 비동기 큐 (Redis 없음)
-  id serial PRIMARY KEY, kind text NOT NULL,        -- 'stt_summarize'|'ingest_answer'|...
+  id serial PRIMARY KEY, kind text NOT NULL,        -- 'stt_summarize'|'ingest_answer'|'ingest_document'|...
   payload jsonb NOT NULL,
   status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','done','failed')),
   attempts int NOT NULL DEFAULT 0, run_after timestamptz NOT NULL DEFAULT now(),
@@ -235,7 +235,8 @@ POST /auth/admin/login     {email, pw}
 GET  /admin/dashboard      → {open_reports, reports_by_status:{submitted,acknowledged,resolved}, unanswered_open, citation_rate:{answered,with_sources,rate}, reports_today_hourly[{hour,count}], generated_at, timezone}   # KPI 4종+추이. citation_rate 분모=답변 방출(gated 제외)·분자=sources 존재. 추이=오늘(Asia/Seoul) 시간대별, 00시~현재 zero-fill. 학습 KPI: per_worker[{worker_id, quiz_set_id, score, label, created_at}]·per_module[{module, n, avg_score}] (v_comprehension, M-38)
 POST /admin/workers/invite {name, emp_no, lang, phone?}     → {invite_url, worker_id}   # phone 선택(M-39)
 POST /admin/workers/{id}/send-invite {channel:'kakao_link'} → {share_url}   # kakao_link=invite_url 공유 URL, sms 발송은 로드맵 (M-39)
-POST /admin/documents      multipart                        → 202 (ingest job)
+POST /admin/documents {title, category, text, filename?} → 202 {id, job_id}   # documents(origin 'upload', source 'upload:'+filename) + ingest_document 잡(청킹 ≤800자·임베딩·chunks meta {category, origin:'upload', draft:false}), text 빈 값·category 밖 422. multipart·PDF 파싱은 로드맵 (M-41)
+GET  /admin/documents      → [{id, title, category, origin, source, created_at, chunk_count, job_status}]   # 최신순 (M-41)
 GET  /admin/glossary?status=draft → [{id, term_ko, term_vi, term_in, note, status, source_question_id, approved_by, approved_at}]   # 001 정본 필드 전사. status CHECK('draft','approved','rejected'), 기본 필터 draft(?status= 빈 값 = 전체). glossary 에 created_at 컬럼 없음 — 정렬 id
 POST /admin/glossary/{id}/approve → {id, status:'approved'} / reject {note?} → {id, status:'rejected'}   # draft 에서만(그 외 422·대상 없음 404). 전이마다 admin_events 1행(M-08d). approved_by 는 integer FK 라 NULL 유지(M-15b), approve 만 approved_at 갱신. reject 사유는 admin_events.detail 에 보존 — glossary.note(용어 설명) 무접촉. 신원 필드 본문 수신 금지(400)
 GET  /admin/unanswered?status=open → [{id, question_id, status, question, lang, question_created_at, admin_answer, answered_at}]   # unanswered_queue ⋈ questions. status CHECK('open','answered'), 기본 필터 open. 적재 대상은 M-05a 2종(no_chunks·no_answer)뿐 — 시스템 오류 미적재
@@ -386,3 +387,4 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-38 | 퀴즈 최소 구현 (2026-09-02, 명선 확정) — 문항 GET·채점·quiz_attempts·학습 KPI, 시드 draft 라벨·q_in 기계번역 초안, 시드 실물 키(q_ko·q_vi·choices·choices_vi·answer_idx·explain_ko + q_in·choices_in) 준수. 영향: SB(구현)·JH(화면)·MS(시드·§3) | 확정 (2026-09-02, 명선) |
 | M-39 | QR 발송 (2026-09-02, 명선 확정) — workers.phone append(CREATE+ALTER IF NOT EXISTS), send-invite kakao_link 공유 URL, sms는 로드맵. 영향: SB·JH·BG(001 재적용) | 확정 (2026-09-02, 명선) |
 | M-40 | PII 마스킹 표시 계층 (2026-09-02, 명선 확정) — 관리자 응답 조립부 연락처만, 이름·사번 제외, env PII_MASK 기본 on, events detail·resolution_note 포함, 원본 무손실. 영향: SB·BG(env) | 확정 (2026-09-02, 명선) |
+| M-41 | 관리자 문서 업로드·자동 적재 (2026-09-02, 명선 확정) — JSON 텍스트 업로드(.md/.txt는 프론트에서 읽어 전송), ingest_document 잡 청킹(≤800자)·bge-m3 임베딩·chunks 적재, GET 목록(청크 수·잡 상태). PDF 파싱·multipart·Dagster 오케스트레이션은 로드맵. 영향: SB(백엔드)·JH(화면)·MS(§3) | 확정 (2026-09-02, 명선) |
