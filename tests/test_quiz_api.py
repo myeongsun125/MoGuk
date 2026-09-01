@@ -302,16 +302,36 @@ def _attempt_params(store):
     return [c[1] for c in store["calls"] if "INSERT INTO quiz_attempts" in c[0]]
 
 
+def _bearer(monkeypatch, wid=9):
+    """submit 은 인증 필수(총괄 판정 0902) — 테스트 공용 Bearer 헤더."""
+    monkeypatch.setenv("JWT_SECRET", "test-secret-for-m38")
+    token = auth_service.issue_token_pair(wid, "axis_demo")["jwt"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_submit_anonymous_401(monkeypatch):
+    """익명 submit 불허(총괄 지정) — 401, 저장소 호출 0."""
+    def _boom(*a, **k):
+        pytest.fail("익명인데 저장소를 호출했다")
+
+    monkeypatch.setattr(quiz.tenancy, "connect", _boom)
+
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]})
+
+    assert r.status_code == 401, r.text
+
+
 def test_submit_perfect_score_green(monkeypatch):
     store = _submit_store()
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
 
-    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]})
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]},
+                    headers=_bearer(monkeypatch))
 
     assert r.status_code == 200, r.text
     assert r.json() == {"score": 100, "passed": True, "label": "green"}
     p = _attempt_params(store)[0]
-    assert (p["quiz_set_id"], p["score"], p["passed"], p["worker_id"]) == (3, 100, True, None)
+    assert (p["quiz_set_id"], p["score"], p["passed"], p["worker_id"]) == (3, 100, True, 9)
     detail = _json.loads(p["detail"])
     assert detail == {"answers": [2, 0], "correct": [True, True]}   # 정오 기록
     assert store["commits"] == 1
@@ -321,7 +341,8 @@ def test_submit_half_score_red_not_passed(monkeypatch):
     store = _submit_store()
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
 
-    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]})
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]},
+                    headers=_bearer(monkeypatch))
 
     assert r.json() == {"score": 50, "passed": False, "label": "red"}
     assert _json.loads(_attempt_params(store)[0]["detail"])["correct"] == [True, False]
@@ -335,7 +356,8 @@ def test_submit_threshold_from_tenant_settings_not_hardcoded(monkeypatch):
     store = _submit_store(threshold=(50,))
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
 
-    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]})
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]},
+                    headers=_bearer(monkeypatch))
 
     assert r.json() == {"score": 50, "passed": True, "label": "red"}
     assert any("tenant_settings" in c[0] for c in store["calls"])
@@ -345,26 +367,25 @@ def test_submit_threshold_from_tenant_settings_not_hardcoded(monkeypatch):
 def test_submit_threshold_row_missing_falls_back_90(monkeypatch):
     store = _submit_store(threshold=None)
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+    headers = _bearer(monkeypatch)
 
-    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]})
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]}, headers=headers)
 
     assert r.json()["passed"] is False                 # 50 < 폴백 90
     r2_store = _submit_store(threshold=None)
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(r2_store))
-    assert client.post("/api/v1/learn/quiz/3/submit",
-                       json={"answers": [2, 0]}).json()["passed"] is True   # 100 ≥ 90
+    assert client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]},
+                       headers=headers).json()["passed"] is True   # 100 ≥ 90
 
 
 def test_submit_records_bearer_worker_id(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET", "test-secret-for-m38")
     store = _submit_store()
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
-    token = auth_service.issue_token_pair(9, "axis_demo")["jwt"]
 
     client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]},
-                headers={"Authorization": f"Bearer {token}"})
+                headers=_bearer(monkeypatch, wid=41))
 
-    assert _attempt_params(store)[0]["worker_id"] == 9
+    assert _attempt_params(store)[0]["worker_id"] == 41
 
 
 @pytest.mark.parametrize("answers", [
@@ -378,7 +399,8 @@ def test_submit_invalid_answers_422_no_insert(monkeypatch, answers):
     store = _submit_store()
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
 
-    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": answers})
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": answers},
+                    headers=_bearer(monkeypatch))
 
     assert r.status_code == 422, r.text
     assert _attempt_params(store) == []                # 거절 시 기록 없음
@@ -401,16 +423,16 @@ def test_submit_non_list_answers_422(monkeypatch):
         pytest.fail("검증 실패인데 저장소를 호출했다")
 
     monkeypatch.setattr(quiz.tenancy, "connect", _boom)
-    assert client.post("/api/v1/learn/quiz/3/submit",
-                       json={"answers": "oops"}).status_code == 422        # pydantic
+    assert client.post("/api/v1/learn/quiz/3/submit", json={"answers": "oops"},
+                       headers=_bearer(monkeypatch)).status_code == 422    # pydantic
 
 
 def test_submit_missing_set_404(monkeypatch):
     store = _store(rows=[("FROM quiz_sets", None)])
     monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
 
-    assert client.post("/api/v1/learn/quiz/999/submit",
-                       json={"answers": [0]}).status_code == 404
+    assert client.post("/api/v1/learn/quiz/999/submit", json={"answers": [0]},
+                       headers=_bearer(monkeypatch)).status_code == 404
 
 
 @pytest.mark.parametrize("score, label", [

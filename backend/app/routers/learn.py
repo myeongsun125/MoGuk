@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StrictInt
 
-from app.routers.auth import optional_identity
+from app.routers.auth import optional_identity, require_worker
 from app.services import quiz
 from app.services.relay import queue
 from app.services.system_service import role
@@ -63,14 +63,15 @@ class SubmitRequest(BaseModel):
 async def submit_quiz(
     set_id: int,
     body: SubmitRequest,
-    identity: dict | None = Depends(optional_identity),
+    claims: dict = Depends(require_worker),
 ) -> JSONResponse:
     """{answers[]} → {score, passed, label} + quiz_attempts 1행 (M-38).
 
-    통과 판정 = tenant_settings.threshold_pass(행 부재 시 90). worker_id 는 Bearer 에서
-    도출(M-28b) — 미인증이면 NULL 기록. 길이·범위 위반은 422.
-    M-28c 동형: edge 는 릴레이 경유 — 상태코드 그대로 투과.
+    인증 필수(총괄 판정 0902) — 익명 응시 불허, 헤더 부재·위조·만료는 require_worker 가
+    401 로 끊는다(confirm M-37 동형). 통과 판정 = tenant_settings.threshold_pass(행 부재
+    시 90). 길이·범위 위반은 422. M-28c 동형: edge 는 릴레이 경유 — 상태코드 그대로 투과.
     """
+    identity = {"wid": claims["wid"], "tenant": claims.get("tenant")}
     if role() == "edge":
         item = queue.enqueue(
             "POST", SUBMIT_PATH.format(set_id=set_id), body.model_dump(), identity
@@ -79,7 +80,7 @@ async def submit_quiz(
         return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
     try:
         result = await asyncio.to_thread(
-            quiz.submit_quiz, set_id, body.answers, (identity or {}).get("wid")
+            quiz.submit_quiz, set_id, body.answers, claims["wid"]
         )
     except quiz.QuizSetNotFound:
         raise HTTPException(status_code=404, detail="quiz set not found") from None

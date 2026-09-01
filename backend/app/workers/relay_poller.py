@@ -297,8 +297,13 @@ def dispatch(
         "/submit"
     ):
         # M-38 채점 — worker_id 는 identity 에서(M-28b 소비). 상태코드 3분기 core 라우터 동일.
+        from app.services.auth import AUTH_FAILED_MESSAGE
         from app.services import quiz
 
+        if worker_id is None:
+            # 총괄 판정 0902: submit 은 인증 필수 — 릴레이는 라우터 의존성을 거치지
+            # 않으므로(서비스 직접 호출) confirm(M-37)과 동형으로 여기서도 401 을 낸다.
+            return 401, {"detail": AUTH_FAILED_MESSAGE}
         set_id = _path_id(route, 5, segments=7)
         if set_id is None:
             return 404, {"detail": f"relay: 잘못된 set_id 경로 {route}"}
