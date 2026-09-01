@@ -1,4 +1,4 @@
-import type { WorkerInviteRequest, WorkerInviteResult } from "../types";
+import type { SendInviteResult, WorkerInviteRequest, WorkerInviteResult } from "../types";
 import { appendEvent } from "./adminEvents.fixtures";
 
 // invites.py:88-98 _validate와 동일 순서(emp_no → name → lang) + :118 WorkerAlreadyActive —
@@ -43,5 +43,13 @@ export function inviteMock(body: WorkerInviteRequest): WorkerInviteResult {
     detail: empNo,
   });
 
-  return { invite_url: inviteUrl };
+  // worker_id는 §3 계약 밖(SB #87 파트2 전) — mock은 ⑤ 카톡 발송 버튼 활성화 조건용으로
+  // 지금부터 채운다(types.ts WorkerInviteResult 주석 참고).
+  return { invite_url: inviteUrl, worker_id: workerId };
+}
+
+// SB #87 파트1 확정 — {channel:'kakao_link'} → {share_url}. mock은 invite_url을 그대로
+// 공유 링크로 재사용(실API 착륙 전까지 형태만 맞춘 임시값).
+export function sendInviteMock(workerId: number, channel: string): SendInviteResult {
+  return { share_url: `${window.location.origin}/activate?token=mock-share-${channel}-${workerId}` };
 }

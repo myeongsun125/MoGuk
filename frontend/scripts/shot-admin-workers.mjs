@@ -17,7 +17,10 @@ async function main() {
   await server.listen();
 
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: VIEWPORT, acceptDownloads: true });
+  const context = await browser.newContext({ viewport: VIEWPORT, acceptDownloads: true });
+  // navigator.clipboard.writeText 테스트용 — headless Chromium은 기본 차단.
+  await context.grantPermissions(["clipboard-write", "clipboard-read"], { origin: `http://localhost:${PORT}` });
+  const page = await context.newPage();
   let failures = 0;
 
   await page.goto(`http://localhost:${PORT}/admin/workers`);
@@ -82,12 +85,35 @@ async function main() {
   await download.saveAs(savedPath);
   console.log("PASS: '이미지 저장' download ->", suggested, "saved to", savedPath);
 
-  // 발송 버튼은 자리만 — disabled 확인.
+  // ⑤ 카톡 발송 — mock이 worker_id를 채워주므로 버튼이 활성화되어야 한다.
   const sendDisabled = await page.getByTestId("invite-send").isDisabled();
-  console.log("send button disabled (자리만, 연결 금지):", sendDisabled);
-  if (!sendDisabled) {
-    console.error("FAIL: '카톡/문자로 보내기' should stay disabled — API 연결 금지 지시 위반");
+  console.log("send button disabled (worker_id 있으면 false 기대):", sendDisabled);
+  if (sendDisabled) {
+    console.error("FAIL: worker_id가 mock에 있는데도 발송 버튼이 disabled");
     failures++;
+  } else {
+    await page.getByTestId("invite-send").click();
+    // headless Chromium엔 navigator.share가 없어 클립보드 경로로 빠진다 — share-url-text +
+    // "링크가 복사되었습니다" 둘 다 렌더되어야 한다.
+    await page.getByTestId("share-url-text").waitFor({ state: "visible", timeout: 5000 }).then(
+      () => console.log("PASS: 카톡 발송 -> share-url-text 렌더"),
+      () => {
+        console.error("FAIL: 카톡 발송 후 share-url-text가 렌더되지 않음");
+        failures++;
+      },
+    );
+    const shareUrlText = await page.getByTestId("share-url-text").textContent().catch(() => null);
+    console.log("share_url:", shareUrlText);
+    if (!shareUrlText || !shareUrlText.includes("/activate?token=")) {
+      console.error("FAIL: share_url shape unexpected");
+      failures++;
+    }
+    const copiedVisible = await page.getByTestId("send-copied").isVisible().catch(() => false);
+    console.log("PASS: send-copied(클립보드 성공) 렌더:", copiedVisible);
+    if (!copiedVisible) {
+      console.error("FAIL: clipboard.writeText 성공 후 send-copied 메시지가 렌더되지 않음");
+      failures++;
+    }
   }
 
   await page.screenshot({ path: OUT_PNG, fullPage: true });

@@ -54,5 +54,7 @@
   "admin.workers.errorDuplicate": "Nomor pegawai ini sudah aktif. Silakan periksa kembali.",
   "admin.workers.errorInvalid": "Silakan periksa kembali nama, nomor pegawai, dan bahasa.",
   "admin.workers.errorGeneric": "Gagal menerbitkan undangan. Silakan coba lagi.",
-  "admin.workers.sendComingSoon": "API pengiriman akan segera terhubung"
+  "admin.workers.sendKakao": "Kirim lewat KakaoTalk",
+  "admin.workers.sendCopied": "Tautan telah disalin",
+  "admin.workers.sendError": "Gagal membagikan. Silakan salin tautan di bawah"
 }
