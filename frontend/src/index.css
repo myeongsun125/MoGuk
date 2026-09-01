@@ -1,5 +1,7 @@
 * {
   box-sizing: border-box;
+  /* 긴 문자열·trace-id 등 공백 없는 텍스트가 레이아웃을 밀어내지 않도록 전역 방어 */
+  overflow-wrap: anywhere;
 }
 
 body {
