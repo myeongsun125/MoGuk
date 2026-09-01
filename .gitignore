@@ -22,3 +22,6 @@ Thumbs.db
 
 # Test / tooling
 .pytest_cache/
+
+# QA 스모크 산출물 — 코드 전용 PR 유지(#72 선례). 이 경로만, 다른 docs/assets는 영향 없음.
+docs/assets/v3-2-admin-unanswered.png
