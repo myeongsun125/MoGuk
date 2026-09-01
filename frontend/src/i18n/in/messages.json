@@ -39,5 +39,9 @@
   "admin.glossary.rejectConfirm": "Konfirmasi penolakan",
   "admin.glossary.rejectCancel": "Batal",
   "worker.report.echoLabel": "Isi yang Anda kirim",
-  "worker.report.confirmReauth": "Undangan telah kedaluwarsa atau sesi hilang. Silakan hubungi admin untuk penerbitan ulang dan aktifkan kembali."
+  "worker.report.confirmReauth": "Undangan telah kedaluwarsa atau sesi hilang. Silakan hubungi admin untuk penerbitan ulang dan aktifkan kembali.",
+  "admin.unanswered.answerPlaceholder": "Masukkan jawaban",
+  "admin.unanswered.answerSubmit": "Kirim jawaban",
+  "admin.unanswered.answerSubmitting": "Mengirim...",
+  "admin.unanswered.answerError": "Gagal mengirim jawaban. Silakan coba lagi."
 }
