@@ -11,6 +11,7 @@ core 는 저장소 직접 호출. core 폴러도 같은 함수를 쓰며 HTTP �
 """
 
 import asyncio
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
@@ -38,6 +39,7 @@ GLOSSARY_APPROVE_PATH = "/api/v1/admin/glossary/{term_id}/approve"
 GLOSSARY_REJECT_PATH = "/api/v1/admin/glossary/{term_id}/reject"
 EVENTS_PATH = "/api/v1/admin/events"
 INVITE_PATH = "/api/v1/admin/workers/invite"
+SEND_INVITE_PATH = "/api/v1/admin/workers/{worker_id}/send-invite"
 LIST_PATH = "/api/v1/admin/reports"
 DETAIL_PATH = "/api/v1/admin/reports/{report_id}"
 ACK_PATH = "/api/v1/admin/reports/{report_id}/ack"
@@ -94,11 +96,12 @@ class InviteRequest(BaseModel):
     name: str
     emp_no: str
     lang: str
+    phone: str | None = None       # M-39 파트2 선택 필드 — 형식 검증 없음(계약), 그대로 저장
 
 
 @router.post("/workers/invite", status_code=201)
 async def invite_worker(body: InviteRequest, request: Request) -> JSONResponse:
-    """{name, emp_no, lang} → 201 {invite_url} (M-32).
+    """{name, emp_no, lang, phone?} → 201 {invite_url, worker_id} (M-32 · §3:236 M-39 파트2).
 
     emp_no 미활성 중복은 재초대(기존 미사용 초대 만료 후 신규 1건), 활성 워커는 409.
     발급마다 admin_events 1행(action='worker_invited').
@@ -113,10 +116,38 @@ async def invite_worker(body: InviteRequest, request: Request) -> JSONResponse:
         return await _relay(INVITE_PATH, "POST", body.model_dump())
     try:
         result = await asyncio.to_thread(
-            invites.create_invite, body.name, body.emp_no, body.lang
+            invites.create_invite, body.name, body.emp_no, body.lang, body.phone
         )
     except invites.InvalidInviteRequest as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+    except invites.WorkerAlreadyActive as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return JSONResponse(status_code=201, content=result)
+
+
+class SendInviteRequest(BaseModel):
+    # 총괄 계약(파트1): channel 은 kakao_link 만 유효 — 그 외 값(sms 포함)은 pydantic 422.
+    channel: Literal["kakao_link"]
+
+
+@router.post("/workers/{worker_id}/send-invite", status_code=201)
+async def send_worker_invite(
+    worker_id: int, body: SendInviteRequest, request: Request
+) -> JSONResponse:
+    """{channel:'kakao_link'} → 201 {share_url} — 기존 워커 초대 링크 재발급 (파트1).
+
+    발급 규칙·URL 형태는 invites 발급 경로 재사용(미사용 1건 유지·재발급 시 기존 만료·72h).
+    워커 없음 404, 이미 활성 409. 가드·릴레이 분기는 invite_worker(M-32b) 동형.
+    """
+    _reject_identity_fields(await _json_body(request))
+    if role() == "edge":
+        return await _relay(
+            SEND_INVITE_PATH.format(worker_id=worker_id), "POST", {"channel": body.channel}
+        )
+    try:
+        result = await asyncio.to_thread(invites.send_invite, worker_id)
+    except invites.WorkerNotFound:
+        raise HTTPException(status_code=404, detail="worker not found") from None
     except invites.WorkerAlreadyActive as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return JSONResponse(status_code=201, content=result)

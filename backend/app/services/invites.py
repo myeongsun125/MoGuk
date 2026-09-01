@@ -44,6 +44,10 @@ class WorkerAlreadyActive(Exception):
     """이미 활성화된 워커 — 라우터가 409 로 변환."""
 
 
+class WorkerNotFound(Exception):
+    """대상 워커 없음 — 라우터가 404 로 변환 (send-invite 파트1)."""
+
+
 class InvalidInviteRequest(Exception):
     """emp_no 미지정·lang 값 이탈 등 요청 형식 위반 — 라우터가 422 로 변환."""
 
@@ -64,11 +68,19 @@ def new_token() -> str:
 # emp_no 는 UNIQUE — 동시 재초대 경합을 막기 위해 행 잠금 후 분기한다.
 _SELECT_WORKER = "SELECT id, activated_at FROM workers WHERE emp_no = %(emp_no)s FOR UPDATE"
 
+# send-invite(파트1)는 worker id 로 특정 — 같은 이유로 행 잠금.
+_SELECT_WORKER_BY_ID = (
+    "SELECT id, emp_no, activated_at FROM workers WHERE id = %(id)s FOR UPDATE"
+)
+
 _INSERT_WORKER = """
-INSERT INTO workers (name, emp_no, lang, invited_at)
-VALUES (%(name)s, %(emp_no)s, %(lang)s, now())
+INSERT INTO workers (name, emp_no, lang, phone, invited_at)
+VALUES (%(name)s, %(emp_no)s, %(lang)s, %(phone)s, now())
 RETURNING id
 """
+
+# M-39 파트2: phone 은 지정된 경우에만 저장 — 미지정 재초대가 기존 값을 지우지 않는다.
+_SET_PHONE = "UPDATE workers SET phone = %(phone)s WHERE id = %(id)s"
 
 # 해석 1: "발급 시 기록" 을 매 발급으로 읽어 재초대에도 갱신한다.
 _TOUCH_INVITED_AT = "UPDATE workers SET invited_at = now() WHERE id = %(id)s"
@@ -99,8 +111,15 @@ def _validate(name: str | None, emp_no: str | None, lang: str | None) -> tuple[s
     return name.strip(), emp_no.strip(), lang
 
 
-def create_invite(name: str | None, emp_no: str | None, lang: str | None) -> dict:
-    """초대 발급 → {"invite_url": …}. 워커 생성·기존 초대 만료·발급·감사를 한 트랜잭션으로."""
+def create_invite(
+    name: str | None, emp_no: str | None, lang: str | None, phone: str | None = None
+) -> dict:
+    """초대 발급 → {"invite_url", "worker_id"} (§3:236, M-39 파트2).
+
+    워커 생성·기존 초대 만료·발급·감사를 한 트랜잭션으로. phone 은 선택 — 계약상 형식
+    검증 없음, 문자열 그대로 저장(+84·+62 국제표기 무변형). 미지정이면 NULL(신규) /
+    기존 값 유지(재초대).
+    """
     name, emp_no, lang = _validate(name, emp_no, lang)
     token = new_token()
 
@@ -109,7 +128,10 @@ def create_invite(name: str | None, emp_no: str | None, lang: str | None) -> dic
             cur.execute(_SELECT_WORKER, {"emp_no": emp_no})
             row = cur.fetchone()
             if row is None:
-                cur.execute(_INSERT_WORKER, {"name": name, "emp_no": emp_no, "lang": lang})
+                cur.execute(
+                    _INSERT_WORKER,
+                    {"name": name, "emp_no": emp_no, "lang": lang, "phone": phone},
+                )
                 worker_id = cur.fetchone()[0]
                 reinvite = False
             else:
@@ -118,6 +140,8 @@ def create_invite(name: str | None, emp_no: str | None, lang: str | None) -> dic
                     raise WorkerAlreadyActive(f"emp_no={emp_no} 는 이미 활성화된 워커입니다")
                 cur.execute(_EXPIRE_PENDING, {"worker_id": worker_id})
                 cur.execute(_TOUCH_INVITED_AT, {"id": worker_id})   # 해석 1
+                if phone is not None:
+                    cur.execute(_SET_PHONE, {"id": worker_id, "phone": phone})
                 reinvite = True
 
             cur.execute(_INSERT_INVITE, {"token": token, "worker_id": worker_id, "ttl_h": INVITE_TTL_H})
@@ -134,4 +158,42 @@ def create_invite(name: str | None, emp_no: str | None, lang: str | None) -> dic
 
     log.info("invite: 발급 worker_id=%s emp_no=%s 재초대=%s ttl_h=%s",
              worker_id, emp_no, reinvite, INVITE_TTL_H)
-    return {"invite_url": build_invite_url(token)}
+    return {"invite_url": build_invite_url(token), "worker_id": worker_id}
+
+
+def send_invite(worker_id: int) -> dict:
+    """기존 워커 초대 재발급 → {"share_url": …} (send-invite 파트1 — channel 검증은 라우터).
+
+    발급 규칙은 create_invite 재초대 분기와 동일: 미사용 초대 즉시 만료 → invited_at 갱신
+    (해석 1) → 신규 1건(TTL 72h) → admin_events 1행. URL 은 build_invite_url 그대로 —
+    invite_url 과 동일한 형태다. 활성 워커는 기존 규칙대로 409 소재(WorkerAlreadyActive).
+    """
+    token = new_token()
+
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_WORKER_BY_ID, {"id": worker_id})
+            row = cur.fetchone()
+            if row is None:
+                raise WorkerNotFound(f"worker_id={worker_id} 는 존재하지 않습니다")
+            _, emp_no, activated_at = row
+            if activated_at is not None:
+                raise WorkerAlreadyActive(f"worker_id={worker_id} 는 이미 활성화된 워커입니다")
+
+            cur.execute(_EXPIRE_PENDING, {"worker_id": worker_id})
+            cur.execute(_TOUCH_INVITED_AT, {"id": worker_id})       # 해석 1
+            cur.execute(_INSERT_INVITE, {"token": token, "worker_id": worker_id, "ttl_h": INVITE_TTL_H})
+
+            admin_events.record(
+                cur,
+                actor=ADMIN_ACTOR_UNAUTHENTICATED,
+                target_type=TARGET_WORKER,
+                target_id=worker_id,
+                action=EV_WORKER_INVITED,
+                detail=emp_no,
+            )
+        conn.commit()
+
+    log.info("invite: send-invite 재발급 worker_id=%s emp_no=%s ttl_h=%s",
+             worker_id, emp_no, INVITE_TTL_H)
+    return {"share_url": build_invite_url(token)}

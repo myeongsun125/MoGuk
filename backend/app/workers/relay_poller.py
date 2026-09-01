@@ -256,10 +256,26 @@ def dispatch(
 
         try:
             return 201, invites.create_invite(
-                body.get("name"), body.get("emp_no"), body.get("lang")
+                body.get("name"), body.get("emp_no"), body.get("lang"), body.get("phone")
             )
         except invites.InvalidInviteRequest as exc:
             return 422, {"detail": str(exc)}
+        except invites.WorkerAlreadyActive as exc:
+            return 409, {"detail": str(exc)}
+    if method == "POST" and route.startswith("/api/v1/admin/workers/") and route.endswith(
+        "/send-invite"
+    ):
+        # 파트1: 초대 재발급도 core 소유(M-32b 동형). channel 검증은 edge 라우터 pydantic 이
+        # 큐 적재 전에 끝낸다 — 상태코드 3분기는 core 라우터(send_worker_invite)와 동일.
+        from app.services import invites
+
+        worker_id = _path_id(route, 5, segments=7)
+        if worker_id is None:
+            return 404, {"detail": f"relay: 잘못된 worker_id 경로 {route}"}
+        try:
+            return 201, invites.send_invite(worker_id)
+        except invites.WorkerNotFound:
+            return 404, {"detail": "worker not found"}
         except invites.WorkerAlreadyActive as exc:
             return 409, {"detail": str(exc)}
     return 404, {"detail": f"relay: 디스패치 대상 아님 {method} {path}"}
