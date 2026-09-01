@@ -1,6 +1,16 @@
 # MoGuk edge 리버스 프록시 — 병갑 [infra]
 # SITE_ADDRESS 미설정 → :80(http, 로컬 dev) / 도메인 지정(예: moguk.ai.kr) → Caddy 자동 TLS(Let's Encrypt) + http→https 리다이렉트
 {$SITE_ADDRESS} {
+        log {
+                output stdout
+                format filter {
+                        wrap json
+                        fields {
+                                request>headers delete
+                                resp_headers delete
+                        }
+                }
+        }
         @admin {
                 path /api/v1/admin/*
                 not remote_ip {$ADMIN_ALLOW_IPS}
