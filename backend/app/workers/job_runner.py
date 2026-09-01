@@ -23,6 +23,7 @@ import time
 
 from app.agents.retrieve import to_vector_literal
 from app.services import approval, risk_reports, tenancy
+from app.services.crypto import open_text
 from app.services.llm_adapter import complete, embed
 
 log = logging.getLogger(__name__)
