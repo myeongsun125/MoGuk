@@ -56,5 +56,6 @@
   "admin.workers.errorGeneric": "Gagal menerbitkan undangan. Silakan coba lagi.",
   "admin.workers.sendKakao": "Kirim lewat KakaoTalk",
   "admin.workers.sendCopied": "Tautan telah disalin",
-  "admin.workers.sendError": "Gagal membagikan. Silakan salin tautan di bawah"
+  "admin.workers.sendError": "Gagal membagikan. Silakan salin tautan di bawah",
+  "admin.workers.linkRefreshed": "Tautan baru telah diperbarui (kode QR sebelumnya tidak berlaku lagi)"
 }

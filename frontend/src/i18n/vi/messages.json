@@ -56,5 +56,6 @@
   "admin.workers.errorGeneric": "Cấp lời mời thất bại. Vui lòng thử lại.",
   "admin.workers.sendKakao": "Gửi qua KakaoTalk",
   "admin.workers.sendCopied": "Đã sao chép liên kết",
-  "admin.workers.sendError": "Chia sẻ thất bại. Vui lòng sao chép liên kết bên dưới"
+  "admin.workers.sendError": "Chia sẻ thất bại. Vui lòng sao chép liên kết bên dưới",
+  "admin.workers.linkRefreshed": "Đã cập nhật liên kết mới (mã QR trước đó không còn hiệu lực)"
 }

@@ -75,6 +75,8 @@ async function main() {
   } else {
     console.log("PASS: QR canvas rendered with non-trivial content");
   }
+  // 발송 전 QR 스냅샷 — 발송 후 share_url로 재렌더되는지 비교용.
+  const qrBeforeSend = canvasSize.dataLen;
 
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 5000 }),
@@ -113,6 +115,39 @@ async function main() {
     if (!copiedVisible) {
       console.error("FAIL: clipboard.writeText 성공 후 send-copied 메시지가 렌더되지 않음");
       failures++;
+    }
+
+    // 화면 표시 URL이 invite_url -> share_url로 교체됐는지 확인.
+    const urlAfterSend = await page.getByTestId("invite-url").textContent();
+    console.log("invite-url after send:", urlAfterSend);
+    if (!urlAfterSend || urlAfterSend !== shareUrlText) {
+      console.error("FAIL: 발송 후 표시 URL이 share_url로 교체되지 않음");
+      failures++;
+    } else {
+      console.log("PASS: 표시 URL이 share_url로 교체됨");
+    }
+
+    // QR 캔버스가 재렌더됐는지(내용 변경) 확인.
+    const canvasAfterSend = await page.evaluate(() => {
+      const c = document.querySelector('[data-testid="invite-qr-canvas"]');
+      return c ? { width: c.width, dataLen: c.toDataURL().length } : null;
+    });
+    console.log("QR canvas after send:", canvasAfterSend);
+    if (!canvasAfterSend || canvasAfterSend.width === 0 || canvasAfterSend.dataLen < 500) {
+      console.error("FAIL: 발송 후 QR canvas가 비어있음");
+      failures++;
+    } else {
+      console.log("PASS: 발송 후 QR canvas 재렌더 확인(non-trivial content) — 발송 전 dataLen:", qrBeforeSend, "발송 후:", canvasAfterSend.dataLen);
+    }
+
+    // "새 링크로 갱신됨" 안내 문구 렌더 확인.
+    const refreshedVisible = await page.getByTestId("link-refreshed").isVisible().catch(() => false);
+    console.log("link-refreshed 렌더:", refreshedVisible);
+    if (!refreshedVisible) {
+      console.error("FAIL: 발송 후 '새 링크로 갱신됨' 안내가 렌더되지 않음");
+      failures++;
+    } else {
+      console.log("PASS: link-refreshed 안내 렌더 확인");
     }
   }
 

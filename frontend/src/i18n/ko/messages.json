@@ -56,5 +56,6 @@
   "admin.workers.errorGeneric": "초대 발급에 실패했습니다. 다시 시도해 주세요.",
   "admin.workers.sendKakao": "카톡으로 보내기",
   "admin.workers.sendCopied": "링크가 복사되었습니다",
-  "admin.workers.sendError": "공유에 실패했습니다. 아래 링크를 복사해 주세요"
+  "admin.workers.sendError": "공유에 실패했습니다. 아래 링크를 복사해 주세요",
+  "admin.workers.linkRefreshed": "새 링크로 갱신됨(이전 QR 무효)"
 }
