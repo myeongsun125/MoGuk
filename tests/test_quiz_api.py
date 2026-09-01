@@ -1,4 +1,4 @@
-"""GET /learn/quiz/{set_id} — 문항 조회 (M-38 §3:221). [새봄]
+"""GET /learn/quiz/{set_id} · POST submit — 문항 조회·채점 (M-38 §3:221·222). [새봄]
 
 검증 대상 계약:
 - 응답 {set_id, module, title, status, items[{id, q, choices[], term_hints[{term_ko, term_lang}]}]}
@@ -284,3 +284,127 @@ def test_get_quiz_is_read_only(monkeypatch):
     for sql, _ in store["calls"]:
         assert sql.strip().split()[0].upper() == "SELECT", sql
     assert store["commits"] == 0
+
+
+# ══ POST /learn/quiz/{set_id}/submit (§3:222) ══════════════
+
+import json as _json
+
+
+def _submit_store(threshold=(90,), rows=None):
+    return _store(
+        rows=[("FROM quiz_sets", SET_ROW), ("FROM tenant_settings", threshold)] + (rows or []),
+        many=[("FROM quiz_items", [(101, ITEM1), (102, ITEM2)])],
+    )
+
+
+def _attempt_params(store):
+    return [c[1] for c in store["calls"] if "INSERT INTO quiz_attempts" in c[0]]
+
+
+def test_submit_perfect_score_green(monkeypatch):
+    store = _submit_store()
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]})
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"score": 100, "passed": True, "label": "green"}
+    p = _attempt_params(store)[0]
+    assert (p["quiz_set_id"], p["score"], p["passed"], p["worker_id"]) == (3, 100, True, None)
+    detail = _json.loads(p["detail"])
+    assert detail == {"answers": [2, 0], "correct": [True, True]}   # 정오 기록
+    assert store["commits"] == 1
+
+
+def test_submit_half_score_red_not_passed(monkeypatch):
+    store = _submit_store()
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]})
+
+    assert r.json() == {"score": 50, "passed": False, "label": "red"}
+    assert _json.loads(_attempt_params(store)[0]["detail"])["correct"] == [True, False]
+
+
+def test_submit_threshold_from_tenant_settings_not_hardcoded(monkeypatch):
+    """threshold_pass=50 행 — score 50 이 passed=True 가 된다(상수 90 이면 불가능).
+
+    label 은 계약 고정 경계라 여전히 red — passed 와 label 의 독립도 함께 고정.
+    """
+    store = _submit_store(threshold=(50,))
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]})
+
+    assert r.json() == {"score": 50, "passed": True, "label": "red"}
+    assert any("tenant_settings" in c[0] for c in store["calls"])
+    assert [c[1] for c in store["calls"] if "tenant_settings" in c[0]] == [{"key": "threshold_pass"}]
+
+
+def test_submit_threshold_row_missing_falls_back_90(monkeypatch):
+    store = _submit_store(threshold=None)
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 1]})
+
+    assert r.json()["passed"] is False                 # 50 < 폴백 90
+    r2_store = _submit_store(threshold=None)
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(r2_store))
+    assert client.post("/api/v1/learn/quiz/3/submit",
+                       json={"answers": [2, 0]}).json()["passed"] is True   # 100 ≥ 90
+
+
+def test_submit_records_bearer_worker_id(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-secret-for-m38")
+    store = _submit_store()
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+    token = auth_service.issue_token_pair(9, "axis_demo")["jwt"]
+
+    client.post("/api/v1/learn/quiz/3/submit", json={"answers": [2, 0]},
+                headers={"Authorization": f"Bearer {token}"})
+
+    assert _attempt_params(store)[0]["worker_id"] == 9
+
+
+@pytest.mark.parametrize("answers", [
+    [2],                 # 길이 부족
+    [2, 0, 1],           # 길이 초과
+    [2, 5],              # 2번 문항(2지) 범위 밖
+    [-1, 0],             # 음수
+    [True, 0],           # bool 은 정수 취급 금지
+])
+def test_submit_invalid_answers_422_no_insert(monkeypatch, answers):
+    store = _submit_store()
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    r = client.post("/api/v1/learn/quiz/3/submit", json={"answers": answers})
+
+    assert r.status_code == 422, r.text
+    assert _attempt_params(store) == []                # 거절 시 기록 없음
+    assert store["commits"] == 0
+
+
+def test_submit_non_list_answers_422(monkeypatch):
+    def _boom(*a, **k):
+        pytest.fail("검증 실패인데 저장소를 호출했다")
+
+    monkeypatch.setattr(quiz.tenancy, "connect", _boom)
+    assert client.post("/api/v1/learn/quiz/3/submit",
+                       json={"answers": "oops"}).status_code == 422        # pydantic
+
+
+def test_submit_missing_set_404(monkeypatch):
+    store = _store(rows=[("FROM quiz_sets", None)])
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    assert client.post("/api/v1/learn/quiz/999/submit",
+                       json={"answers": [0]}).status_code == 404
+
+
+@pytest.mark.parametrize("score, label", [
+    (0, "red"), (79, "red"), (80, "yellow"), (89, "yellow"), (90, "green"), (100, "green"),
+])
+def test_label_boundaries_contract_fixed(score, label):
+    """red<80 / yellow<90 / green — v_comprehension(001:69) 경계와 동일."""
+    assert quiz.label_for(score) == label
