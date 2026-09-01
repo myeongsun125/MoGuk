@@ -21,6 +21,8 @@ from app.agents.neg_lexicon import ko_neg
 from app.agents.num_compare import num_compare
 from app.agents.retrieve import Chunk, retrieve
 from app.agents.verify import Verify, is_high_risk, verify_backtranslation
+from app.agents.verify import _norm as verify_norm
+from app.services import glossary_terms
 from app.models import Worker
 from app.services import tenancy
 from app.services.llm_adapter import _env, _env_float, complete, deadline_s
@@ -206,6 +208,43 @@ def _rule_trace(src_text: str, back_text: str) -> dict:
     }
 
 
+ANSWER_INJECT_ENV = "GLOSSARY_INJECT_ANSWER"   # 기본 off — 스모크 후 총괄 on 판정(0901)
+ANSWER_GLOSS_HEAD = "다음 용어는 반드시 지정 표기로 번역: "
+
+
+def _answer_inject_on() -> bool:
+    """기본 off 플래그 — 명시적 on 값만 켠다."""
+    return (_env(ANSWER_INJECT_ENV, "") or "").strip().lower() in ("1", "true", "on", "yes")
+
+
+def _answer_gloss_line(chunks: list[Chunk], lang: str) -> tuple[str | None, list[tuple[str, str]]]:
+    """근거 청크(ko)에 포함된 term_ko 만 골라 term_ko→term_{lang} 지정 1행. off·0개면 None.
+
+    되번역 주입(verify.build_backtrans_prompt)과 같은 매칭 규칙(NFC·casefold 부분
+    문자열)·같은 로더를 쓴다. 대상 lang 이 vi/in 밖이면(ko 등) 주입하지 않는다.
+    조회 실패는 원 프롬프트 폴백 — 답변 생성을 막지 않는다.
+    """
+    if not _answer_inject_on() or lang not in ("vi", "in") or not chunks:
+        return None, []
+    try:
+        terms = glossary_terms.fetch_terms()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("graph: 용어집 조회 실패 — 답변 주입 없이 진행 (%s)", exc)
+        return None, []
+    hay = verify_norm(" ".join(c.content for c in chunks))
+    matched = []
+    for term_ko, term_vi, term_in in terms:
+        target = term_in if lang == "in" else term_vi
+        if not (term_ko and target):
+            continue
+        if verify_norm(term_ko) in hay:
+            matched.append((term_ko, target))
+    if not matched:
+        return None, []
+    line = ANSWER_GLOSS_HEAD + ", ".join(f"{ko}→{tgt}" for ko, tgt in matched)
+    return line, matched
+
+
 def _backtrans_trace(
     bt: Verify | None,
     *,
@@ -213,17 +252,22 @@ def _backtrans_trace(
     src_kind: str,
     chunks_joined: str = "",
     src_text: str = "",
+    ans_injected: list | tuple = (),
 ) -> dict:
     """trace.verify 실측 — §3 응답(4키) 밖으로는 나가지 않는다."""
     base = {
         "high_risk": high_risk,
         "src_kind": src_kind,
         "chunks_joined_len": len(chunks_joined),
+        # 용어집 주입 실측(0901) — 계약 4키 밖. ans_* = 답변 프롬프트 축(기본 off)
+        "ans_inj_n": len(ans_injected),
+        "ans_inj_terms": [f"{a}→{b}" for a, b in ans_injected],
     }
     if bt is None:
         return dict(
             base, back_text=None, back_ms=None, timed_out=None, error=None,
             score_question=None, score_chunks=None, num=None, neg=None,
+            inj_n=None, inj_terms=None,
         )
     # src_text = 근거 청크 결합문(ko). 부재면 ko 대조축이 없으므로 규칙 축은 기록하지 않는다.
     rules = _rule_trace(src_text, bt.back_text or "") if src_text else {"num": None, "neg": None}
@@ -235,6 +279,8 @@ def _backtrans_trace(
         error=bt.error,
         score_question=bt.score_src,
         score_chunks=bt.score_aux,
+        inj_n=len(bt.inj_terms),
+        inj_terms=[f"{a}→{b}" for a, b in bt.inj_terms],
         **rules,
     )
 
@@ -284,6 +330,7 @@ def run_ask(
 
     answer_text = ""
     grounded = False
+    ans_injected: list[tuple[str, str]] = []  # 답변 주입 실측(기본 off — 평시 빈 목록)
     bt: Verify | None = None                  # M-34 c 되번역 결과(미수행이면 None)
     gate_src = _gate_src()                    # 요청당 1회 판정 — 오값이면 경고 후 question
     chunks_joined = ""                        # 게이트 aux 축(근거 결합문) — trace 길이 기록용
@@ -296,7 +343,14 @@ def run_ask(
     elif chunks:
         t_llm = time.perf_counter()
         # M-17 티어 정책: 사업장 지식 = 로컬 고정 / M-30: timeout_s=None → LLM_TIMEOUT_LOCAL_S
-        result = complete(build_prompt(question, lang, chunks), "local", timeout_s=None)
+        answer_prompt = build_prompt(question, lang, chunks)
+        # 용어집 답변 주입(기본 off, 총괄 확정 0901) — off 면 answer_prompt 바이트 동일
+        ans_line, ans_injected = _answer_gloss_line(chunks, lang)
+        if ans_line:
+            answer_prompt = answer_prompt.replace(
+                "\n[근거 자료]\n", "\n" + ans_line + "\n\n[근거 자료]\n", 1
+            )
+        result = complete(answer_prompt, "local", timeout_s=None)
         llm_ms = int((time.perf_counter() - t_llm) * 1000)
         trace["route"] = {
             "tier": result.tier_used,
@@ -319,6 +373,7 @@ def run_ask(
                 aux_src=chunks_joined,
                 gate_on="aux" if gate_src == "chunks" else "src",
                 timeout_s=_backtrans_budget_s(t0),
+                lang=lang,               # 용어집 주입 src 축(총괄 확정 0901)
             )
     else:
         trace["route"] = {"tier": None, "model": None, "ms": 0, "error": "no_chunks"}
@@ -352,6 +407,7 @@ def run_ask(
             src_kind=gate_src,
             chunks_joined=chunks_joined,
             src_text=chunks_joined,          # 규칙 축은 항상 ko 결합문 대조 (게이트 src 와 무관)
+            ans_injected=ans_injected,
         ),
     )
     trace["grounded"] = grounded

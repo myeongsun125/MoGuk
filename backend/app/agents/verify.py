@@ -6,10 +6,12 @@ import logging
 import math
 import os
 import time
+import unicodedata
 from dataclasses import dataclass
 
 from app.agents.classify import Cls
 from app.agents.retrieve import Chunk
+from app.services import glossary_terms
 from app.services.llm_adapter import complete, embed
 
 log = logging.getLogger(__name__)
@@ -21,6 +23,52 @@ DEFAULT_GATE_TAU = 0.80
 BACKTRANS_PROMPT = """다음 문장을 한국어로 번역하세요. 번역문만 출력하고 다른 말은 덧붙이지 마세요.
 
 {text}"""
+
+# ── 용어집 주입 (총괄 확정 0901) — 실험 사본 gloss_prompt(:79-88)와 문자열 동일 규격 ──
+# env GLOSSARY_INJECT_BACKTRANS 기본 on. off 면 기존 프롬프트 바이트 동일.
+INJECT_BACKTRANS_ENV = "GLOSSARY_INJECT_BACKTRANS"
+GLOSS_HEAD = "다음 용어는 반드시 지정 한국어 표기로 번역: "
+_TEXT_TAIL = "\n\n{text}"
+assert BACKTRANS_PROMPT.endswith(_TEXT_TAIL), "원 프롬프트 말미가 '\\n\\n{text}' 가 아님 — 삽입 위치 재확인 필요"
+
+
+def _flag_off(name: str) -> bool:
+    """기본 on 플래그 — 명시적 off 값만 끈다."""
+    return (os.getenv(name) or "").strip().lower() in ("0", "false", "off", "no")
+
+
+def _norm(s: str) -> str:
+    return unicodedata.normalize("NFC", s or "").casefold()
+
+
+def build_backtrans_prompt(out: str, lang: str | None = None) -> tuple[str, list[tuple[str, str]]]:
+    """out 에 포함된 용어집 항목만 나열한 되번역 프롬프트. 0개·off·조회 실패면 원 프롬프트.
+
+    조립 규격 = 실험 사본과 동일: 헤드 + "src→ko" 나열(", " 구분, 용어집 순서),
+    삽입 위치 = 지시문 바로 다음 행, 매칭 = NFC·casefold 부분 문자열.
+    항목의 src 축은 질의 lang 이 in 이면 term_in, 그 외 term_vi.
+    """
+    if _flag_off(INJECT_BACKTRANS_ENV):
+        return BACKTRANS_PROMPT, []
+    try:
+        terms = glossary_terms.fetch_terms()
+    except Exception as exc:  # noqa: BLE001 — 주입은 보강이므로 조회 실패는 원 프롬프트로 폴백
+        log.warning("verify: 용어집 조회 실패 — 주입 없이 되번역 진행 (%s)", exc)
+        return BACKTRANS_PROMPT, []
+    hay = _norm(out)
+    matched = []
+    for term_ko, term_vi, term_in in terms:
+        src = term_in if lang == "in" else term_vi
+        if not (src and term_ko):
+            continue
+        if _norm(src) in hay:
+            matched.append((src, term_ko))
+    if not matched:
+        return BACKTRANS_PROMPT, []
+    line = GLOSS_HEAD + ", ".join(f"{src}→{ko}" for src, ko in matched)
+    line = line.replace("{", "{{").replace("}", "}}")   # str.format 보호(용어에 중괄호는 없지만 방어)
+    body = BACKTRANS_PROMPT[: -len(_TEXT_TAIL)]
+    return body + "\n" + line + _TEXT_TAIL, matched
 
 
 @dataclass(frozen=True)
@@ -34,6 +82,7 @@ class Verify:
     back_ms: int = 0
     timed_out: bool = False
     error: str | None = None
+    inj_terms: tuple = ()        # 용어집 주입 실측 (src, ko) — trace 기록용, 게이트 무관
 
 
 def _env_float(name: str, default: float) -> float:
@@ -86,20 +135,23 @@ def verify_backtranslation(
     aux_src: str | None = None,
     gate_on: str = "src",
     timeout_s: float | None = None,
+    lang: str | None = None,
 ) -> Verify:
     """out(vi/in)을 ko 로 되번역해 src 와 bge-m3 코사인 비교. score < τ 면 passed=False.
 
     src 가 무엇인지는 호출측(graph)이 정한다 — §4 동결 시그니처 (src, out) 유지.
     aux_src 를 주면 같은 embed 호출 1회로 두 점수를 함께 낸다(M-34 c: 질문·근거 병기).
     gate_on='aux' 면 aux 점수로 게이트한다. 타임아웃·오류는 전부 fail-open.
+    lang 은 용어집 주입의 src 축 선택(in → term_in, 그 외 term_vi) — 게이트 판정 무관.
     """
     if not (src or "").strip() or not (out or "").strip():
         return _fail_open("empty_input")
     if timeout_s is not None and timeout_s <= 0:
         return _fail_open("no_budget", timed_out=True)
 
+    prompt, injected = build_backtrans_prompt(out, lang)   # 용어집 주입(기본 on) — 실패·0개면 원 프롬프트
     t_bt = time.perf_counter()
-    result = complete(BACKTRANS_PROMPT.format(text=out), "local", timeout_s=timeout_s)
+    result = complete(prompt.format(text=out), "local", timeout_s=timeout_s)
     back_ms = int((time.perf_counter() - t_bt) * 1000)
 
     if result.error is not None:
@@ -127,6 +179,7 @@ def verify_backtranslation(
         score_aux=score_aux,
         back_text=back_text,
         back_ms=back_ms,
+        inj_terms=tuple(injected),
     )
 
 
