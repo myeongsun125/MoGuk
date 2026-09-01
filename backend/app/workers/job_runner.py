@@ -7,6 +7,10 @@ M-08b ②: 요약·severity 생성 실패(재시도 3회 소진 = local_failed)�
   tier="external" 문자열이 코드 경로에 존재하지 않는다.
 
 요약 재생성은 V5(M-08b ③). STT 경로는 V5 — 아래 스텁 분기는 호출되지 않는다.
+
+M-05a: kind='ingest_answer' 는 관리자 답변을 documents(origin='admin_answer')+chunks 로
+적재하고 unanswered_queue.ingested_doc_id 를 채운다. 실패는 위 요약과 같은
+attempts 백오프·3회 failed 경로를 그대로 탄다.
 """
 
 from __future__ import annotations
@@ -17,8 +21,9 @@ import os
 import threading
 import time
 
-from app.services import risk_reports, tenancy
-from app.services.llm_adapter import complete
+from app.agents.retrieve import to_vector_literal
+from app.services import approval, risk_reports, tenancy
+from app.services.llm_adapter import complete, embed
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +140,90 @@ def _handle_summarize(cur, job: dict) -> None:
     risk_reports.mark_summary_done(cur, report_id, ko_summary, severity)
 
 
+class IngestAnswerError(RuntimeError):
+    """관리자 답변 적재 실패 — 요약과 같은 재시도 경로를 탄다."""
+
+
+# 001:28-33 정본 컬럼. category 는 CHECK('process','instruction','safety','equipment') 라
+# 'general' 을 넣을 수 없다 — NULL 로 두고 검색용 분류는 chunks.meta.category 가 갖는다.
+_INSERT_DOCUMENT = """
+INSERT INTO documents (title, category, origin, source, version, masked)
+VALUES (%(title)s, NULL, 'admin_answer', %(source)s, 1, false)
+RETURNING id
+"""
+
+_INSERT_CHUNK = """
+INSERT INTO chunks (document_id, chunk_idx, content, embedding, meta)
+VALUES (%(document_id)s, 0, %(content)s, %(embedding)s::vector, %(meta)s::jsonb)
+"""
+
+_SELECT_QUESTION = "SELECT question FROM questions WHERE id = %(id)s"
+_SET_INGESTED_DOC = """
+UPDATE unanswered_queue SET ingested_doc_id = %(doc_id)s WHERE id = %(id)s
+"""
+
+# 검색 노출용 meta. retrieve 는 meta->>'category' 를 sources.category 로 쓰고
+# meta->>'role' <> 'case' 만 배제하므로 이 형태는 즉시 검색 후보가 된다(M-29a 무관).
+CHUNK_META_CATEGORY = "general"
+TITLE_MAX = 80
+
+
+def _answer_title(cur, question_id: int) -> str:
+    """documents.title 은 NOT NULL — 원 질문을 잘라 쓰고, 없으면 식별자로 대체한다."""
+    cur.execute(_SELECT_QUESTION, {"id": question_id})
+    row = cur.fetchone()
+    question = (row[0] if row else None) or ""
+    question = question.strip()
+    if not question:
+        return f"관리자 답변 (question_id={question_id})"
+    return f"관리자 답변: {question[:TITLE_MAX]}"
+
+
+def _handle_ingest_answer(cur, job: dict) -> None:
+    """M-05a — 관리자 답변을 검색 코퍼스에 편입한다.
+
+    documents(origin='admin_answer') 1건 + chunks 1건(임베딩 1024 고정, M-02) +
+    unanswered_queue.ingested_doc_id 갱신을 잡 트랜잭션 안에서 끝낸다.
+    """
+    payload = job["payload"]
+    text = (payload.get("text") or "").strip()
+    if not text:
+        raise IngestAnswerError(f"job={job['id']} payload.text 비어 있음")
+    try:
+        question_id = int(payload["question_id"])
+        unanswered_id = int(payload["unanswered_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IngestAnswerError(f"job={job['id']} payload 필드 위반: {exc}") from exc
+
+    title = _answer_title(cur, question_id)
+    cur.execute(_INSERT_DOCUMENT, {"title": title, "source": f"unanswered:{unanswered_id}"})
+    doc_id = cur.fetchone()[0]
+
+    vectors = embed([text])            # M-02a 단일 런타임 — 차원 위반은 embed 가 예외로 막는다
+    cur.execute(
+        _INSERT_CHUNK,
+        {
+            "document_id": doc_id,
+            "content": text,
+            "embedding": to_vector_literal(vectors[0]),
+            "meta": json.dumps(
+                {
+                    "category": CHUNK_META_CATEGORY,
+                    "draft": False,
+                    "origin": "admin_answer",
+                    "question_id": question_id,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    )
+    cur.execute(_SET_INGESTED_DOC, {"doc_id": doc_id, "id": unanswered_id})
+    log.info(
+        "jobs: 관리자 답변 적재 job=%s question_id=%s document_id=%s",
+        job["id"], question_id, doc_id,
+    )
+
+
 def _fail_job(cur, job: dict, exc: Exception) -> None:
     """attempts 증가 → 3회 소진 시 local_failed 처리. 원문은 건드리지 않는다."""
     attempts = int(job["attempts"]) + 1
@@ -175,6 +264,8 @@ def process_once() -> bool:
             try:
                 if job["kind"] == risk_reports.JOB_KIND_SUMMARIZE:
                     _handle_summarize(cur, job)
+                elif job["kind"] == approval.JOB_KIND_INGEST_ANSWER:
+                    _handle_ingest_answer(cur, job)
                 elif job["kind"] == "stt_summarize":
                     _transcribe_pending(job["payload"])  # V5 — 현재 미사용 경로
                 else:
