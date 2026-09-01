@@ -10,6 +10,10 @@ const STATUS_LABEL: Record<string, string> = {
   answered: "답변됨",
 };
 
+function errorStatus(e: unknown): number | undefined {
+  return e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
+}
+
 export default function AdminUnansweredScreen() {
   const { t } = useAdminLang();
   const [items, setItems] = useState<UnansweredItem[]>([]);
@@ -19,8 +23,8 @@ export default function AdminUnansweredScreen() {
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<Record<number, string>>({});
 
-  // POST 응답 스키마 미확정(#74 스텁)이라 성공 여부만 보고 목록을 재조회한다 —
-  // status=open 재조회가 진실원본이므로 방금 답변한 항목은 자연히 빠진다.
+  // status=open 재조회가 진실원본이므로 방금 답변한 항목은 재조회 후 자연히 빠진다
+  // (handleSubmit이 그 전에 응답 status·answered_at을 해당 행에 먼저 반영한다).
   async function refresh() {
     setLoading(true);
     try {
@@ -43,11 +47,24 @@ export default function AdminUnansweredScreen() {
     setSubmittingId(item.question_id);
     setRowError((m) => ({ ...m, [item.question_id]: "" }));
     try {
-      await answerUnanswered(item.question_id, text);
+      const result = await answerUnanswered(item.question_id, text);
+      // id는 unanswered_queue.id(=목록 item.id) 축 — question_id가 아니다(approval.py 주석).
+      setItems((list) =>
+        list.map((x) =>
+          x.id === result.id ? { ...x, status: result.status, answered_at: result.answered_at } : x,
+        ),
+      );
       setDrafts((d) => ({ ...d, [item.question_id]: "" }));
       await refresh();
-    } catch {
-      setRowError((m) => ({ ...m, [item.question_id]: t("admin.unanswered.answerError") }));
+    } catch (e) {
+      const status = errorStatus(e);
+      const key =
+        status === 404
+          ? "admin.unanswered.answerErrorNotFound"
+          : status === 422
+            ? "admin.unanswered.answerErrorConflict"
+            : "admin.unanswered.answerError";
+      setRowError((m) => ({ ...m, [item.question_id]: t(key) }));
     } finally {
       setSubmittingId(null);
     }

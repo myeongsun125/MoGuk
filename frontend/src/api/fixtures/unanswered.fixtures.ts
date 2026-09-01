@@ -1,4 +1,5 @@
-import type { UnansweredItem } from "../types";
+import type { AnswerResult, UnansweredItem } from "../types";
+import { appendEvent } from "./adminEvents.fixtures";
 
 // 답변 제출이 상태를 바꿔야 open 필터에서 항목이 빠지는 걸 mock으로 재현할 수 있어
 // adminReports.fixtures·glossary.fixtures와 동일하게 모듈 내 mutable store로 둔다.
@@ -41,13 +42,37 @@ export function listMock(status?: string): UnansweredItem[] {
   return store.filter((u) => u.status === status);
 }
 
-// POST 응답 스키마 미확정(#74 스텁)이라 반환값은 갱신된 항목 자체 — 실API 착륙 후
-// 실제 응답과 다르면 adminUnanswered.ts 소비부만 맞추면 된다(화면은 이 반환값을 쓰지 않는다).
-export function answerMock(questionId: number, text: string): UnansweredItem | undefined {
+let jobIdSeq = 5001; // jobs.id(serial) mock — 실DB 시퀀스와 축만 다를 뿐 unanswered.id와 무관.
+
+// approval.py answer_unanswered(205-268)와 동일 규칙: 대상 없음 404·text 공백 422·
+// open 아님(이미 answered) 422 — 각각 Error에 status를 실어 던진다(adminUnanswered.ts와 대칭).
+export function answerMock(questionId: number, text: string): AnswerResult {
+  const body = text.trim();
   const u = store.find((x) => x.question_id === questionId);
-  if (!u) return undefined;
+  if (!u) {
+    throw Object.assign(new Error(`unanswered question not found: ${questionId}`), { status: 404 });
+  }
+  if (!body) {
+    throw Object.assign(new Error("text 는 필수입니다 (공백 불가)"), { status: 422 });
+  }
+  if (u.status !== "open") {
+    throw Object.assign(new Error(`${u.status} → answered 불가 (open 에서만)`), { status: 422 });
+  }
+  const from = u.status;
   u.status = "answered";
-  u.admin_answer = text;
+  u.admin_answer = body;
   u.answered_at = new Date().toISOString();
-  return u;
+  // approval.py:246-259 admin_events.record와 동일 배선(target_type='unanswered',
+  // action='unanswered_answered', target_id=question_id — queue id 아님) — AuditLog
+  // 화면이 필터 없이 그대로 노출하는지 mock으로도 확인할 수 있게 parity 유지.
+  appendEvent({
+    actor: "admin:unauthenticated",
+    target_type: "unanswered",
+    target_id: questionId,
+    action: "unanswered_answered",
+    from_state: from,
+    to_state: "answered",
+    detail: JSON.stringify({ ingested_doc_id: null, text_len: body.length }),
+  });
+  return { id: u.id, status: "answered", answered_at: u.answered_at, ingest_job_id: jobIdSeq++ };
 }
