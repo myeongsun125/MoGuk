@@ -156,7 +156,7 @@ def test_unanswered_open_counts_only_open(monkeypatch):
 # ── D: 근거 인용률 ────────────────────────────────────────
 
 def test_citation_rate_denominator_excludes_gated(monkeypatch):
-    """분모는 grounded(방출)만 — gated 는 D 에 혼입되지 않는다(C 담당)."""
+    """분모 = 답변 방출(§3:234) — grounded 이면서 gated 아닌 행만 센다."""
     store = _store(status_rows=[], unanswered=7, citation=(12, 12), trend_rows=[],
                    now_local="2026-08-30 03:00:00")
     monkeypatch.setattr(dash.tenancy, "connect", fake_connect(store))
@@ -165,11 +165,25 @@ def test_citation_rate_denominator_excludes_gated(monkeypatch):
 
     assert out["citation_rate"] == {"answered": 12, "with_sources": 12, "rate": 1.0}
     sql = [s for s in _sqls(store) if "FILTER (WHERE grounded" in s][0]
-    assert "count(*) FILTER (WHERE grounded)" in sql              # 분모 = 방출만
     assert "jsonb_array_length(sources) > 0" in sql               # 분자 = 출처 존재
-    assert "unanswered" not in sql and "gated" not in sql         # gated 경로 혼입 금지
+    assert "unanswered" not in sql                                # C 경로 혼입 금지
     # 분모가 전체 질의(count(*) 단독)면 gated 가 섞인다 — 그 형태가 아님을 단정
     assert re.search(r"count\(\*\)\s+FROM questions", sql) is None, sql
+
+
+def test_citation_sql_excludes_threshold_blocked_rows():
+    """threshold 차단 행(grounded=true·trace.verify.gated=true)은 분모·분자 모두 제외.
+
+    grounded 판별만으로는 τ 차단 행이 분모에 남는다(0831 워밍업 3건 실측).
+    분모·분자 FILTER 두 곳 모두에 gated 제외 조건이 있어야 하고, 키 부재 행은
+    NULL → IS DISTINCT FROM 으로 미차단 계산(하위 호환)이어야 한다.
+    """
+    sql = dash._SQL_CITATION
+    assert sql.count("trace -> 'verify' -> 'gated'") == 2         # 분모·분자 양쪽
+    assert sql.count("IS DISTINCT FROM 'true'::jsonb") == 2       # NULL 안전(키 부재 = 미차단)
+    denom, numer = sql.split("count(*) FILTER")[1:]
+    assert "IS DISTINCT FROM" in denom and "grounded" in denom
+    assert "IS DISTINCT FROM" in numer and "jsonb_array_length(sources) > 0" in numer
 
 
 def test_citation_rate_below_one_is_reported_as_is(monkeypatch, caplog):

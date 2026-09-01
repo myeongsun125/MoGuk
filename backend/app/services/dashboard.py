@@ -52,10 +52,16 @@ _SQL_STATUS = "SELECT status, count(*) FROM risk_reports GROUP BY status"
 # C
 _SQL_UNANSWERED = "SELECT count(*) FROM unanswered_queue WHERE status = 'open'"
 
-# D — 분모는 grounded(방출)만. gated 는 제외한다.
+# D — 분모 = 답변 방출(§3:234). grounded 만으로는 threshold 차단 행
+#     (grounded=true·gated=true·sources=[])이 분모에 남는다 — trace.verify.gated 로
+#     분모·분자 양쪽에서 제외한다. 판별자는 run_ask 첫 구현(403f027)부터 전 행에
+#     기록됐고, 키 부재 행은 NULL → IS DISTINCT FROM 이 미차단으로 계산(하위 호환).
 _SQL_CITATION = """
-SELECT count(*) FILTER (WHERE grounded),
-       count(*) FILTER (WHERE grounded AND jsonb_array_length(sources) > 0)
+SELECT count(*) FILTER (WHERE grounded
+                          AND (trace -> 'verify' -> 'gated') IS DISTINCT FROM 'true'::jsonb),
+       count(*) FILTER (WHERE grounded
+                          AND (trace -> 'verify' -> 'gated') IS DISTINCT FROM 'true'::jsonb
+                          AND jsonb_array_length(sources) > 0)
 FROM questions
 """
 
