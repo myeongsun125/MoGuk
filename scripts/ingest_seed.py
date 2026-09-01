@@ -16,7 +16,10 @@ WORKORDER 67행(인제스천: 분류→마스킹→청킹 500–800/오버랩 10
   - 후처리    : 제어문자(C0/C1, \\n·\\t 제외) 제거 + NFC — 원문 추출물(예: text/KOSHA-CASE-1 의 BEL) 유입 차단
   - 멱등      : 같은 seed_file 의 기존 documents(origin='seed') 삭제 후 재적재(chunks 는 CASCADE),
                 glossary 는 draft·source_question_id IS NULL 행만 교체 (승인·질문 유래 행 무접촉)
-  - 미적재    : phrases·quiz·safety_courses·testset — V3-1·V5-1 범위 (phrases.note 기본선 유지)
+  - 미적재    : phrases·safety_courses·testset — V3-1·V5-1 범위 (phrases.note 기본선 유지)
+  - quiz      : --sources quiz (M-38) — quiz_sets(origin='seed', status='draft') + quiz_items
+                (파일 순서 그대로, body=항목 원형). 멱등 키 = origin+module+title, 세트 행 보존·
+                문항 교체(quiz_attempts FK), approved 세트 무접촉. 임베딩·ollama 불필요
   - text/ 코퍼스(--sources text|all, 2026-08-30 판정 4건): manifest status=fetched ∧ text/<ID>.md 실재 → 13건.
                 단위 = 페이지 표식(<!-- p.N -->) 또는 ## 헤딩(LAW 조문·별표) → 500–800/오버랩 100.
                 documents(origin='seed', source=text 경로, version 1) — 시드 42청크와 source 가 달라 보존. glossary 는 무접촉(seed|all 한정).
@@ -43,7 +46,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
-import yaml
+# yaml 은 seed·text 경로에서만 쓴다 — 사용 함수 안에서 임포트(quiz 경로·CI 테스트는
+# pyyaml 없이도 이 모듈을 임포트할 수 있어야 한다. requirements-dev 에 pyyaml 없음).
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -79,6 +83,8 @@ def parse_ids(s: str) -> list[str]:
 
 def split_manual(md: str):
     """front matter + 장/절 단위 섹션 [{section, title, category, lines}]."""
+    import yaml
+
     m = FRONT.match(md)
     fm = yaml.safe_load(m.group(1)) if m else {}
     body = md[m.end():] if m else md
@@ -191,6 +197,8 @@ def _split_800(text: str) -> list[str]:
 def split_text_source(md: str) -> tuple[dict, list[dict]]:
     """text/<ID>.md → front matter + 단위 [{section, text}].
     단위 경계 = `<!-- p.N -->` 페이지 표식(KOSHA·NCS) 또는 `## ` 헤딩(LAW 조문·별표). fenced 블록(별표 표)은 단위 안에 유지."""
+    import yaml
+
     m = FRONT.match(md)
     fm = yaml.safe_load(m.group(1)) if m else {}
     body = md[m.end():] if m else md
@@ -219,6 +227,8 @@ def split_text_source(md: str) -> tuple[dict, list[dict]]:
 
 def load_text_plan() -> list[dict]:
     """manifest 연동: status=fetched ∧ text/<ID>.md 실재 → 13건. documents(origin='seed', source=text 경로, version 1)."""
+    import yaml
+
     manifest = yaml.safe_load((ROOT / MANIFEST).read_text(encoding="utf-8"))["sources"]
     docs = []
     for src in manifest:
@@ -249,6 +259,65 @@ def load_text_plan() -> list[dict]:
     return docs
 
 
+# ── 퀴즈 시드 (M-38) — --sources quiz ─────────────────────
+QUIZ_FILES = ["data/seed/quiz/quiz_learning_1.json", "data/seed/quiz/quiz_safety_1.json"]
+
+
+def load_quiz_plan() -> list[dict]:
+    """--sources quiz: 시드 2파일 → quiz_sets(origin='seed', status='draft') + quiz_items.
+
+    items 는 파일에 적힌 순서 그대로(순서 = quiz_items.id 오름차순). body 는 항목 dict
+    원형 그대로 적재 — 실물 키 q_ko·q_vi·q_in·choices·choices_vi·choices_in·answer_idx·
+    explain_ko (+ draft·source·src·quote). 임베딩·ollama 불필요.
+    """
+    sets = []
+    for rel in QUIZ_FILES:
+        data = json.loads((ROOT / rel).read_text(encoding="utf-8"))
+        meta, items = data["_meta"], data["items"]
+        sets.append({
+            "module": meta["module"],
+            "title": clean_text(str(meta["title"])),
+            "source": rel,
+            "items": items,
+        })
+        print(f"{rel}: module={meta['module']} items={len(items)}")
+    return sets
+
+
+def ingest_quiz(cur, quiz_sets: list[dict]) -> None:
+    """quiz_sets·quiz_items 적재 — 멱등.
+
+    멱등 키 = (origin='seed', module, title). 기존 세트가 있으면 행을 보존한 채(quiz_attempts
+    FK 가 세트 id 를 참조 — documents 식 DELETE+재INSERT 불가) 문항만 교체한다.
+    glossary 멱등('승인 행 무접촉')과 동형으로, status='approved' 세트는 건드리지 않는다.
+    """
+    for qs in quiz_sets:
+        cur.execute(
+            "SELECT id, status FROM quiz_sets WHERE origin='seed' AND module=%s AND title=%s",
+            (qs["module"], qs["title"]),
+        )
+        row = cur.fetchone()
+        if row is not None:
+            set_id, cur_status = row
+            if cur_status == "approved":
+                print(f"quiz_sets.id={set_id} ({qs['module']}) status=approved — 무접촉(승인 보존)")
+                continue
+            cur.execute("DELETE FROM quiz_items WHERE quiz_set_id=%s", (set_id,))
+        else:
+            cur.execute(
+                "INSERT INTO quiz_sets (module, title, origin, status) "
+                "VALUES (%s,%s,'seed','draft') RETURNING id",
+                (qs["module"], qs["title"]),
+            )
+            set_id = cur.fetchone()[0]
+        for it in qs["items"]:
+            cur.execute(
+                "INSERT INTO quiz_items (quiz_set_id, body) VALUES (%s,%s)",
+                (set_id, json.dumps(it, ensure_ascii=False)),
+            )
+        print(f"quiz_sets.id={set_id} module={qs['module']} items={len(qs['items'])}")
+
+
 def load_plan() -> tuple[list[dict], list[dict]]:
     docs = []
     for rel in MANUALS:
@@ -273,14 +342,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slug", default=os.environ.get("TENANT_SLUG", "axis_demo"))
     ap.add_argument("--dry-run", action="store_true", help="청킹·정제 통계만 출력 (DB·ollama 불필요)")
-    ap.add_argument("--sources", choices=("seed", "text", "all"), default="seed",
-                    help="seed=매뉴얼 2+glossary(기본, 기존 동작) / text=근거 원문 text/ 13건 / all=둘 다. 멱등 키는 documents.source 라 서로 보존")
+    ap.add_argument("--sources", choices=("seed", "text", "all", "quiz"), default="seed",
+                    help="seed=매뉴얼 2+glossary(기본, 기존 동작) / text=근거 원문 text/ 13건 / all=둘 다(기존 의미 유지 — quiz 미포함) / quiz=시드 퀴즈 2파일(M-38). 멱등 키는 documents.source·(quiz는 origin+module+title)")
     a = ap.parse_args()
-    docs, gl = [], []
+    docs, gl, quiz_sets = [], [], []
     if a.sources in ("seed", "all"):
         docs, gl = load_plan()
     if a.sources in ("text", "all"):
         docs += load_text_plan()
+    if a.sources == "quiz":
+        quiz_sets = load_quiz_plan()
     if a.dry_run:
         print("dry-run: no DB write")
         return 0
@@ -312,10 +383,15 @@ def main() -> int:
             for g in gl:
                 cur.execute("INSERT INTO glossary (term_ko, term_vi, term_in, note, status) VALUES (%s,%s,%s,%s,'draft')",
                             (g["term_ko"], g.get("term_vi"), g.get("term_in"), g.get("note")))
-        cur.execute("SELECT (SELECT count(*) FROM documents), (SELECT count(*) FROM chunks), (SELECT count(*) FROM glossary), "
-                    "(SELECT count(*) FROM chunks WHERE content LIKE '%[src:%'), "
-                    "(SELECT count(DISTINCT vector_dims(embedding)) FROM chunks)")
-        print("counts documents/chunks/glossary/src-tag-residue/dim-distinct:", cur.fetchone())
+        if quiz_sets:                      # M-38 — documents·chunks·glossary 무접촉 경로
+            ingest_quiz(cur, quiz_sets)
+            cur.execute("SELECT (SELECT count(*) FROM quiz_sets), (SELECT count(*) FROM quiz_items)")
+            print("counts quiz_sets/quiz_items:", cur.fetchone())
+        else:
+            cur.execute("SELECT (SELECT count(*) FROM documents), (SELECT count(*) FROM chunks), (SELECT count(*) FROM glossary), "
+                        "(SELECT count(*) FROM chunks WHERE content LIKE '%[src:%'), "
+                        "(SELECT count(DISTINCT vector_dims(embedding)) FROM chunks)")
+            print("counts documents/chunks/glossary/src-tag-residue/dim-distinct:", cur.fetchone())
         conn.commit()
     return 0
 
