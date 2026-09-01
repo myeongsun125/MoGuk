@@ -1,6 +1,16 @@
-"""/learn — 학습카드·퀴즈 (modules/learning). [새봄]"""
+"""/learn — 학습카드·퀴즈 (modules/learning, M-38). [새봄]
 
-from fastapi import APIRouter
+GET  /learn/quiz/{set_id}?lang=   문항 조회 — answer_idx 미노출(§3:221)
+lang 미지정 → Bearer 근로자 lang(optional_identity — 미인증이면 ko), 지정 → vi·in 외 ko 폴백.
+"""
+
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+
+from app.routers.auth import optional_identity
+from app.services import quiz
 
 router = APIRouter(prefix="/learn", tags=["learn"])
 
@@ -8,6 +18,25 @@ router = APIRouter(prefix="/learn", tags=["learn"])
 @router.get("/cards")
 def cards(module: str | None = None) -> dict:
     raise NotImplementedError("[새봄] GET /learn/cards?module=")
+
+
+@router.get("/quiz/{set_id}")
+async def get_quiz(
+    set_id: int,
+    lang: str | None = None,
+    identity: dict | None = Depends(optional_identity),
+) -> JSONResponse:
+    """{set_id, module, title, status, items[{id, q, choices[], term_hints[]}]} (M-38).
+
+    status 는 그대로 반환(draft 포함) — 화면 라벨 문구는 JH 몫, 서버는 만들지 않는다.
+    """
+    try:
+        result = await asyncio.to_thread(
+            quiz.get_quiz, set_id, lang, (identity or {}).get("wid")
+        )
+    except quiz.QuizSetNotFound:
+        raise HTTPException(status_code=404, detail="quiz set not found") from None
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.post("/quiz/{set_id}/submit")
