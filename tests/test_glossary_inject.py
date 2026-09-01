@@ -120,14 +120,14 @@ def test_answer_prompt_byte_identical_when_off():
 def test_answer_inject_on_matches_ko_terms(monkeypatch):
     monkeypatch.setenv(graph_mod.ANSWER_INJECT_ENV, "on")
     line, matched = graph_mod._answer_gloss_line(CHUNKS, "vi")
-    assert matched == [("보안경", "kính bảo hộ"), ("선반", "máy tiện")]   # 용어집 순서
-    assert line == graph_mod.ANSWER_GLOSS_HEAD + "보안경→kính bảo hộ, 선반→máy tiện"
+    assert matched == [("선반", "máy tiện"), ("보안경", "kính bảo hộ")]   # 용어집 순서(선반=1번째 항목)
+    assert line == graph_mod.ANSWER_GLOSS_HEAD + "선반→máy tiện, 보안경→kính bảo hộ"
 
 
 def test_answer_inject_in_lang_maps_term_in(monkeypatch):
     monkeypatch.setenv(graph_mod.ANSWER_INJECT_ENV, "on")
     _, matched = graph_mod._answer_gloss_line(CHUNKS, "in")
-    assert matched == [("보안경", "kacamata pengaman"), ("선반", "mesin bubut")]
+    assert matched == [("선반", "mesin bubut"), ("보안경", "kacamata pelindung")]
 
 
 def test_answer_inject_skips_ko_lang(monkeypatch):
