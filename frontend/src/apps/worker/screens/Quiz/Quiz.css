@@ -1,0 +1,161 @@
+.quiz-screen {
+  min-height: 100vh;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quiz-screen h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.quiz-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #c0392b;
+}
+
+.quiz-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.quiz-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+}
+
+.quiz-question {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.quiz-draft-banner {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff4e5;
+  color: #9c5700;
+  font-size: 0.85rem;
+}
+
+.quiz-term-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.term-hint-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #f4f4f4;
+  color: #666;
+  font-size: 0.78rem;
+}
+
+.quiz-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quiz-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+.quiz-screen > button[data-testid="quiz-submit"] {
+  align-self: flex-start;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.quiz-screen > button[data-testid="quiz-submit"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.quiz-screen .error {
+  color: #c0392b;
+  margin: 0;
+}
+
+.quiz-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+}
+
+.quiz-result h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.quiz-result p {
+  margin: 0;
+}
+
+/* Dashboard.css의 badge-label-* 3색 관례 재사용(레이블 값 미확정 — 실값 오면 여기·index.tsx의
+   LABEL_CLASS만 교체) */
+.badge {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.badge-label-red {
+  background: #fdecea;
+  color: #b71c1c;
+}
+
+.badge-label-yellow {
+  background: #fff4e5;
+  color: #9c5700;
+}
+
+.badge-label-green {
+  background: #eef7ee;
+  color: #2e7d32;
+}
+
+.badge-label-neutral {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.quiz-passed {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.quiz-failed {
+  color: #c0392b;
+  font-weight: 600;
+}

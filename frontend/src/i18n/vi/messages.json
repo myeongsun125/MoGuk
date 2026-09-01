@@ -35,6 +35,7 @@
   "worker.report.summaryFailed": "Tạo tóm tắt thất bại. Báo cáo đã được tiếp nhận bình thường và quản trị viên sẽ trực tiếp kiểm tra nội dung gốc.",
   "worker.nav.ask": "Hỏi đáp",
   "worker.nav.report": "Báo cáo nguy hiểm",
+  "worker.nav.quiz": "Trắc nghiệm",
   "admin.glossary.rejectNotePlaceholder": "Lý do từ chối (tuỳ chọn)",
   "admin.glossary.rejectConfirm": "Xác nhận từ chối",
   "admin.glossary.rejectCancel": "Huỷ",
@@ -57,5 +58,18 @@
   "admin.workers.sendKakao": "Gửi qua KakaoTalk",
   "admin.workers.sendCopied": "Đã sao chép liên kết",
   "admin.workers.sendError": "Chia sẻ thất bại. Vui lòng sao chép liên kết bên dưới",
-  "admin.workers.linkRefreshed": "Đã cập nhật liên kết mới (mã QR trước đó không còn hiệu lực)"
+  "admin.workers.linkRefreshed": "Đã cập nhật liên kết mới (mã QR trước đó không còn hiệu lực)",
+  "worker.quiz.title": "Trắc nghiệm an toàn",
+  "worker.quiz.loadingItems": "Đang tải câu hỏi...",
+  "worker.quiz.loadError": "Không tải được câu hỏi. Vui lòng thử lại.",
+  "worker.quiz.retry": "Thử lại",
+  "worker.quiz.submit": "Nộp bài",
+  "worker.quiz.submitting": "Đang nộp...",
+  "worker.quiz.submitError": "Nộp bài thất bại. Vui lòng thử lại.",
+  "worker.quiz.scoreLabel": "Điểm số",
+  "worker.quiz.passed": "Đạt",
+  "worker.quiz.failed": "Chưa đạt",
+  "worker.quiz.resultTitle": "Kết quả",
+  "worker.quiz.draftLabel": "Câu hỏi chưa kiểm duyệt (sẽ được người bản ngữ kiểm duyệt)",
+  "worker.quiz.termLabel": "Thuật ngữ"
 }

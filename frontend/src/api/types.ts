@@ -257,3 +257,36 @@ export interface WorkerInviteResult {
 export interface SendInviteResult {
   share_url: string;
 }
+
+// 퀴즈(learn) — §3 M-38 확정 계약. GET /learn/quiz/{set_id}?lang= 응답이 이 shape.
+// 서버가 요청 lang 기준으로 q·choices를 이미 localize해 내려주므로 클라는 그대로 렌더한다
+// (q_ko/q_vi 선택·in→ko 폴백 로직은 서버 책임으로 이동 — 클라에는 없음).
+export interface QuizTermHint {
+  term_ko: string;
+  term_lang: string;
+}
+
+export interface QuizItem {
+  id: number;
+  q: string;
+  choices: string[];
+  term_hints: QuizTermHint[];
+}
+
+export interface QuizSet {
+  set_id: number;
+  module: string;
+  title: string;
+  status: string;
+  items: QuizItem[];
+}
+
+// POST /learn/quiz/{set_id}/submit body {answers:number[]} → 이 응답(learn.py:13-15 주석,
+// M-01 tenant threshold 판정). label 값 enum은 SB 미확정 — mock에서 "red"|"yellow"|"green"
+// 3색으로 임시 정의(관리자 Dashboard의 ComprehensionLabel과 동일 색 관례 재사용), 실값 오면
+// 화면의 색 매핑 함수 1곳만 교체하면 된다. 타입은 string으로 넓게 둔다(미확정 계약 보수적 처리).
+export interface QuizSubmitResult {
+  score: number;
+  passed: boolean;
+  label: string;
+}

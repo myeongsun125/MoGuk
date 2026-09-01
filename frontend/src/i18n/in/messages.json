@@ -35,6 +35,7 @@
   "worker.report.summaryFailed": "Pembuatan ringkasan gagal. Laporan telah diterima dengan normal dan admin akan memeriksa teks asli secara langsung.",
   "worker.nav.ask": "Tanya Jawab",
   "worker.nav.report": "Laporan bahaya",
+  "worker.nav.quiz": "Kuis",
   "admin.glossary.rejectNotePlaceholder": "Alasan penolakan (opsional)",
   "admin.glossary.rejectConfirm": "Konfirmasi penolakan",
   "admin.glossary.rejectCancel": "Batal",
@@ -57,5 +58,18 @@
   "admin.workers.sendKakao": "Kirim lewat KakaoTalk",
   "admin.workers.sendCopied": "Tautan telah disalin",
   "admin.workers.sendError": "Gagal membagikan. Silakan salin tautan di bawah",
-  "admin.workers.linkRefreshed": "Tautan baru telah diperbarui (kode QR sebelumnya tidak berlaku lagi)"
+  "admin.workers.linkRefreshed": "Tautan baru telah diperbarui (kode QR sebelumnya tidak berlaku lagi)",
+  "worker.quiz.title": "Kuis keselamatan",
+  "worker.quiz.loadingItems": "Memuat soal...",
+  "worker.quiz.loadError": "Gagal memuat soal. Silakan coba lagi.",
+  "worker.quiz.retry": "Coba lagi",
+  "worker.quiz.submit": "Kirim",
+  "worker.quiz.submitting": "Mengirim...",
+  "worker.quiz.submitError": "Gagal mengirim. Silakan coba lagi.",
+  "worker.quiz.scoreLabel": "Skor",
+  "worker.quiz.passed": "Lulus",
+  "worker.quiz.failed": "Belum lulus",
+  "worker.quiz.resultTitle": "Hasil",
+  "worker.quiz.draftLabel": "Soal belum diperiksa (akan diperiksa oleh penutur asli)",
+  "worker.quiz.termLabel": "Istilah"
 }
