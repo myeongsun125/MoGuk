@@ -41,6 +41,10 @@ def tenant_key() -> bytes:
         raise CryptoKeyError(
             f"{KEY_ENV} 미설정 — 원문 봉인 불가(M-19: 평문 저장 폴백 없음)"
         )
+    # 배포 env 실값은 패딩 '=' 없는 43자로 올 수 있다(EC2 실측) — 디코드 전 보정.
+    # 개행·공백 혼입도 함께 걷어낸다. 보정 실패(형식·길이)는 아래 검증이 그대로 잡는다.
+    raw = raw.strip()
+    raw += "=" * (-len(raw) % 4)
     cached = _key_cache.get(raw)
     if cached is not None:
         return cached

@@ -106,6 +106,22 @@ def test_open_text_without_key_raises_for_sealed(monkeypatch, keyed):
         crypto.open_text(sealed)
 
 
+def test_key_env_without_padding_loads_same_key(monkeypatch):
+    """배포 실값은 패딩 '=' 없는 43자 — 패딩·개행 유무와 무관하게 같은 키 bytes 로 로드."""
+    padded = base64.urlsafe_b64encode(os.urandom(crypto.KEY_BYTES)).decode()
+    assert len(padded) == 44 and padded.endswith("=")
+    monkeypatch.setenv(crypto.KEY_ENV, padded)
+    k_padded = crypto.tenant_key()
+
+    unpadded = padded.rstrip("=")
+    assert len(unpadded) == 43
+    monkeypatch.setenv(crypto.KEY_ENV, unpadded)
+    assert crypto.tenant_key() == k_padded
+
+    monkeypatch.setenv(crypto.KEY_ENV, unpadded + chr(10))   # 개행 혼입도 strip 으로 흡수
+    assert crypto.tenant_key() == k_padded
+
+
 @pytest.mark.parametrize(
     "bad", ["!!not-base64!!", base64.urlsafe_b64encode(b"short-key").decode()]
 )
