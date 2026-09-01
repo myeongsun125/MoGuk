@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import auth as auth_service, risk_reports
+from app.services import auth as auth_service, crypto, risk_reports
 from app.workers import job_runner
 
 client = TestClient(app, client=("127.0.0.1", 50000))
@@ -124,7 +124,9 @@ def test_submit_text_report_single_transaction(monkeypatch):
 
     rep = _params_for(store, "INSERT INTO risk_reports")[0]
     assert rep["source"] == "text"
-    assert rep["original_text"] == "프레스 안전덮개가 열려 있습니다"
+    # M-19: 저장 시 봉인 — 컬럼에는 enc1 마커 봉인문이 들어가고 평문은 남지 않는다
+    assert rep["original_text"].startswith(crypto.ENC_MARKER)
+    assert crypto.open_text(rep["original_text"]) == "프레스 안전덮개가 열려 있습니다"
     assert rep["lang"] == "vi"
     assert rep["status"] == "submitted"
     assert rep["processing_state"] == "queued"
