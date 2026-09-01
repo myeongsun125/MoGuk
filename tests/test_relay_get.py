@@ -57,9 +57,11 @@ EDGE_CASES = [
      {"id": 1, "status": "acknowledged"}),
     ("POST", "/api/v1/admin/reports/1/resolve", "/api/v1/admin/reports/1/resolve",
      {}, {"note": None}, 200, {"id": 1, "status": "resolved"}),
-    # M-32b: 초대 발급 — 201 그대로 투과(200 으로 눌리지 않는다), 본문 온전 전달
+    # M-32b: 초대 발급 — 201 그대로 투과(200 으로 눌리지 않는다), 본문 온전 전달.
+    # M-39 파트2: 라우터 model_dump 가 미지정 phone 을 None 으로 실어 보낸다.
     ("POST", "/api/v1/admin/workers/invite", "/api/v1/admin/workers/invite",
-     INVITE_BODY, INVITE_BODY, 201, {"invite_url": "http://localhost/activate?token=t"}),
+     INVITE_BODY, {**INVITE_BODY, "phone": None}, 201,
+     {"invite_url": "http://localhost/activate?token=t"}),
 ]
 
 
@@ -281,15 +283,15 @@ def test_dispatch_invite_created(monkeypatch):
 
     seen = {}
 
-    def fake_create(name, emp_no, lang):
-        seen.update(name=name, emp_no=emp_no, lang=lang)
+    def fake_create(name, emp_no, lang, phone=None):
+        seen.update(name=name, emp_no=emp_no, lang=lang, phone=phone)
         return {"invite_url": "http://localhost/activate?token=t"}
 
     monkeypatch.setattr(invites, "create_invite", fake_create)
     status, body = relay_poller.dispatch("POST", "/api/v1/admin/workers/invite", INVITE_BODY)
     assert status == 201
     assert body == {"invite_url": "http://localhost/activate?token=t"}
-    assert seen == INVITE_BODY
+    assert seen == {**INVITE_BODY, "phone": None}      # M-39 파트2 — phone 전달(미지정 None)
 
 
 @pytest.mark.parametrize(
