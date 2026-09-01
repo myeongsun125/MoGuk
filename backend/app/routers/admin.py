@@ -33,6 +33,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 DASHBOARD_PATH = "/api/v1/admin/dashboard"
 GLOSSARY_PATH = "/api/v1/admin/glossary"
 UNANSWERED_PATH = "/api/v1/admin/unanswered"
+UNANSWERED_ANSWER_PATH = "/api/v1/admin/unanswered/{question_id}/answer"
 GLOSSARY_APPROVE_PATH = "/api/v1/admin/glossary/{term_id}/approve"
 GLOSSARY_REJECT_PATH = "/api/v1/admin/glossary/{term_id}/reject"
 EVENTS_PATH = "/api/v1/admin/events"
@@ -195,10 +196,30 @@ async def list_unanswered(status: str | None = approval.UNANSWERED_DEFAULT_STATU
     return JSONResponse(status_code=200, content=result)
 
 
+class AnswerRequest(BaseModel):
+    text: str
+
+
 @router.post("/unanswered/{question_id}/answer")
-def answer_unanswered(question_id: int, body: dict) -> dict:
-    # {text} → ingest_answer job → documents(origin='admin_answer') 편입 (M-05)
-    raise NotImplementedError("[새봄] POST /admin/unanswered/{id}/answer")
+async def answer_unanswered(question_id: int, body: AnswerRequest, request: Request) -> JSONResponse:
+    """{text} — open → answered + ingest_answer job 적재 (M-05a).
+
+    → {id, status:'answered', answered_at, ingest_job_id}. 적재(documents origin='admin_answer')는
+    job_runner 가 비동기로 수행한다. 전이마다 admin_events 1행(M-08d).
+    text 누락은 pydantic 422, 공백은 서비스가 422. open 아니면 422·대상 없음 404.
+    """
+    _reject_identity_fields(await _json_body(request))
+    if role() == "edge":
+        return await _relay(
+            UNANSWERED_ANSWER_PATH.format(question_id=question_id), "POST", {"text": body.text}
+        )
+    try:
+        result = await asyncio.to_thread(approval.answer_unanswered, question_id, body.text)
+    except approval.UnansweredNotFound:
+        raise HTTPException(status_code=404, detail="unanswered question not found") from None
+    except (approval.InvalidAnswer, approval.TransitionError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.get("/reports")

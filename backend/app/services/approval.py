@@ -1,6 +1,6 @@
 """관리자 승인큐 — glossary 후보·무근거 질의 목록 (총괄 확정 0830). [새봄]
 
-범위 = 목록 조회 + 전이(approve/reject). 전이는 admin_events 1행을 함께 남긴다(M-08d).
+범위 = 목록 조회 + 전이(approve/reject, unanswered answer). 전이는 admin_events 1행을 함께 남긴다(M-08d).
 
 M-08d 배선:
 - 수용처 = admin_events (범용 감사 — actor text·target_type/target_id·from/to·detail)
@@ -22,6 +22,7 @@ M-08d 배선:
 
 from __future__ import annotations
 
+import json
 import logging
 
 from app.services import admin_events, tenancy
@@ -160,3 +161,93 @@ def approve_glossary(term_id: int) -> dict:
 def reject_glossary(term_id: int, note: str | None = None) -> dict:
     """draft → rejected. 사유는 admin_events.detail 에 보존 — glossary.note 는 무접촉."""
     return _transition(term_id, "reject", _REJECT, EV_GLOSSARY_REJECTED, note)
+
+
+# ── unanswered 답변 전이 (M-05a) ───────────────────────────
+
+EV_UNANSWERED_ANSWERED = "unanswered_answered"
+TARGET_UNANSWERED = "unanswered"
+
+# jobs.kind — 001:126 주석의 'ingest_answer' 그대로. 적재는 job_runner 가 맡는다.
+JOB_KIND_INGEST_ANSWER = "ingest_answer"
+
+# open 에서만 전이한다 — answered 를 되돌리는 경로는 두지 않는다(M-08 단방향 패턴).
+UNANSWERED_FROM_STATE = "open"
+UNANSWERED_TO_STATE = "answered"
+
+
+class UnansweredNotFound(Exception):
+    """대상 무근거 질의 없음 — 404."""
+
+
+class InvalidAnswer(Exception):
+    """answer 본문 text 누락·공백 — 422."""
+
+
+_SELECT_UNANSWERED_FOR_UPDATE = """
+SELECT id, status FROM unanswered_queue WHERE question_id = %(question_id)s FOR UPDATE
+"""
+
+# answered_by(integer FK)는 건드리지 않는다 — M-15b 판정 1 과 동일. 행위자는 admin_events.actor 단독.
+_ANSWER = """
+UPDATE unanswered_queue
+SET status = %(to_state)s, admin_answer = %(text)s, answered_at = now()
+WHERE id = %(id)s
+RETURNING answered_at
+"""
+
+# 적재는 비동기 — 전이 트랜잭션은 jobs 1행만 남기고 끝낸다(M-18 큐).
+_INSERT_JOB = """
+INSERT INTO jobs (kind, payload) VALUES (%(kind)s, %(payload)s::jsonb) RETURNING id
+"""
+
+
+def answer_unanswered(question_id: int, text: str | None) -> dict:
+    """open → answered 1회 + ingest_answer job 적재를 한 트랜잭션으로.
+
+    §3:240 응답 = {id, status:'answered', answered_at, ingest_job_id}.
+    id 는 unanswered_queue.id — GET /admin/unanswered 목록의 id 와 같은 축이다
+    (경로 파라미터는 question_id, admin_events.target_id 도 question_id).
+    """
+    body = (text or "").strip()
+    if not body:
+        raise InvalidAnswer("text 는 필수입니다 (공백 불가)")
+
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_UNANSWERED_FOR_UPDATE, {"question_id": question_id})
+            row = cur.fetchone()
+            if row is None:
+                raise UnansweredNotFound(f"question_id={question_id}")
+            queue_id, current = row[0], row[1]
+            if current != UNANSWERED_FROM_STATE:
+                raise TransitionError(
+                    f"{current} → {UNANSWERED_TO_STATE} 불가 ({UNANSWERED_FROM_STATE} 에서만)"
+                )
+
+            cur.execute(_ANSWER, {"id": queue_id, "to_state": UNANSWERED_TO_STATE, "text": body})
+            answered_at = cur.fetchone()[0]
+
+            payload = {
+                "unanswered_id": queue_id,
+                "question_id": question_id,
+                "text": body,
+            }
+            cur.execute(
+                _INSERT_JOB,
+                {
+                    "kind": JOB_KIND_INGEST_ANSWER,
+                    "payload": json.dumps(payload, ensure_ascii=False),
+                },
+            )
+            job_id = cur.fetchone()[0]
+        conn.commit()
+    log.info(
+        "unanswered: 답변 question_id=%s queue_id=%s job=%s", question_id, queue_id, job_id
+    )
+    return {
+        "id": queue_id,
+        "status": UNANSWERED_TO_STATE,
+        "answered_at": _iso(answered_at),
+        "ingest_job_id": job_id,
+    }
