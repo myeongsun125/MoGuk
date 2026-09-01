@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 from app.routers.auth import optional_identity
 from app.services import quiz
@@ -55,7 +55,8 @@ async def get_quiz(
 
 
 class SubmitRequest(BaseModel):
-    answers: list[int]
+    # StrictInt — pydantic lax 가 JSON true 를 1 로 코어스하는 것을 막는다(bool·문자열 422).
+    answers: list[StrictInt]
 
 
 @router.post("/quiz/{set_id}/submit")

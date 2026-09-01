@@ -372,7 +372,7 @@ def test_submit_records_bearer_worker_id(monkeypatch):
     [2, 0, 1],           # 길이 초과
     [2, 5],              # 2번 문항(2지) 범위 밖
     [-1, 0],             # 음수
-    [True, 0],           # bool 은 정수 취급 금지
+    [True, 0],           # bool — StrictInt 가 pydantic 코어스(true→1)를 차단
 ])
 def test_submit_invalid_answers_422_no_insert(monkeypatch, answers):
     store = _submit_store()
@@ -383,6 +383,17 @@ def test_submit_invalid_answers_422_no_insert(monkeypatch, answers):
     assert r.status_code == 422, r.text
     assert _attempt_params(store) == []                # 거절 시 기록 없음
     assert store["commits"] == 0
+
+
+def test_submit_bool_rejected_at_service_layer(monkeypatch):
+    """릴레이 경로처럼 pydantic 을 거치지 않는 직접 호출 — bool 은 서비스가 거절한다."""
+    store = _submit_store()
+    monkeypatch.setattr(quiz.tenancy, "connect", fake_connect(store))
+
+    with pytest.raises(quiz.InvalidAnswers):
+        quiz.submit_quiz(3, [True, 0])
+
+    assert _attempt_params(store) == []
 
 
 def test_submit_non_list_answers_422(monkeypatch):
