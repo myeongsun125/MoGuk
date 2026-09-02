@@ -8,15 +8,16 @@ import {
 } from "../../../../api/adminReports";
 import type { AdminReportDetail, AdminReportListItem } from "../../../../api/types";
 import { formatKst } from "../../../../utils/formatKst";
+import { useAdminLang } from "../../../../i18n/AdminLangContext";
 import "./Reports.css";
 
-const STATUS_LABEL: Record<string, string> = {
-  submitted: "접수",
-  acknowledged: "확인됨",
-  resolved: "해결됨",
-};
-
 export default function AdminReportsScreen() {
+  const { t } = useAdminLang();
+  const STATUS_LABEL: Record<string, string> = {
+    submitted: t("admin.reports.statusSubmitted"),
+    acknowledged: t("admin.reports.statusAcknowledged"),
+    resolved: t("admin.reports.statusResolved"),
+  };
   const [reports, setReports] = useState<AdminReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -61,7 +62,12 @@ export default function AdminReportsScreen() {
   }
 
   function describeError(id: number, e: unknown) {
-    const msg = e instanceof TransitionConflictError ? "이미 처리됨" : e instanceof Error ? e.message : String(e);
+    const msg =
+      e instanceof TransitionConflictError
+        ? t("admin.reports.alreadyProcessed")
+        : e instanceof Error
+          ? e.message
+          : String(e);
     setActionMsg((m) => ({ ...m, [id]: msg }));
   }
 
@@ -90,12 +96,13 @@ export default function AdminReportsScreen() {
 
   return (
     <div className="admin-reports" data-testid="admin-reports-screen">
-      <h1>위험보고 관리</h1>
+      <h1>{t("admin.reports.title")}</h1>
       <div className="unconfirmed-badge" data-testid="unconfirmed-count">
-        미확인 위험보고: {unconfirmedCount}건
+        {t("admin.reports.unconfirmedLabel")}: {unconfirmedCount}
+        {t("admin.reports.countUnit")}
       </div>
 
-      {loading && <p>불러오는 중...</p>}
+      {loading && <p>{t("admin.reports.loading")}</p>}
       {listError && <p className="error">{listError}</p>}
 
       <ul className="report-list" data-testid="report-list">
@@ -104,24 +111,28 @@ export default function AdminReportsScreen() {
             <div className="report-row-main">
               <span className={`badge badge-status-${r.status}`}>{STATUS_LABEL[r.status]}</span>
               {r.severity && <span className={`badge badge-severity-${r.severity}`}>{r.severity}</span>}
-              {r.reporter_confirmed && <span className="badge badge-confirmed">보고자 확인</span>}
+              {r.reporter_confirmed && (
+                <span className="badge badge-confirmed">{t("admin.reports.reporterConfirmed")}</span>
+              )}
               <span className="summary">
-                {r.processing_state === "failed" ? "요약 실패 — 원문 직접 확인" : r.ko_summary ?? "(요약 대기 중)"}
+                {r.processing_state === "failed"
+                  ? t("admin.reports.summaryFailed")
+                  : r.ko_summary ?? t("admin.reports.summaryPendingRow")}
               </span>
             </div>
             <div className="report-row-actions">
               {r.status === "submitted" && (
                 <button data-testid="ack-btn" onClick={() => handleAck(r.id)}>
-                  확인(ack)
+                  {t("admin.reports.ackButton")}
                 </button>
               )}
               {r.status === "acknowledged" && (
                 <button data-testid="resolve-btn" onClick={() => handleResolve(r.id)}>
-                  해결(resolve)
+                  {t("admin.reports.resolveButton")}
                 </button>
               )}
               <button data-testid="detail-btn" onClick={() => openDetail(r.id)}>
-                세부
+                {t("admin.reports.detailButton")}
               </button>
             </div>
             {actionMsg[r.id] && (
@@ -133,30 +144,35 @@ export default function AdminReportsScreen() {
         ))}
       </ul>
 
-      {detailLoading && <p>상세 불러오는 중...</p>}
+      {detailLoading && <p>{t("admin.reports.detailLoading")}</p>}
 
       {detail && (
         <div className="report-detail" data-testid="report-detail">
           <button className="close-btn" onClick={closeDetail}>
-            닫기
+            {t("admin.reports.closeButton")}
           </button>
-          <h2>보고 #{detail.id} 상세</h2>
+          <h2>
+            {t("admin.reports.detailTitlePrefix")}
+            {detail.id} {t("admin.reports.detailTitleSuffix")}
+          </h2>
           <dl>
-            <dt>원문</dt>
+            <dt>{t("admin.reports.dtOriginal")}</dt>
             <dd data-testid="detail-original">{detail.original_text ?? "—"}</dd>
-            <dt>요약</dt>
+            <dt>{t("admin.reports.dtSummary")}</dt>
             <dd>
-              {detail.processing_state === "failed" ? "요약 실패 — 원문 직접 확인" : detail.ko_summary ?? "(대기 중)"}
+              {detail.processing_state === "failed"
+                ? t("admin.reports.summaryFailed")
+                : detail.ko_summary ?? t("admin.reports.summaryPendingDetail")}
             </dd>
-            <dt>상태</dt>
+            <dt>{t("admin.reports.dtStatus")}</dt>
             <dd>{STATUS_LABEL[detail.status]}</dd>
-            <dt>보고자 확인</dt>
-            <dd>{detail.reporter_confirmed ? "확인함" : "-"}</dd>
-            <dt>확인자(ack)</dt>
-            <dd data-testid="detail-acked-by">{detail.acked_by ?? "— (인증 도입 예정)"}</dd>
-            <dt>해결자(resolve)</dt>
-            <dd data-testid="detail-resolved-by">{detail.resolved_by ?? "— (인증 도입 예정)"}</dd>
-            <dt>비고</dt>
+            <dt>{t("admin.reports.reporterConfirmed")}</dt>
+            <dd>{detail.reporter_confirmed ? t("admin.reports.confirmedYes") : "-"}</dd>
+            <dt>{t("admin.reports.dtAckedBy")}</dt>
+            <dd data-testid="detail-acked-by">{detail.acked_by ?? t("admin.reports.authPending")}</dd>
+            <dt>{t("admin.reports.dtResolvedBy")}</dt>
+            <dd data-testid="detail-resolved-by">{detail.resolved_by ?? t("admin.reports.authPending")}</dd>
+            <dt>{t("admin.reports.dtNote")}</dt>
             <dd>{detail.resolution_note ?? "—"}</dd>
           </dl>
 
@@ -164,17 +180,17 @@ export default function AdminReportsScreen() {
             <div className="resolve-form">
               <input
                 data-testid="resolve-note"
-                placeholder="처리 메모(선택)"
+                placeholder={t("admin.reports.notePlaceholder")}
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
               />
               <button data-testid="resolve-btn-detail" onClick={() => handleResolve(detail.id)}>
-                해결(resolve)
+                {t("admin.reports.resolveButton")}
               </button>
             </div>
           )}
 
-          <h3>이력</h3>
+          <h3>{t("admin.reports.historyTitle")}</h3>
           <div className="table-scroll">
             <ul className="event-list" data-testid="event-list">
               {detail.events.map((ev) => (
