@@ -25,6 +25,36 @@ async function main() {
   await page.goto(`http://localhost:${PORT}/admin/dashboard`);
   await page.getByTestId("kpi-grid").waitFor({ state: "visible", timeout: 5000 });
 
+  // i18n 배선 확인 — ko(기본) -> vi -> ko 토글 시 라벨이 실제로 바뀌는지(admin i18n 신규 배선).
+  const h1Ko = await page.locator("h1").textContent();
+  await page.getByTestId("admin-lang-vi").click();
+  await page.waitForTimeout(50);
+  const h1Vi = await page.locator("h1").textContent();
+  console.log("h1 ko:", h1Ko, "/ h1 vi:", h1Vi);
+  if (h1Ko === h1Vi) {
+    console.error("FAIL: admin-lang-vi 토글 후 h1 라벨이 바뀌지 않음 — i18n 배선 미동작 의심");
+    failures++;
+  } else {
+    console.log("PASS: vi 토글 시 라벨 변경 확인");
+  }
+  const kpiLabelVi = await page.getByTestId("kpi-open-reports").locator(".kpi-label").textContent();
+  console.log("KPI① 라벨(vi):", kpiLabelVi);
+  if (kpiLabelVi?.includes("미확인")) {
+    console.error("FAIL: vi 토글인데 KPI① 라벨이 여전히 한국어");
+    failures++;
+  } else {
+    console.log("PASS: KPI 카드 라벨도 vi로 전환됨");
+  }
+  await page.getByTestId("admin-lang-ko").click();
+  await page.waitForTimeout(50);
+  const h1Back = await page.locator("h1").textContent();
+  if (h1Back !== h1Ko) {
+    console.error("FAIL: ko로 되돌린 후 라벨이 원래대로 복귀하지 않음");
+    failures++;
+  } else {
+    console.log("PASS: ko 복귀 확인");
+  }
+
   // "(mock)" 라벨 제거 확인 — M-41 전엔 근로자별/모듈별 제목에 "(mock)"이 붙어 있었다.
   const bodyText = await page.textContent("body");
   if (bodyText?.includes("(mock)")) {

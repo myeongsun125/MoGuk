@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getAdminEvents } from "../../../../api/adminEvents";
 import type { AdminEvent } from "../../../../api/types";
 import { formatKst } from "../../../../utils/formatKst";
+import { useAdminLang } from "../../../../i18n/AdminLangContext";
 import "./AuditLog.css";
 
 function todayLocal(): string {
@@ -11,6 +12,7 @@ function todayLocal(): string {
 }
 
 export default function AdminAuditLogScreen() {
+  const { t } = useAdminLang();
   const [date, setDate] = useState(todayLocal());
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,10 +42,10 @@ export default function AdminAuditLogScreen() {
 
   return (
     <div className="admin-audit-log" data-testid="admin-audit-log-screen">
-      <h1>감사 로그</h1>
+      <h1>{t("admin.auditlog.title")}</h1>
 
       <div className="filter-row">
-        <label htmlFor="date-filter">날짜</label>
+        <label htmlFor="date-filter">{t("admin.auditlog.dateLabel")}</label>
         <input
           id="date-filter"
           data-testid="date-filter"
@@ -52,23 +54,24 @@ export default function AdminAuditLogScreen() {
           onChange={(e) => handleDateChange(e.target.value)}
         />
         <span className="count-label" data-testid="event-count">
-          {events.length}건
+          {events.length}
+          {t("admin.auditlog.countUnit")}
         </span>
       </div>
 
-      {loading && <p>불러오는 중...</p>}
+      {loading && <p>{t("admin.auditlog.loading")}</p>}
       {error && <p className="error">{error}</p>}
 
       <div className="table-scroll">
         <table className="event-table" data-testid="event-table">
           <thead>
             <tr>
-              <th>시각</th>
-              <th>행위자</th>
-              <th>대상</th>
+              <th>{t("admin.auditlog.thTime")}</th>
+              <th>{t("admin.auditlog.thActor")}</th>
+              <th>{t("admin.auditlog.thTarget")}</th>
               <th>action</th>
-              <th>전→후</th>
-              <th>비고</th>
+              <th>{t("admin.auditlog.thTransition")}</th>
+              <th>{t("admin.auditlog.thDetail")}</th>
             </tr>
           </thead>
           <tbody>
@@ -91,7 +94,7 @@ export default function AdminAuditLogScreen() {
             {!loading && events.length === 0 && (
               <tr>
                 <td colSpan={6} className="empty-row">
-                  해당 날짜 기록이 없습니다.
+                  {t("admin.auditlog.emptyRow")}
                 </td>
               </tr>
             )}

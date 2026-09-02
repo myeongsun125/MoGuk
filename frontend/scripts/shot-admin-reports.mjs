@@ -24,10 +24,33 @@ async function main() {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: VIEWPORT });
+  let failures = 0;
 
   await page.goto(`http://localhost:${PORT}/admin/reports`);
   await page.getByTestId("admin-reports-screen").waitFor({ state: "visible", timeout: 5000 });
   await page.getByTestId("report-row").first().waitFor({ state: "visible", timeout: 5000 });
+
+  // i18n 배선 확인 — ko(기본) -> vi -> ko 토글 시 라벨이 실제로 바뀌는지(admin i18n 신규 배선).
+  const h1Ko = await page.locator("h1").textContent();
+  await page.getByTestId("admin-lang-vi").click();
+  await page.waitForTimeout(50);
+  const h1Vi = await page.locator("h1").textContent();
+  console.log("h1 ko:", h1Ko, "/ h1 vi:", h1Vi);
+  if (h1Ko === h1Vi) {
+    console.error("FAIL: admin-lang-vi 토글 후 h1 라벨이 바뀌지 않음 — i18n 배선 미동작 의심");
+    failures++;
+  } else {
+    console.log("PASS: vi 토글 시 라벨 변경 확인");
+  }
+  await page.getByTestId("admin-lang-ko").click();
+  await page.waitForTimeout(50);
+  const h1Back = await page.locator("h1").textContent();
+  if (h1Back !== h1Ko) {
+    console.error("FAIL: ko로 되돌린 후 라벨이 원래대로 복귀하지 않음");
+    failures++;
+  } else {
+    console.log("PASS: ko 복귀 확인");
+  }
 
   const before = await page.getByTestId("unconfirmed-count").textContent();
   console.log("before:", before);
@@ -58,6 +81,12 @@ async function main() {
   console.log(`saved ${BEFORE_PNG}`);
   console.log(`saved ${AFTER_PNG}`);
   console.log(`saved ${DETAIL_PNG}`);
+
+  if (failures > 0) {
+    console.error(`\n${failures} CHECK(S) FAILED`);
+    process.exit(1);
+  }
+  console.log("\nALL CHECKS PASSED");
 }
 
 main().catch((err) => {
