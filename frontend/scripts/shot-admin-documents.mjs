@@ -35,6 +35,29 @@ async function main() {
   // 마운트 refresh()가 아직 응답하기 전(0건)에 계산돼 모든 뒷단 단언이 어긋난다.
   await page.getByTestId("document-row").nth(2).waitFor({ state: "visible", timeout: 5000 });
 
+  // 7차: 문서 등록 화면 제목 i18n 배선 확인 — ko -> vi -> ko 토글 시 실제로 바뀌는지
+  // (admin.documents.nav 키 재사용 — nav 라벨과 h1이 동일 문구라 기존 키 그대로 연결).
+  const h1Ko = await page.locator("h1").textContent();
+  await page.getByTestId("admin-lang-vi").click();
+  await page.waitForTimeout(50);
+  const h1Vi = await page.locator("h1").textContent();
+  console.log("documents h1 ko:", h1Ko, "/ vi:", h1Vi);
+  if (h1Ko === h1Vi) {
+    console.error("FAIL: 문서 등록 화면 제목이 vi 토글 후 바뀌지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 문서 등록 화면 제목 vi 토글 확인");
+  }
+  await page.getByTestId("admin-lang-ko").click();
+  await page.waitForTimeout(50);
+  const h1Back = await page.locator("h1").textContent();
+  if (h1Back !== h1Ko) {
+    console.error("FAIL: 문서 등록 ko 복귀 후 제목이 원래대로 돌아오지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 문서 등록 ko 복귀 확인");
+  }
+
   // job_status null(SB 확정, 잡 없는 시드 문서) 방어 — "—"(admin.documents.statusNone) 렌더.
   const noneBadge = page.getByTestId("document-status-none");
   await noneBadge.waitFor({ state: "visible", timeout: 5000 }).then(

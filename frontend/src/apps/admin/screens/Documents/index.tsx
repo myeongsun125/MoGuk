@@ -132,7 +132,7 @@ export default function AdminDocumentsScreen() {
 
   return (
     <div className="admin-documents" data-testid="admin-documents-screen">
-      <h1>문서 등록</h1>
+      <h1>{t("admin.documents.nav")}</h1>
 
       <form className="document-form" onSubmit={handleSubmit} data-testid="document-form">
         <label>

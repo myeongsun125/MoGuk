@@ -26,6 +26,28 @@ async function main() {
   await page.goto(`http://localhost:${PORT}/admin/workers`);
   await page.getByTestId("invite-form").waitFor({ state: "visible", timeout: 5000 });
 
+  // 7차: 근로자 등록 화면 제목 i18n 배선 확인 — ko -> vi -> ko 토글 시 실제로 바뀌는지.
+  const h1Ko = await page.locator("h1").textContent();
+  await page.getByTestId("admin-lang-vi").click();
+  await page.waitForTimeout(50);
+  const h1Vi = await page.locator("h1").textContent();
+  console.log("workers h1 ko:", h1Ko, "/ vi:", h1Vi);
+  if (h1Ko === h1Vi) {
+    console.error("FAIL: 근로자 등록 화면 제목이 vi 토글 후 바뀌지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 근로자 등록 화면 제목 vi 토글 확인");
+  }
+  await page.getByTestId("admin-lang-ko").click();
+  await page.waitForTimeout(50);
+  const h1Back = await page.locator("h1").textContent();
+  if (h1Back !== h1Ko) {
+    console.error("FAIL: 근로자 등록 ko 복귀 후 제목이 원래대로 돌아오지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 근로자 등록 ko 복귀 확인");
+  }
+
   // A — 422: 공백뿐인 이름(name)으로 제출 → invites.py _validate와 동일 422 경로.
   await page.getByTestId("invite-name").fill("   ");
   await page.getByTestId("invite-emp-no").fill("EMP-NEW-001");

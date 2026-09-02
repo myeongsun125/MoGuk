@@ -3,13 +3,16 @@ import { AdminLangProvider, useAdminLang } from "../../i18n/AdminLangContext";
 import type { Lang } from "../../api/types";
 import "./AdminLayout.css";
 
-const LINKS = [
-  { to: "/admin/reports", label: "위험보고" },
-  { to: "/admin/dashboard", label: "대시보드" },
-  { to: "/admin/glossary", label: "승인큐" },
-  { to: "/admin/events", label: "감사 로그" },
-  { to: "/admin/unanswered", label: "무근거 질의" },
-  { to: "/admin/workers", label: "근로자 등록" },
+// #100 후속 — 전 항목 labelKey로 통일(문서 등록만 아래 별도 append 그대로).
+// 대시보드·감사 로그·근로자 등록은 화면 제목과 nav 텍스트가 동일해 #97 title 키를
+// 그대로 재사용, 위험보고만 제목("위험보고 관리")과 nav 텍스트가 달라 전용 키 신규.
+const LINKS: { to: string; label?: string; labelKey?: string }[] = [
+  { to: "/admin/reports", labelKey: "admin.reports.nav" },
+  { to: "/admin/dashboard", labelKey: "admin.dashboard.title" },
+  { to: "/admin/glossary", labelKey: "admin.glossary.nav" },
+  { to: "/admin/events", labelKey: "admin.auditlog.title" },
+  { to: "/admin/unanswered", labelKey: "admin.unanswered.nav" },
+  { to: "/admin/workers", labelKey: "admin.workers.title" },
 ];
 
 // endonym(자기표기) 고정 상수 — WorkerLayout과 동일 관례(#61). i18n 대상 아님.
@@ -24,7 +27,7 @@ const LANG_ENDONYM: Record<Lang, string> = {
 // 상태가 서버 DB에 있어 무관해지지만, 지금은 이 nav가 mock 데모의 전제조건이다.
 function AdminLayoutInner() {
   const { lang, setLang, t } = useAdminLang();
-  // ①(M-41) 신규 항목만 i18n 키로 — 기존 5개는 스코프 밖(무접촉), t()도 이 항목에만 사용.
+  // #100 후속으로 LINKS 6개 전부 labelKey — 문서 등록만 기존 방식(별도 append) 그대로.
   const links = [...LINKS, { to: "/admin/documents", label: t("admin.documents.nav") }];
 
   return (
@@ -37,7 +40,7 @@ function AdminLayoutInner() {
               to={l.to}
               className={({ isActive }) => (isActive ? "admin-nav-link active" : "admin-nav-link")}
             >
-              {l.label}
+              {l.labelKey ? t(l.labelKey) : l.label}
             </NavLink>
           ))}
         </nav>

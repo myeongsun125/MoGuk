@@ -137,7 +137,7 @@ export default function AdminWorkersScreen() {
 
   return (
     <div className="admin-workers" data-testid="admin-workers-screen">
-      <h1>근로자 등록</h1>
+      <h1>{t("admin.workers.title")}</h1>
 
       {!result && (
         <form className="invite-form" onSubmit={handleSubmit} data-testid="invite-form">
