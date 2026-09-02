@@ -131,6 +131,7 @@
   "admin.reports.statusResolved": "해결됨",
   "admin.reports.alreadyProcessed": "이미 처리됨",
   "admin.reports.title": "위험보고 관리",
+  "admin.reports.nav": "위험보고",
   "admin.reports.unconfirmedLabel": "미확인 위험보고",
   "admin.reports.countUnit": "건",
   "admin.reports.loading": "불러오는 중...",

@@ -131,6 +131,7 @@
   "admin.reports.statusResolved": "Diselesaikan",
   "admin.reports.alreadyProcessed": "Sudah diproses",
   "admin.reports.title": "Manajemen laporan bahaya",
+  "admin.reports.nav": "Laporan bahaya",
   "admin.reports.unconfirmedLabel": "Laporan belum dikonfirmasi",
   "admin.reports.countUnit": "kasus",
   "admin.reports.loading": "Memuat...",

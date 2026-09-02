@@ -131,6 +131,7 @@
   "admin.reports.statusResolved": "Đã giải quyết",
   "admin.reports.alreadyProcessed": "Đã xử lý rồi",
   "admin.reports.title": "Quản lý báo cáo nguy hiểm",
+  "admin.reports.nav": "Báo cáo nguy hiểm",
   "admin.reports.unconfirmedLabel": "Báo cáo chưa xác nhận",
   "admin.reports.countUnit": "vụ",
   "admin.reports.loading": "Đang tải...",

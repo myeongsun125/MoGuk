@@ -36,6 +36,9 @@ async function main() {
   // 7차: 승인큐 nav 라벨·화면 제목 i18n 배선 확인 — ko -> vi -> ko 토글 시 실제로 바뀌는지.
   const navKo = await page.getByRole("link", { name: "승인큐" }).count();
   const h1Ko = await page.locator("h1").textContent();
+  const navTextsKo = await page.locator('[data-testid="admin-nav"] a').allTextContents();
+  console.log("nav texts (ko):", navTextsKo);
+
   await page.getByTestId("admin-lang-vi").click();
   await page.waitForTimeout(50);
   const h1Vi = await page.locator("h1").textContent();
@@ -47,6 +50,22 @@ async function main() {
   } else {
     console.log("PASS: 승인큐 제목·nav 라벨 vi 토글 확인");
   }
+
+  // #100 후속 — nav 6개 전 항목이 vi 토글 후 한글이 하나도 안 남는지(전부 labelKey 배선됐는지).
+  const navTextsVi = await page.locator('[data-testid="admin-nav"] a').allTextContents();
+  console.log("nav texts (vi):", navTextsVi);
+  const hangulRe = /[가-힣]/;
+  const stillKorean = navTextsVi.filter((t) => hangulRe.test(t));
+  if (stillKorean.length > 0) {
+    console.error("FAIL: vi 토글 후에도 한글이 남아있는 nav 항목:", stillKorean);
+    failures++;
+  } else if (navTextsVi.length !== navTextsKo.length) {
+    console.error("FAIL: vi 토글 후 nav 항목 개수가 달라짐:", navTextsKo.length, "->", navTextsVi.length);
+    failures++;
+  } else {
+    console.log("PASS: nav 전 항목(", navTextsVi.length, "개)이 vi 토글 후 한글 잔여 없음");
+  }
+
   await page.getByTestId("admin-lang-ko").click();
   await page.waitForTimeout(50);
   const h1Back = await page.locator("h1").textContent();
@@ -55,6 +74,13 @@ async function main() {
     failures++;
   } else {
     console.log("PASS: 승인큐 ko 복귀 확인");
+  }
+  const navTextsBack = await page.locator('[data-testid="admin-nav"] a').allTextContents();
+  if (JSON.stringify(navTextsBack) !== JSON.stringify(navTextsKo)) {
+    console.error("FAIL: ko 복귀 후 nav 텍스트가 원래와 다름:", navTextsBack);
+    failures++;
+  } else {
+    console.log("PASS: ko 복귀 후 nav 텍스트 전부 원상 복구 확인");
   }
 
   const before = await page.getByTestId("pending-count").textContent();
