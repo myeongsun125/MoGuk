@@ -22,6 +22,7 @@ from app.services import (
     admin_events,
     approval,
     dashboard as dashboard_service,
+    documents as documents_service,
     invites,
     risk_reports,
 )
@@ -38,6 +39,7 @@ UNANSWERED_ANSWER_PATH = "/api/v1/admin/unanswered/{question_id}/answer"
 GLOSSARY_APPROVE_PATH = "/api/v1/admin/glossary/{term_id}/approve"
 GLOSSARY_REJECT_PATH = "/api/v1/admin/glossary/{term_id}/reject"
 EVENTS_PATH = "/api/v1/admin/events"
+DOCUMENTS_PATH = "/api/v1/admin/documents"
 INVITE_PATH = "/api/v1/admin/workers/invite"
 SEND_INVITE_PATH = "/api/v1/admin/workers/{worker_id}/send-invite"
 LIST_PATH = "/api/v1/admin/reports"
@@ -153,10 +155,45 @@ async def send_worker_invite(
     return JSONResponse(status_code=201, content=result)
 
 
+class DocumentUploadRequest(BaseModel):
+    title: str
+    category: str          # 4종 검증은 서비스가 한다 — 릴레이(비 pydantic) 경로와 단일 판정
+    text: str
+    filename: str | None = None
+
+
 @router.post("/documents", status_code=202)
-def upload_document() -> dict:
-    # multipart → 202 (ingest job)
-    raise NotImplementedError("[새봄] POST /admin/documents")
+async def upload_document(body: DocumentUploadRequest, request: Request) -> JSONResponse:
+    """{title, category, text, filename?} → 202 {id, job_id} (M-41).
+
+    JSON 본문만 받는다 — multipart·신규 의존성 없음(총괄 확정). 접수는 documents 1행 +
+    ingest_document 잡 1행뿐(결정론 경로), 적재는 job_runner 가 비동기 수행.
+    text 빈 값·category 4종 이탈은 422.
+    """
+    _reject_identity_fields(await _json_body(request))
+    if role() == "edge":
+        return await _relay(DOCUMENTS_PATH, "POST", body.model_dump())
+    try:
+        result = await asyncio.to_thread(
+            documents_service.create_document,
+            body.title, body.category, body.text, body.filename,
+        )
+    except documents_service.InvalidDocument as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return JSONResponse(status_code=202, content=result)
+
+
+@router.get("/documents")
+async def list_documents() -> JSONResponse:
+    """[{id, title, category, origin, source, created_at, chunk_count, job_status}] 최신순 (M-41).
+
+    chunk_count·job_status 는 조인으로 채운다 — 잡이 없는 기존 문서는 job_status null.
+    읽기 전용, 쓰기·이벤트 없음. M-28c ①②: edge 는 릴레이 경유.
+    """
+    if role() == "edge":
+        return await _relay(DOCUMENTS_PATH, "GET", {})
+    result = await asyncio.to_thread(documents_service.list_documents)
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.get("/glossary")

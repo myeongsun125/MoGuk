@@ -14,6 +14,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
      · POST /api/v1/admin/workers/invite(M-32b — 초대 발급, 201/409/422).
      · POST /api/v1/admin/unanswered/{id}/answer(M-05a — 답변 전이 + ingest_answer job).
      · GET /api/v1/learn/quiz/{id}?lang= · POST /api/v1/learn/quiz/{id}/submit (M-38).
+     · GET /api/v1/admin/documents · POST /api/v1/admin/documents (M-41 — 업로드·목록).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -85,6 +86,12 @@ def _dispatch_get(route: str, query: dict, worker_id: int | None = None) -> tupl
         from app.services.dashboard import get_dashboard
 
         return 200, get_dashboard()
+
+    if route == "/api/v1/admin/documents":
+        # M-41 — 문서 목록. 읽기 전용, 쿼리 파라미터 없음.
+        from app.services import documents
+
+        return 200, documents.list_documents()
 
     if route == "/api/v1/admin/events":
         from app.services import admin_events
@@ -293,6 +300,16 @@ def dispatch(
             return 404, {"detail": "worker not found"}
         except invites.WorkerAlreadyActive as exc:
             return 409, {"detail": str(exc)}
+    if method == "POST" and route == "/api/v1/admin/documents":
+        # M-41 — 업로드 접수. 검증(text·category)은 서비스 단일 판정 — 422 분기 core 라우터 동일.
+        from app.services import documents
+
+        try:
+            return 202, documents.create_document(
+                body.get("title"), body.get("category"), body.get("text"), body.get("filename")
+            )
+        except documents.InvalidDocument as exc:
+            return 422, {"detail": str(exc)}
     if method == "POST" and route.startswith("/api/v1/learn/quiz/") and route.endswith(
         "/submit"
     ):

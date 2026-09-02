@@ -66,6 +66,14 @@ EDGE_CASES = [
     # 이 미인증 왕복 하네스에서 빠지고 아래 전용 테스트 2건이 대신한다.
     ("GET", "/api/v1/learn/quiz/3?lang=vi", "/api/v1/learn/quiz/3?lang=vi", {}, {}, 200,
      {"set_id": 3, "module": "learning", "title": "t", "status": "draft", "items": []}),
+    # M-41: 문서 업로드·목록 — 202 그대로 투과, 본문 온전 전달(model_dump 는 미지정
+    # filename 을 None 으로 실어 보낸다)
+    ("GET", "/api/v1/admin/documents", "/api/v1/admin/documents", {}, {}, 200,
+     [{"id": 31, "job_status": "done"}]),
+    ("POST", "/api/v1/admin/documents", "/api/v1/admin/documents",
+     {"title": "t", "category": "safety", "text": "본문"},
+     {"title": "t", "category": "safety", "text": "본문", "filename": None}, 202,
+     {"id": 31, "job_id": 77}),
 ]
 
 
@@ -263,8 +271,8 @@ def test_dispatch_admin_transition_errors(monkeypatch):
         "/api/v1/reports/abc",              # id 가 정수가 아님
         "/api/v1/reports/1/confirm",        # POST 전용 하위 경로 — GET 으로 오인 금지
         "/api/v1/admin/reports/abc",
-        "/api/v1/admin/documents",          # 미등록 GET (glossary 는 승인큐 PR 에서 등록됨)
-        "/api/v1/health",
+        "/api/v1/health",                   # documents 는 M-41 에서 등록됨 — 목록에서 제외
+
     ],
 )
 def test_dispatch_unregistered_get_returns_404(path):
@@ -452,6 +460,45 @@ async def test_edge_submit_anonymous_401_no_enqueue(monkeypatch):
 
     assert r.status_code == 401, r.text
     assert relay.queue.snapshot() == []
+
+
+# ── M-41: 문서 업로드·목록 디스패치 ────────────────────────
+
+def test_dispatch_documents_get(monkeypatch):
+    rows = [{"id": 31, "title": "t", "job_status": "done"}]
+    monkeypatch.setattr("app.services.documents.list_documents", lambda: rows)
+    status, body = relay_poller.dispatch("GET", "/api/v1/admin/documents", {})
+    assert (status, body) == (200, rows)
+
+
+def test_dispatch_documents_post_created(monkeypatch):
+    seen = {}
+
+    def fake_create(title, category, text, filename=None):
+        seen.update(title=title, category=category, text=text, filename=filename)
+        return {"id": 31, "job_id": 77}
+
+    monkeypatch.setattr("app.services.documents.create_document", fake_create)
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/admin/documents",
+        {"title": "t", "category": "safety", "text": "본문", "filename": "a.md"},
+    )
+    assert (status, body) == (202, {"id": 31, "job_id": 77})
+    assert seen == {"title": "t", "category": "safety", "text": "본문", "filename": "a.md"}
+
+
+def test_dispatch_documents_post_invalid_422(monkeypatch):
+    """검증 실패 매핑이 core 라우터와 동일하다 — 422."""
+    from app.services import documents
+
+    def boom(*a, **k):
+        raise documents.InvalidDocument("사유")
+
+    monkeypatch.setattr("app.services.documents.create_document", boom)
+    status, body = relay_poller.dispatch(
+        "POST", "/api/v1/admin/documents", {"title": "t", "category": "x", "text": ""}
+    )
+    assert status == 422 and body == {"detail": "사유"}
 
 
 # ── M-28c ③: 무접촉 단정 ──────────────────────────────────
