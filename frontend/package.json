@@ -16,6 +16,7 @@
     "shot:admin-documents": "node scripts/shot-admin-documents.mjs",
     "shot:admin-dashboard": "node scripts/shot-admin-dashboard.mjs",
     "shot:worker-quiz": "node scripts/shot-worker-quiz.mjs",
+    "shot:worker-learn": "node scripts/shot-worker-learn.mjs",
     "rehearse": "node scripts/rehearse.mjs",
     "postinstall": "playwright install chromium"
   },

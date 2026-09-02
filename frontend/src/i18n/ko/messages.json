@@ -87,5 +87,17 @@
   "admin.documents.statusRunning": "처리 중",
   "admin.documents.statusDone": "완료",
   "admin.documents.statusFailed": "실패",
-  "admin.documents.statusNone": "—"
+  "admin.documents.statusNone": "—",
+  "worker.nav.learn": "학습",
+  "worker.learn.title": "학습 카드",
+  "worker.learn.moduleSafety": "안전 문구",
+  "worker.learn.moduleLearning": "용어집",
+  "worker.learn.loading": "카드를 불러오는 중...",
+  "worker.learn.loadError": "카드를 불러오지 못했습니다. 다시 시도해 주세요.",
+  "worker.learn.retry": "다시 시도",
+  "worker.learn.empty": "표시할 카드가 없습니다.",
+  "worker.learn.highRisk": "위험",
+  "worker.learn.srcLabel": "출처",
+  "worker.learn.takeQuiz": "퀴즈 풀기",
+  "worker.learn.quizPending": "퀴즈 준비 중입니다"
 }

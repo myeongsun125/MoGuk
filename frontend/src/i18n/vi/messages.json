@@ -87,5 +87,17 @@
   "admin.documents.statusRunning": "Đang xử lý",
   "admin.documents.statusDone": "Hoàn tất",
   "admin.documents.statusFailed": "Thất bại",
-  "admin.documents.statusNone": "—"
+  "admin.documents.statusNone": "—",
+  "worker.nav.learn": "Học tập",
+  "worker.learn.title": "Thẻ học tập",
+  "worker.learn.moduleSafety": "Câu an toàn",
+  "worker.learn.moduleLearning": "Từ vựng",
+  "worker.learn.loading": "Đang tải thẻ...",
+  "worker.learn.loadError": "Không tải được thẻ. Vui lòng thử lại.",
+  "worker.learn.retry": "Thử lại",
+  "worker.learn.empty": "Không có thẻ để hiển thị.",
+  "worker.learn.highRisk": "Nguy hiểm",
+  "worker.learn.srcLabel": "Nguồn",
+  "worker.learn.takeQuiz": "Làm bài trắc nghiệm",
+  "worker.learn.quizPending": "Bài trắc nghiệm đang chuẩn bị"
 }

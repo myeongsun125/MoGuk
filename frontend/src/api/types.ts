@@ -309,6 +309,30 @@ export interface QuizSubmitResult {
   label: string;
 }
 
+// 학습카드 — GET /learn/cards?module=&lang= (SB 확정, §3 M-42). safety=phrase(안전문구
+// 10건)·learning=term(용어집). text=요청 lang으로 서버가 localize, text_ko는 항상 한국어
+// 병기용. high_risk는 phrase만 true 가능(term은 항상 false) — 빨간 강조 매핑. note_ko·src는
+// 옵셔널(없을 수 있어 화면에서 방어). 인증 optional(퀴즈 GET 동형, 토큰 있으면 lang 없어도
+// 서버가 근로자 lang으로 localize). 실백엔드는 착수중·미착륙(learn.py:27-29 스텁 확인) —
+// mock 경계로 동작, 착륙 즉시 실경로 전환.
+export type LearnCardKind = "phrase" | "term";
+
+export interface LearnCard {
+  id: number;
+  kind: LearnCardKind;
+  text: string;
+  text_ko: string;
+  high_risk: boolean;
+  note_ko?: string;
+  src?: string;
+}
+
+export interface LearnCardsResponse {
+  module: string;
+  quiz_set_id: number | null; // 이 모듈에 연결된 퀴즈 세트 — 없으면 "퀴즈 준비 중"
+  cards: LearnCard[];
+}
+
 // 문서 등록(관리자 업로드) — POST/GET /admin/documents (M-41). §3 등재 문구는 아직 구
 // multipart 그대로지만, docs/ms-m41(0902 명선 확정, 미머지)이 실 계약을 JSON으로 확정:
 // {title,category,text,filename?} → 202 {id,job_id}, GET → 목록. 백엔드는 POST가 아직

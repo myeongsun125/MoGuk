@@ -1,4 +1,4 @@
-import type { QuizItem, QuizSet, QuizSubmitResult, QuizTermHint } from "../types";
+import type { LearnCard, LearnCardsResponse, QuizItem, QuizSet, QuizSubmitResult, QuizTermHint } from "../types";
 
 // §3 M-38 확정 계약(GET /learn/quiz/{set_id}?lang=) 시뮬레이션 — 서버가 lang 기준으로
 // q·choices·term_hints를 이미 localize해 내려주는 동작을 mock에서 재현한다. 원본 문항
@@ -215,4 +215,149 @@ export function submitQuizMock(setId: number, answers: number[]): QuizSubmitResu
   const passed = score >= 60;
   const label = score >= 80 ? "green" : score >= 60 ? "yellow" : "red";
   return { score, passed, label };
+}
+
+// M-42 학습카드 mock — GET /learn/cards?module=&lang= (§3 확정, learn.py:27-29 백엔드 스텁이라
+// mock 경계). vi/in 문구는 기계번역 draft — 원어민 검수 후속(커밋 메시지 명기).
+interface RawPhrase {
+  id: number;
+  ko: string;
+  vi: string;
+  high_risk: boolean;
+  note_ko?: string;
+  src?: string;
+}
+
+// safety=phrase 10건 — 선반·프레스 안전수칙(퀴즈 SAFETY_ITEMS와 같은 소재 계열, 문항이
+// 아니라 그대로 게시하는 경고 문구). note_ko/src는 일부만(방어 검증용 — 카드 3·6·9는 둘 다
+// 없음, 카드 5·10은 note_ko만).
+const SAFETY_PHRASES: RawPhrase[] = [
+  {
+    id: 1,
+    ko: "선반 작업 중 장갑 착용을 금한다",
+    vi: "Cấm đeo găng tay khi vận hành máy tiện",
+    high_risk: true,
+    note_ko: "회전체에 장갑이 말려 들어가는 사고 위험",
+    src: "안전 수칙 3조",
+  },
+  {
+    id: 2,
+    ko: "프레스 금형을 부착·해체·조정할 때 안전블록을 사용한다",
+    vi: "Dùng khối chèn an toàn khi lắp, tháo, điều chỉnh khuôn máy dập",
+    high_risk: true,
+    note_ko: "슬라이드 갑작스런 낙하·작동 방지",
+    src: "안전 수칙 7조",
+  },
+  {
+    id: 3,
+    ko: "정비·청소 전 전원을 차단하고 잠금장치를 건다",
+    vi: "Ngắt nguồn và khóa thiết bị trước khi bảo dưỡng, vệ sinh",
+    high_risk: true,
+  },
+  {
+    id: 4,
+    ko: "칩은 맨손으로 만지지 않는다",
+    vi: "Không dùng tay trần chạm vào phoi",
+    high_risk: true,
+    src: "안전 수칙 5조",
+  },
+  {
+    id: 5,
+    ko: "기계 회전 중에는 청소하지 않는다",
+    vi: "Không vệ sinh khi máy đang quay",
+    high_risk: true,
+    note_ko: "회전부 접촉 시 즉시 중상 위험",
+  },
+  {
+    id: 6,
+    ko: "비상정지 버튼 위치를 작업 전 확인한다",
+    vi: "Kiểm tra vị trí nút dừng khẩn cấp trước khi làm việc",
+    high_risk: false,
+  },
+  {
+    id: 7,
+    ko: "작업장 통로에 물건을 적재하지 않는다",
+    vi: "Không chất đồ vật trên lối đi trong xưởng",
+    high_risk: false,
+    src: "안전 수칙 12조",
+  },
+  {
+    id: 8,
+    ko: "인화성 물질 근처에서 화기를 사용하지 않는다",
+    vi: "Không dùng lửa gần vật liệu dễ cháy",
+    high_risk: true,
+  },
+  {
+    id: 9,
+    ko: "소음이 심한 구역에서는 귀마개를 착용한다",
+    vi: "Đeo nút tai ở khu vực có tiếng ồn lớn",
+    high_risk: false,
+  },
+  {
+    id: 10,
+    ko: "보호구 미착용 시 작업을 시작하지 않는다",
+    vi: "Không bắt đầu làm việc nếu chưa mang đủ đồ bảo hộ",
+    high_risk: false,
+    note_ko: "보안경·안전화 등 기본 보호구 포함",
+  },
+];
+
+// learning=term 용어집 — 퀴즈 term_hints와 같은 용어 풀이(척·바이트 등)를 카드로도 노출.
+// high_risk는 term에서 항상 false(계약 그대로).
+interface RawTerm {
+  id: number;
+  term_ko: string;
+  term_vi: string;
+  note_ko?: string;
+}
+
+const LEARNING_TERMS: RawTerm[] = [
+  { id: 1, term_ko: "척", term_vi: "mâm cặp", note_ko: "공작물을 고정하는 선반의 회전 부품" },
+  { id: 2, term_ko: "바이트", term_vi: "dao tiện", note_ko: "선반에서 절삭에 쓰이는 공구" },
+  { id: 3, term_ko: "심압대", term_vi: "ụ động" },
+  { id: 4, term_ko: "볼스터", term_vi: "bàn máy", note_ko: "프레스 하부의 금형 받침대" },
+  { id: 5, term_ko: "광전자식 방호장치", term_vi: "thiết bị bảo vệ quang điện", note_ko: "광선 차단으로 기계를 급정지시키는 장치" },
+  { id: 6, term_ko: "발 스위치", term_vi: "công tắc chân" },
+  { id: 7, term_ko: "안전블록", term_vi: "khối chèn an toàn" },
+  { id: 8, term_ko: "기동장치", term_vi: "thiết bị khởi động" },
+];
+
+function localizePhrase(raw: RawPhrase, lang: string): LearnCard {
+  const vi = lang === "vi";
+  return {
+    id: raw.id,
+    kind: "phrase",
+    text: vi ? raw.vi : raw.ko, // in은 vi 대역이 없어 ko로 폴백(서버 폴백 시뮬 — Quiz mock과 동일 관례)
+    text_ko: raw.ko,
+    high_risk: raw.high_risk,
+    ...(raw.note_ko ? { note_ko: raw.note_ko } : {}),
+    ...(raw.src ? { src: raw.src } : {}),
+  };
+}
+
+function localizeTerm(raw: RawTerm, lang: string): LearnCard {
+  const vi = lang === "vi";
+  return {
+    id: raw.id,
+    kind: "term",
+    text: vi ? raw.term_vi : raw.term_ko,
+    text_ko: raw.term_ko,
+    high_risk: false, // 계약 그대로 — term은 항상 false
+    ...(raw.note_ko ? { note_ko: raw.note_ko } : {}),
+  };
+}
+
+export function getCardsMock(module: "safety" | "learning", lang: string): LearnCardsResponse {
+  if (module === "safety") {
+    return {
+      module: "safety",
+      quiz_set_id: null, // 안전문구 카드는 아직 연결된 퀴즈 세트 없음 — "퀴즈 준비 중" 케이스
+      cards: SAFETY_PHRASES.map((raw) => localizePhrase(raw, lang)),
+    };
+  }
+  return {
+    module: "learning",
+    quiz_set_id: 1, // QUIZ_SET_META[1]=learning_1과 동일 세트 — "퀴즈 풀기" 링크 있는 케이스
+    cards: LEARNING_TERMS.map((raw) => localizeTerm(raw, lang)),
+  };
 }
