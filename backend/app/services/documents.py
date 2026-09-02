@@ -4,7 +4,7 @@ POST /admin/documents 계약(총괄 확정 0902):
 - 요청 JSON {title, category, text, filename?} — multipart 아님, 신규 의존성 없음.
 - category 는 001:32 CHECK 집합('process','instruction','safety','equipment') 4종만 — 그 외 422.
 - documents INSERT: origin='upload', source='upload:'+filename.
-  filename 부재 시 source='upload:direct' (계약 외 — 자결, 보고 등재).
+  filename 부재 시 source='upload:manual' (SB 자체결정 — 총괄 확정 0902).
 - jobs INSERT: kind='ingest_document', payload={document_id, text(원문 무변형)}.
 - 응답 202 {id, job_id}. text 빈 값·category 이탈은 422 — 저장소 호출 전에 거절.
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from app.services import tenancy
 
@@ -23,7 +24,7 @@ log = logging.getLogger(__name__)
 
 CATEGORY_VALUES = ("process", "instruction", "safety", "equipment")   # 001:32 CHECK 동일
 JOB_KIND_INGEST_DOCUMENT = "ingest_document"
-DEFAULT_SOURCE = "upload:direct"   # filename 부재 시 — 본문 직접 입력 표기(자결)
+DEFAULT_SOURCE = "upload:manual"   # filename 부재 시 (총괄 확정 0902)
 
 
 class InvalidDocument(Exception):
@@ -121,28 +122,34 @@ def list_documents() -> list[dict]:
 
 # ── 청킹 (M-41 ②) ─────────────────────────────────────────
 # 기존 청킹은 scripts/ingest_seed.py(_split_800·make_chunks)에만 있고 앱 이미지는
-# backend/ 단독이라 임포트 불가 — 줄 경계 분할 규칙 동형으로 재작성(자결, 보고 등재).
+# backend/ 단독이라 임포트 불가 — 앱 계층에 재작성. 분할 규칙은 총괄 확정 0902.
 
 CHUNK_MAX_CHARS = 800
 
+# 문장 경계 = 마침표·줄바꿈(총괄 확정 0902). 경계 문자를 앞 문장에 붙여 자른다 —
+# 이어 붙이면 원문과 동일(내용 소실·변형 없음).
+_SENTENCE_RE = re.compile(r"[^.\n]*[.\n]|[^.\n]+$")
+
 
 def _split_oversize(block: str) -> list[str]:
-    """800자 초과 블록 — 줄 경계 누적 분할(_split_800 동형·오버랩 없음),
-    줄바꿈 없는 초장문은 800자 고정 절단(자결)."""
+    """800자 초과 블록 — 문장 경계(마침표·줄바꿈)로 누적 분할, 오버랩 없음(총괄 확정 0902).
+
+    문장 경계가 전혀 없는 초장문은 800자 고정 절단(현행 유지). 문장 중간은 자르지 않는다.
+    """
     parts: list[str] = []
     buf = ""
-    for line in block.splitlines():
-        while len(line) > CHUNK_MAX_CHARS:
+    for seg in _SENTENCE_RE.findall(block):
+        while len(seg) > CHUNK_MAX_CHARS:      # 경계 없는 초장문 — 800자 고정 절단
             if buf:
                 parts.append(buf)
                 buf = ""
-            parts.append(line[:CHUNK_MAX_CHARS])
-            line = line[CHUNK_MAX_CHARS:]
-        if buf and len(buf) + len(line) + 1 > CHUNK_MAX_CHARS:
+            parts.append(seg[:CHUNK_MAX_CHARS])
+            seg = seg[CHUNK_MAX_CHARS:]
+        if buf and len(buf) + len(seg) > CHUNK_MAX_CHARS:
             parts.append(buf)
-            buf = line
+            buf = seg
         else:
-            buf = (buf + "\n" + line) if buf else line
+            buf += seg
     if buf:
         parts.append(buf)
     return parts
@@ -152,7 +159,7 @@ def split_document(text: str) -> list[str]:
     """빈 줄·마크다운 제목(#…)을 경계로 800자 이하 청크. 비어 있지 않으면 최소 1개.
 
     경계마다 청크를 끊는다(블록 병합 없음 — 계약 문면 그대로). 제목 줄은 다음 블록의
-    머리로 붙인다. 800자 초과 블록은 _split_oversize 로 나눈다.
+    머리로 붙인다. 800자 초과 블록은 문장 경계(마침표·줄바꿈)로 나눈다(총괄 확정 0902).
     """
     blocks: list[str] = []
     cur: list[str] = []

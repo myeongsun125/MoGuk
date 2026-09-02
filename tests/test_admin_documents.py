@@ -118,8 +118,8 @@ def test_upload_returns_202_with_ids(monkeypatch):
     assert _json.loads(j["payload"]) == {"document_id": 31, "text": GOOD["text"]}  # 원문 무변형
 
 
-def test_upload_without_filename_uses_direct_source(monkeypatch):
-    """filename 부재 시 source='upload:direct' (계약 외 — 자결값)."""
+def test_upload_without_filename_uses_manual_source(monkeypatch):
+    """filename 부재 시 source='upload:manual' (SB 자체결정 — 총괄 확정 0902)."""
     store = _upload_store()
     monkeypatch.setattr(documents.tenancy, "connect", fake_connect(store))
 
@@ -127,7 +127,7 @@ def test_upload_without_filename_uses_direct_source(monkeypatch):
                     json={k: v for k, v in GOOD.items() if k != "filename"})
 
     assert r.status_code == 202
-    assert _params_for(store, "INSERT INTO documents")[0]["source"] == "upload:direct"
+    assert _params_for(store, "INSERT INTO documents")[0]["source"] == "upload:manual"
 
 
 # ── 422 2종 — 저장소 무호출 ───────────────────────────────
@@ -189,7 +189,7 @@ def test_split_short_text_single_chunk():
 
 
 def test_split_oversize_block_line_boundary():
-    """800자 초과 블록 — 줄 경계 누적 분할, 전 청크 ≤800."""
+    """800자 초과 블록 — 줄바꿈(문장 경계)으로 누적 분할, 전 청크 ≤800 (기존 케이스 유지)."""
     line = "가" * 300
     text = "\n".join([line] * 4)                       # 한 블록 1203자
     parts = documents.split_document(text)
@@ -199,8 +199,21 @@ def test_split_oversize_block_line_boundary():
     assert "".join(parts).replace("\n", "") == "가" * 1200   # 내용 소실 없음
 
 
+def test_split_oversize_block_sentence_boundary():
+    """마침표 문장 여럿의 900자+ 블록 — 문장 경계 분할, 문장 중간이 잘리지 않는다(총괄 확정 0902)."""
+    sentence = "가" * 88 + "다."                       # 90자 문장
+    text = sentence * 12                               # 한 블록 1080자, 줄바꿈 없음
+    parts = documents.split_document(text)
+
+    assert len(parts) == 2
+    assert all(len(p) <= documents.CHUNK_MAX_CHARS for p in parts)
+    assert all(p.endswith("다.") for p in parts)       # 청크가 문장 경계에서 끝난다
+    assert all(len(p) % 90 == 0 for p in parts)        # 문장 중간 절단 없음(90자 배수)
+    assert "".join(parts) == text                      # 내용 소실·변형 없음
+
+
 def test_split_single_long_line_hard_cut():
-    """줄바꿈 없는 초장문 — 800자 고정 절단(자결)."""
+    """마침표·줄바꿈이 전혀 없는 초장문 — 800자 고정 절단(현행 유지, 총괄 확정 0902)."""
     parts = documents.split_document("나" * 1700)
 
     assert [len(p) for p in parts] == [800, 800, 100]
