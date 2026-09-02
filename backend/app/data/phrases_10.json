@@ -1,0 +1,12 @@
+[
+  {"text_ko": "멈춰 주세요!", "text_vi": "Dừng lại!", "text_in": "Berhenti!", "high_risk": true, "note": "비상 시 주변에 알리는 최우선 문장. 선반·프레스 매뉴얼 §6.3", "src": "NCS-LATHE p.57", "draft": true},
+  {"text_ko": "위험합니다!", "text_vi": "Nguy hiểm!", "text_in": "Bahaya!", "high_risk": true, "note": "위험을 즉시 알리는 경고 문장", "draft": true},
+  {"text_ko": "손을 넣지 마세요.", "text_vi": "Đừng cho tay vào.", "text_in": "Jangan masukkan tangan.", "high_risk": true, "note": "프레스 금형 사이·선반 회전부 접근 금지. 프레스 매뉴얼 §4.1, 선반 매뉴얼 §4.1", "src": "LAW-KOSH-RULE 제103조①; NCS-COMMON p.35; NCS-LATHE p.40", "draft": true},
+  {"text_ko": "기계를 정지하세요.", "text_vi": "Hãy dừng máy lại.", "text_in": "Hentikan mesinnya.", "high_risk": true, "note": "정비·청소·이상 발생 시 운전정지 지시. 공통 §4.4", "src": "LAW-KOSH-RULE 제92조①; NCS-COMMON p.35", "draft": true},
+  {"text_ko": "전원을 차단하세요.", "text_vi": "Hãy ngắt nguồn điện.", "text_in": "Putuskan sumber listriknya.", "high_risk": true, "note": "정비보수·사고 시 전원 차단 지시. 공통 §4.4, §6.2", "src": "KOSHA-COMMON-2; NCS-LATHE p.39", "draft": true},
+  {"text_ko": "장갑을 벗으세요.", "text_vi": "Hãy tháo găng tay ra.", "text_in": "Lepaskan sarung tangannya.", "high_risk": false, "note": "선반 작업 장갑 착용 금지 지시. 선반 매뉴얼 §4.3", "src": "NCS-LATHE p.42", "draft": true},
+  {"text_ko": "보안경을 착용하세요.", "text_vi": "Hãy đeo kính bảo hộ.", "text_in": "Pakailah kacamata pelindung.", "high_risk": false, "note": "칩 비산 대비 보호구 지시. 선반 매뉴얼 §4.2", "src": "NCS-LATHE p.38", "draft": true},
+  {"text_ko": "안전블록을 끼우세요.", "text_vi": "Hãy lắp khối chèn an toàn.", "text_in": "Pasang blok pengamannya.", "high_risk": true, "note": "금형 교체·조정 전 지시. 프레스 매뉴얼 §4.3", "src": "LAW-KOSH-RULE 제104조", "draft": true},
+  {"text_ko": "다쳤어요, 도와주세요.", "text_vi": "Tôi bị thương, hãy giúp tôi.", "text_in": "Saya terluka, tolong bantu saya.", "high_risk": true, "note": "부상 신고·구조 요청", "draft": true},
+  {"text_ko": "다시 말해 주세요.", "text_vi": "Xin hãy nói lại.", "text_in": "Tolong ulangi.", "high_risk": false, "note": "지시 재확인 요청", "draft": true}
+]
