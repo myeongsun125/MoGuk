@@ -15,6 +15,7 @@ M-22: 이동 방향은 언제나 core → edge. edge 는 core 를 호출하지 �
      · POST /api/v1/admin/unanswered/{id}/answer(M-05a — 답변 전이 + ingest_answer job).
      · GET /api/v1/learn/quiz/{id}?lang= · POST /api/v1/learn/quiz/{id}/submit (M-38).
      · GET /api/v1/admin/documents · POST /api/v1/admin/documents (M-41 — 업로드·목록).
+     · GET /api/v1/learn/cards?module=&lang= (M-42 — 학습 카드).
 개별 item 실패는 해당 respond 에 5xx 로 회신하고 루프는 계속된다.
 
 env: EDGE_API_URL(compose 기존 키, 기본 http://edge-api:8000), RELAY_HOLD_S(대기 상한)
@@ -122,6 +123,17 @@ def _dispatch_get(route: str, query: dict, worker_id: int | None = None) -> tupl
             return 200, get_report_detail(report_id)
         except ReportNotFound:
             return 404, {"detail": "report not found"}
+
+    if route == "/api/v1/learn/cards":
+        # M-42 — module·lang 은 쿼리. 검증(module)은 서비스 단일 판정 — 422 분기 core 동일.
+        from app.services import learn_cards
+
+        module = (query.get("module") or [None])[0]
+        lang = (query.get("lang") or [None])[0]
+        try:
+            return 200, learn_cards.get_cards(module, lang, worker_id)
+        except learn_cards.InvalidModule as exc:
+            return 422, {"detail": str(exc)}
 
     if route.startswith("/api/v1/learn/quiz/"):
         # M-38 — lang 은 쿼리, 미지정 시 identity 근로자 lang 은 core(서비스)가 도출.

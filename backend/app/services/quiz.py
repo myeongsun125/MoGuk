@@ -72,6 +72,11 @@ def _resolve_lang(cur, lang: str | None, worker_id: int | None) -> str:
     return "ko"
 
 
+def resolve_lang(cur, lang: str | None, worker_id: int | None) -> str:
+    """공용 이름(M-42) — 타 모듈 재사용용 얇은 위임. 규칙 본문은 _resolve_lang 그대로."""
+    return _resolve_lang(cur, lang, worker_id)
+
+
 def _pick(body: dict, lang_key: str, ko_key: str):
     """lang 축 값이 부재(키 없음·null·빈 값)면 ko 폴백."""
     v = body.get(lang_key)
