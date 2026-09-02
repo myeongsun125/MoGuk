@@ -340,5 +340,7 @@ export interface DocumentListItem {
   source: string | null;
   created_at: string;
   chunk_count: number;
-  job_status: JobStatus | string;
+  // SB 확정 — 잡 없이 바로 적재된 시드 문서는 job_status가 null(잡 자체가 없음, 상태
+  // '없음'과 실패는 다른 의미라 failed로 대신하지 않는다).
+  job_status: JobStatus | string | null;
 }

@@ -86,5 +86,6 @@
   "admin.documents.statusQueued": "대기 중",
   "admin.documents.statusRunning": "처리 중",
   "admin.documents.statusDone": "완료",
-  "admin.documents.statusFailed": "실패"
+  "admin.documents.statusFailed": "실패",
+  "admin.documents.statusNone": "—"
 }

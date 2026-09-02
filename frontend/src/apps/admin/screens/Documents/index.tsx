@@ -34,7 +34,8 @@ function stripExtension(filename: string): string {
   return idx > 0 ? filename.slice(0, idx) : filename;
 }
 
-function isPending(status: string): boolean {
+function isPending(status: string | null): boolean {
+  if (status == null) return false; // SB 확정 — 잡 없는 시드 문서(null)는 폴링 대상 아님
   return status === "queued" || status === "running";
 }
 
@@ -195,14 +196,20 @@ export default function AdminDocumentsScreen() {
           </thead>
           <tbody>
             {items.map((doc) => (
-              <tr key={doc.id} data-testid="document-row" data-job-status={doc.job_status}>
+              <tr key={doc.id} data-testid="document-row" data-job-status={doc.job_status ?? "none"}>
                 <td>{doc.title}</td>
                 <td>{t(CATEGORY_KEY[doc.category as DocumentCategory] ?? "") || doc.category}</td>
                 <td>{doc.chunk_count}</td>
                 <td>
-                  <span className={`badge badge-job-${doc.job_status}`}>
-                    {t(STATUS_KEY[doc.job_status] ?? "") || doc.job_status}
-                  </span>
+                  {doc.job_status == null ? (
+                    <span className="badge badge-job-none" data-testid="document-status-none">
+                      {t("admin.documents.statusNone")}
+                    </span>
+                  ) : (
+                    <span className={`badge badge-job-${doc.job_status}`}>
+                      {t(STATUS_KEY[doc.job_status] ?? "") || doc.job_status}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

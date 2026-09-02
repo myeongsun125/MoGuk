@@ -41,6 +41,19 @@ const STORE: MockDoc[] = [
     _pollsSeen: 0,
     _textLen: 0,
   },
+  {
+    // SB 확정 — 잡 없이 바로 적재된 시드 문서는 job_status가 null(잡 자체가 없음).
+    id: 3,
+    title: "장비 점검 체크리스트",
+    category: "equipment",
+    origin: "seed",
+    source: "seed:equipment_checklist_1",
+    created_at: "2026-08-22T08:00:00",
+    chunk_count: 3,
+    job_status: null,
+    _pollsSeen: 0,
+    _textLen: 0,
+  },
 ];
 
 // 업로드 직후 첫 조회(handleSubmit의 즉시 refresh())까지는 running, 그 다음 조회(5초

@@ -86,5 +86,6 @@
   "admin.documents.statusQueued": "Đang chờ",
   "admin.documents.statusRunning": "Đang xử lý",
   "admin.documents.statusDone": "Hoàn tất",
-  "admin.documents.statusFailed": "Thất bại"
+  "admin.documents.statusFailed": "Thất bại",
+  "admin.documents.statusNone": "—"
 }

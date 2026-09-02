@@ -86,5 +86,6 @@
   "admin.documents.statusQueued": "Menunggu",
   "admin.documents.statusRunning": "Diproses",
   "admin.documents.statusDone": "Selesai",
-  "admin.documents.statusFailed": "Gagal"
+  "admin.documents.statusFailed": "Gagal",
+  "admin.documents.statusNone": "—"
 }

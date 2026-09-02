@@ -116,6 +116,11 @@
   color: #991b1b;
 }
 
+.badge-job-none {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
 .empty-row {
   text-align: center;
   color: #999;

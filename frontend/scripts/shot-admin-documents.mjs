@@ -31,9 +31,32 @@ async function main() {
 
   await page.goto(`http://localhost:${PORT}/admin/documents`);
   await page.getByTestId("document-form").waitFor({ state: "visible", timeout: 5000 });
-  // 초기 목록(시드 2건) 로딩이 끝날 때까지 기다린다 — 이걸 안 기다리면 이후 "beforeRows"가
+  // 초기 목록(시드 3건) 로딩이 끝날 때까지 기다린다 — 이걸 안 기다리면 이후 "beforeRows"가
   // 마운트 refresh()가 아직 응답하기 전(0건)에 계산돼 모든 뒷단 단언이 어긋난다.
-  await page.getByTestId("document-row").nth(1).waitFor({ state: "visible", timeout: 5000 });
+  await page.getByTestId("document-row").nth(2).waitFor({ state: "visible", timeout: 5000 });
+
+  // job_status null(SB 확정, 잡 없는 시드 문서) 방어 — "—"(admin.documents.statusNone) 렌더.
+  const noneBadge = page.getByTestId("document-status-none");
+  await noneBadge.waitFor({ state: "visible", timeout: 5000 }).then(
+    () => console.log("PASS: job_status null -> statusNone(\"—\") 렌더"),
+    () => {
+      console.error("FAIL: job_status null 문서가 statusNone으로 렌더되지 않음");
+      failures++;
+    },
+  );
+  const noneText = await noneBadge.textContent().catch(() => null);
+  console.log("null 상태 표시 텍스트:", noneText);
+  if (noneText !== "—") {
+    console.error("FAIL: null 상태 표시 텍스트가 '—'가 아님:", noneText);
+    failures++;
+  }
+  const noneRow = page.locator('[data-testid="document-row"][data-job-status="none"]');
+  if ((await noneRow.count()) !== 1) {
+    console.error("FAIL: data-job-status=\"none\" 행이 정확히 1개가 아님");
+    failures++;
+  } else {
+    console.log("PASS: null 문서 행의 data-job-status=\"none\" 확인");
+  }
 
   // A — 정상 업로드: 파일 선택 -> title 자동 채움 확인 -> 제출 -> 202 -> 목록 반영(running).
   await page.getByTestId("document-file").setInputFiles(okPath);
