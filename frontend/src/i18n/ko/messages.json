@@ -10,6 +10,7 @@
   "worker.invite.submit": "활성화",
   "worker.invite.activating": "활성화 중...",
   "worker.invite.invalidToken": "초대 링크가 유효하지 않습니다 — 관리자에게 재발급을 요청하세요",
+  "worker.invite.goToLogin": "이미 등록했어요 → 로그인",
   "worker.ask.title": "질문하기",
   "worker.ask.placeholder": "질문을 입력하세요",
   "worker.ask.submit": "제출",
@@ -165,5 +166,17 @@
   "admin.auditlog.thTarget": "대상",
   "admin.auditlog.thTransition": "전→후",
   "admin.auditlog.thDetail": "비고",
-  "admin.auditlog.emptyRow": "해당 날짜 기록이 없습니다."
+  "admin.auditlog.emptyRow": "해당 날짜 기록이 없습니다.",
+  "worker.login.title": "로그인",
+  "worker.login.langLabel": "언어 선택",
+  "worker.login.langVi": "Tiếng Việt",
+  "worker.login.langKo": "한국어",
+  "worker.login.langIn": "Bahasa Indonesia",
+  "worker.login.empNoLabel": "사번",
+  "worker.login.empNoPlaceholder": "사번을 입력하세요",
+  "worker.login.pinLabel": "PIN 입력",
+  "worker.login.pinPlaceholder": "PIN 4자리 이상",
+  "worker.login.submit": "로그인",
+  "worker.login.loggingIn": "로그인 중...",
+  "worker.login.invalidCreds": "사번 또는 PIN이 올바르지 않습니다. 초대 링크로 먼저 활성화했는지 확인하세요"
 }

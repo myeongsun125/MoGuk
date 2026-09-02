@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { LangProvider } from "./i18n/LangContext";
 import { AuthProvider } from "./auth/AuthContext";
 import InviteScreen from "./apps/worker/screens/Invite";
+import LoginScreen from "./apps/worker/screens/Login";
 import AskScreen from "./apps/worker/screens/Ask";
 import ReportScreen from "./apps/worker/screens/Report";
 import QuizScreen from "./apps/worker/screens/Quiz";
@@ -24,6 +25,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/activate" replace />} />
             <Route path="/activate" element={<InviteScreen />} />
+            <Route path="/login" element={<LoginScreen />} />
             <Route element={<WorkerLayout />}>
               <Route path="/ask" element={<AskScreen />} />
               <Route path="/report" element={<ReportScreen />} />

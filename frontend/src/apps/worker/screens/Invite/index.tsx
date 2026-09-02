@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useLang } from "../../../../i18n/LangContext";
 import { useAuth } from "../../../../auth/AuthContext";
 import { activate } from "../../../../api/auth";
@@ -49,6 +49,9 @@ export default function InviteScreen() {
     return (
       <div className="invite-screen">
         <p data-testid="invite-no-token">{t("worker.invite.noToken")}</p>
+        <Link to="/login" data-testid="invite-go-to-login" className="go-to-login">
+          {t("worker.invite.goToLogin")}
+        </Link>
       </div>
     );
   }
@@ -92,6 +95,10 @@ export default function InviteScreen() {
           </p>
         )}
       </form>
+
+      <Link to="/login" data-testid="invite-go-to-login" className="go-to-login">
+        {t("worker.invite.goToLogin")}
+      </Link>
     </div>
   );
 }
