@@ -145,6 +145,16 @@ async function main() {
     } else {
       console.log("PASS: /quiz?set_id=2 -> safety_1 로드(set_id 쿼리 소비 확인)");
     }
+
+    // 제목 동적화 — h1이 고정 라벨이 아니라 quizSet.title(세트별 실제 제목)로 뜨는지.
+    const h1Text = await p.locator("h1").textContent();
+    console.log("set_id=2 h1:", h1Text);
+    if (h1Text !== "선반·프레스 안전 수칙") {
+      console.error("FAIL: h1이 quizSet.title(safety_1)과 다름:", h1Text);
+      failures++;
+    } else {
+      console.log("PASS: h1이 quizSet.title로 동적 렌더됨(safety_1)");
+    }
     await p.close();
   }
 
@@ -162,6 +172,15 @@ async function main() {
       failures++;
     } else {
       console.log("PASS: item.q 직접 렌더 확인");
+    }
+
+    const h1TextDefault = await p.locator("h1").textContent();
+    console.log("default(set_id=1) h1:", h1TextDefault);
+    if (h1TextDefault !== "선반·프레스 장비 이해") {
+      console.error("FAIL: h1이 quizSet.title(learning_1)과 다름:", h1TextDefault);
+      failures++;
+    } else {
+      console.log("PASS: h1이 quizSet.title로 동적 렌더됨(learning_1)");
     }
 
     const draftBanner = await p.getByTestId("quiz-draft-banner").isVisible().catch(() => false);

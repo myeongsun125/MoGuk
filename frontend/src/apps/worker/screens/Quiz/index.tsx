@@ -71,7 +71,9 @@ export default function QuizScreen() {
 
   return (
     <div className="quiz-screen" data-testid="quiz-screen">
-      <h1>{t("worker.quiz.title")}</h1>
+      {/* 세트별 실제 제목(quizSet.title, 다시학습 module과 정합) — 로딩/에러로 quizSet이
+          아직 없을 때만 기존 고정 라벨로 폴백(worker.quiz.title 그대로 유지, dead key 방지). */}
+      <h1>{quizSet ? quizSet.title : t("worker.quiz.title")}</h1>
 
       {loadStatus === "loading" && <p>{t("worker.quiz.loadingItems")}</p>}
 
