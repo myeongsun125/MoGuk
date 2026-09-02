@@ -1,4 +1,4 @@
-.invite-screen {
+.login-screen {
   min-height: 100vh;
   padding: 24px 20px;
   display: flex;
@@ -6,7 +6,7 @@
   gap: 20px;
 }
 
-.invite-screen h1 {
+.login-screen h1 {
   font-size: 1.3rem;
   margin: 0;
 }
@@ -31,20 +31,20 @@
   border-color: #1a1a1a;
 }
 
-.invite-screen form {
+.login-screen form {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.invite-screen input {
+.login-screen input {
   padding: 12px 14px;
   border-radius: 8px;
   border: 1px solid #ccc;
   font-size: 1rem;
 }
 
-.invite-screen button[type="submit"] {
+.login-screen button[type="submit"] {
   padding: 12px 14px;
   border-radius: 8px;
   border: none;
@@ -54,18 +54,11 @@
   cursor: pointer;
 }
 
-.invite-screen button[type="submit"]:disabled {
+.login-screen button[type="submit"]:disabled {
   opacity: 0.6;
 }
 
-.invite-screen .error {
+.login-screen .error {
   color: #c0392b;
   font-size: 0.9rem;
-}
-
-.go-to-login {
-  align-self: flex-start;
-  color: #3730a3;
-  font-size: 0.9rem;
-  text-decoration: none;
 }

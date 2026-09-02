@@ -10,6 +10,7 @@
   "worker.invite.submit": "Aktifkan",
   "worker.invite.activating": "Mengaktifkan...",
   "worker.invite.invalidToken": "Tautan undangan tidak valid — silakan hubungi admin untuk penerbitan ulang",
+  "worker.invite.goToLogin": "Sudah terdaftar → Masuk",
   "worker.ask.title": "Tanya Jawab",
   "worker.ask.placeholder": "Masukkan pertanyaan Anda",
   "worker.ask.submit": "Kirim",
@@ -165,5 +166,17 @@
   "admin.auditlog.thTarget": "Target",
   "admin.auditlog.thTransition": "Sebelum→Sesudah",
   "admin.auditlog.thDetail": "Catatan",
-  "admin.auditlog.emptyRow": "Tidak ada catatan untuk tanggal ini."
+  "admin.auditlog.emptyRow": "Tidak ada catatan untuk tanggal ini.",
+  "worker.login.title": "Masuk",
+  "worker.login.langLabel": "Pilih bahasa",
+  "worker.login.langVi": "Tiếng Việt",
+  "worker.login.langKo": "한국어",
+  "worker.login.langIn": "Bahasa Indonesia",
+  "worker.login.empNoLabel": "Nomor pegawai",
+  "worker.login.empNoPlaceholder": "Masukkan nomor pegawai",
+  "worker.login.pinLabel": "Masukkan PIN",
+  "worker.login.pinPlaceholder": "PIN minimal 4 digit",
+  "worker.login.submit": "Masuk",
+  "worker.login.loggingIn": "Sedang masuk...",
+  "worker.login.invalidCreds": "Nomor pegawai atau PIN salah. Silakan periksa apakah sudah diaktifkan lewat tautan undangan"
 }

@@ -20,6 +20,14 @@ async function main() {
   const page = await browser.newPage({ viewport: VIEWPORT });
   let failures = 0;
 
+  // ⑪ WorkerLayout이 jwt 없으면 /login으로 보내는 보호화면이 됨 — /learn 진입 전 세션을
+  // 미리 심어둔다(localStorage moguk_jwt/moguk_refresh, AuthContext.tsx 키 그대로).
+  await page.goto(`http://localhost:${PORT}/activate`);
+  await page.evaluate(() => {
+    localStorage.setItem("moguk_jwt", "fake.jwt.token");
+    localStorage.setItem("moguk_refresh", "fake.refresh.token");
+  });
+
   await page.goto(`http://localhost:${PORT}/learn`);
   await page.getByTestId("learn-card-list").waitFor({ state: "visible", timeout: 5000 });
 
@@ -120,6 +128,11 @@ async function main() {
   // 사용). 새 페이지의 첫 goto()이므로 SPA 상태 리셋 문제 없음.
   {
     const p = await browser.newPage({ viewport: VIEWPORT });
+    await p.goto(`http://localhost:${PORT}/activate`);
+    await p.evaluate(() => {
+      localStorage.setItem("moguk_jwt", "fake.jwt.token");
+      localStorage.setItem("moguk_refresh", "fake.refresh.token");
+    });
     await p.goto(`http://localhost:${PORT}/learn?module=learning`);
     await p.getByTestId("learn-card-list").waitFor({ state: "visible", timeout: 5000 });
 

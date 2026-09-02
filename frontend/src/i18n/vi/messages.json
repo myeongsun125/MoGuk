@@ -10,6 +10,7 @@
   "worker.invite.submit": "Kích hoạt",
   "worker.invite.activating": "Đang kích hoạt...",
   "worker.invite.invalidToken": "Liên kết mời không hợp lệ — vui lòng liên hệ quản trị viên để cấp lại",
+  "worker.invite.goToLogin": "Đã đăng ký rồi → Đăng nhập",
   "worker.ask.title": "Hỏi đáp",
   "worker.ask.placeholder": "Nhập câu hỏi của bạn",
   "worker.ask.submit": "Gửi",
@@ -165,5 +166,17 @@
   "admin.auditlog.thTarget": "Đối tượng",
   "admin.auditlog.thTransition": "Trước→Sau",
   "admin.auditlog.thDetail": "Ghi chú",
-  "admin.auditlog.emptyRow": "Không có bản ghi cho ngày này."
+  "admin.auditlog.emptyRow": "Không có bản ghi cho ngày này.",
+  "worker.login.title": "Đăng nhập",
+  "worker.login.langLabel": "Chọn ngôn ngữ",
+  "worker.login.langVi": "Tiếng Việt",
+  "worker.login.langKo": "한국어",
+  "worker.login.langIn": "Bahasa Indonesia",
+  "worker.login.empNoLabel": "Mã số nhân viên",
+  "worker.login.empNoPlaceholder": "Nhập mã số nhân viên",
+  "worker.login.pinLabel": "Nhập mã PIN",
+  "worker.login.pinPlaceholder": "PIN từ 4 số trở lên",
+  "worker.login.submit": "Đăng nhập",
+  "worker.login.loggingIn": "Đang đăng nhập...",
+  "worker.login.invalidCreds": "Mã số nhân viên hoặc PIN không đúng. Vui lòng kiểm tra đã kích hoạt bằng liên kết mời chưa"
 }

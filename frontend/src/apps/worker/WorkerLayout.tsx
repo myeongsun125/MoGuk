@@ -1,5 +1,6 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { useLang } from "../../i18n/LangContext";
+import { useAuth } from "../../auth/AuthContext";
 import type { Lang } from "../../api/types";
 import "./WorkerLayout.css";
 
@@ -14,6 +15,13 @@ const LANG_ENDONYM: Record<Lang, string> = {
 // SPA 내부 라우팅(NavLink)으로만 이동 — AdminLayout과 동일 이유(mock 모듈 상태 유지, D-3).
 export default function WorkerLayout() {
   const { t, lang, setLang } = useLang();
+  const { jwt } = useAuth();
+
+  // ⑪ 보호화면 — jwt 없으면 /login으로. 이 레이아웃 하위(ask/report/quiz/learn) 전부를
+  // 한 지점에서 보호(개별 화면 파일은 무접촉).
+  if (!jwt) {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <div className="worker-layout">

@@ -122,10 +122,15 @@ async function main() {
   }
 
   // #94: /quiz?set_id=2(safety_1, published) 직접 진입 -> set_id 쿼리 소비 확인.
-  // 이 페이지는 새로 열어 첫 goto()가 곧 이 URL이므로 SPA 상태 리셋 문제 없음(퀴즈 GET은
-  // 인증 optional이라 activate 없이도 렌더된다).
+  // 퀴즈 GET 자체는 인증 optional이지만, ⑪로 WorkerLayout이 jwt 없으면 /login으로 보내는
+  // 보호화면이 됐다 — 진입 전 세션을 심어둔다(moguk_jwt/moguk_refresh, AuthContext.tsx 키).
   {
     const p = await browser.newPage({ viewport: VIEWPORT });
+    await p.goto(`http://localhost:${PORT}/activate`);
+    await p.evaluate(() => {
+      localStorage.setItem("moguk_jwt", "fake.jwt.token");
+      localStorage.setItem("moguk_refresh", "fake.refresh.token");
+    });
     await p.goto(`http://localhost:${PORT}/quiz?set_id=2`);
     await p.getByTestId("quiz-item").first().waitFor({ state: "visible", timeout: 5000 });
     const draftBanner = await p.getByTestId("quiz-draft-banner").isVisible().catch(() => false);

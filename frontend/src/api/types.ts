@@ -38,6 +38,13 @@ export interface ActivateResponse {
   lang?: Lang;
 }
 
+// 재로그인 — POST /auth/login {emp_no,pin} (SB 실물, auth.py:106-113·auth_service.login
+// 코드 대조 확인). {jwt,refresh}만 — lang 없음(계정 미존재·PIN 불일치 구분 없이 401 단일).
+export interface LoginResult {
+  jwt: string;
+  refresh: string;
+}
+
 // 위험보고 — skeleton-v3 §3 관리자/근로자 블록, M-08·M-08a·M-15b
 export type ReportStatus = "submitted" | "acknowledged" | "resolved";
 export type ProcessingState = "queued" | "running" | "done" | "failed";
