@@ -8,9 +8,9 @@ GET /learn/cards?module=safety|learning&lang= 계약(총괄 확정 0902):
 - safety = phrases 카드: 소스는 backend/app/data/phrases_10.json (M-42 대안 B —
   core-api 이미지가 backend/app 만 COPY 하므로 패키지 내 사본을 로드, 프로세스 캐시).
   id = 파일 순번 1부터(총괄 확정). DB 테이블·적재기 확장 없음, 001 무접촉.
-- learning = glossary term 카드: glossary_terms.fetch_terms_full()(approved ∪ draft — env
-  GLOSSARY_STATUS 동일 필터) 재사용. id = glossary.id, high_risk = false 고정,
-  src 는 glossary 에 컬럼이 없어 전건 생략(계약 — 컬럼 있으면 넣기).
+- learning = glossary term 카드: glossary_terms.fetch_term_cards()(approved ∪ draft — env
+  GLOSSARY_STATUS 동일 필터·동일 60s 캐시, 총괄 확정 0902). id = glossary.id,
+  high_risk = false 고정, src 는 생략 확정(총괄).
 - note_ko·src 는 값이 없는 항목에서 키 생략(계약).
 """
 
@@ -88,7 +88,7 @@ def _phrase_cards(lang: str) -> list[dict]:
 
 def _term_cards(lang: str) -> list[dict]:
     cards = []
-    for term_id, term_ko, term_vi, term_in, note in glossary_terms.fetch_terms_full():
+    for term_id, term_ko, term_vi, term_in, note in glossary_terms.fetch_term_cards():
         if lang == "vi":
             text = term_vi or term_ko                  # 대상어 부재 시 ko 폴백(퀴즈 동형)
         elif lang == "in":

@@ -34,6 +34,16 @@ ORDER BY id
 
 _cache: dict = {"at": 0.0, "key": None, "terms": ()}
 
+# M-42 카드 전용 조회 — fetch_terms() 무변경(답변 주입 경로 소비 중), 동일 필터·동일 캐시 방식.
+_SQL_CARDS = """
+SELECT id, term_ko, term_vi, term_in, note
+FROM glossary
+WHERE status = ANY(%(statuses)s)
+ORDER BY id
+"""
+
+_cache_cards: dict = {"at": 0.0, "key": None, "rows": ()}
+
 
 def statuses() -> tuple[str, ...]:
     """GLOSSARY_STATUS 파싱 — 빈 값·공백뿐이면 기본 집합."""
@@ -45,8 +55,9 @@ def statuses() -> tuple[str, ...]:
 
 
 def invalidate() -> None:
-    """캐시 강제 만료 — 테스트·수동 갱신용."""
+    """캐시 강제 만료 — 테스트·수동 갱신용(두 캐시 모두)."""
     _cache.update(at=0.0, key=None, terms=())
+    _cache_cards.update(at=0.0, key=None, rows=())
 
 
 def fetch_terms() -> tuple[tuple[str, str | None, str | None], ...]:
@@ -62,3 +73,22 @@ def fetch_terms() -> tuple[tuple[str, str | None, str | None], ...]:
     terms = tuple((r[0], r[1], r[2]) for r in rows)
     _cache.update(at=now, key=key, terms=terms)
     return terms
+
+
+def fetch_term_cards() -> tuple[tuple[int, str, str | None, str | None, str | None], ...]:
+    """(id, term_ko, term_vi, term_in, note) 나열 — 학습 카드 전용 (M-42, 총괄 확정 0902).
+
+    status 필터는 fetch_terms() 와 동일(GLOSSARY_STATUS env, 기본 approved·draft —
+    rejected 제외), 캐시도 동일 방식·동일 60s.
+    """
+    key = statuses()
+    now = time.monotonic()
+    if _cache_cards["key"] == key and now - _cache_cards["at"] < CACHE_TTL_S:
+        return _cache_cards["rows"]
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SQL_CARDS, {"statuses": list(key)})
+            rows = cur.fetchall()
+    out = tuple(tuple(r) for r in rows)
+    _cache_cards.update(at=now, key=key, rows=out)
+    return out

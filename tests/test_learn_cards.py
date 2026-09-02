@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import auth as auth_service
-from app.services import learn_cards
+from app.services import glossary_terms, learn_cards
 
 client = TestClient(app, client=("127.0.0.1", 50000))
 
@@ -40,6 +40,12 @@ class FakeCursor:
                 return value
         return None
 
+    def fetchall(self):
+        for needle, value in self.store.get("many", []):
+            if needle in self._last:
+                return value
+        return []
+
 
 class FakeConn:
     def __init__(self, store):
@@ -63,7 +69,7 @@ def fake_connect(store):
 
 
 def _store(**kw):
-    base = {"calls": [], "rows": [], "commits": 0}
+    base = {"calls": [], "rows": [], "many": [], "commits": 0}
     base.update(kw)
     return base
 
@@ -72,9 +78,12 @@ def _store(**kw):
 def _base_env(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@127.0.0.1:1/test")
     monkeypatch.setenv("API_ROLE", "core")
+    monkeypatch.delenv("GLOSSARY_STATUS", raising=False)
     learn_cards.invalidate_cache()
+    glossary_terms.invalidate()
     yield
     learn_cards.invalidate_cache()
+    glossary_terms.invalidate()
 
 
 def _patch(monkeypatch, rows=None):
@@ -220,3 +229,108 @@ def test_phrases_file_read_once(monkeypatch):
     client.get("/api/v1/learn/cards?module=safety&lang=vi")
 
     assert calls["n"] == 1                             # 두 번째 호출은 캐시
+
+
+# ══ learning = term 카드 (로더 판정 확정 0902 — fetch_term_cards) ══
+
+TERM_ROWS = (
+    (1, "척", "mâm cặp", "cekam", "선반 고정구"),
+    (2, "보안경", "kính bảo hộ", None, None),          # term_in·note NULL — 폴백·키 생략 검증
+    (3, "프레스", None, "mesin press", "설비"),         # term_vi NULL
+)
+
+
+def _patch_terms(monkeypatch, rows=None):
+    store = _patch(monkeypatch)
+    monkeypatch.setattr("app.services.glossary_terms.fetch_term_cards",
+                        lambda: rows if rows is not None else TERM_ROWS)
+    return store
+
+
+def test_learning_term_cards_vi(monkeypatch):
+    _patch_terms(monkeypatch)
+
+    body = client.get("/api/v1/learn/cards?module=learning&lang=vi").json()
+
+    assert body["module"] == "learning"
+    assert all(c["kind"] == "term" for c in body["cards"])
+    assert all(c["high_risk"] is False for c in body["cards"])   # 계약 고정
+    c0 = body["cards"][0]
+    assert (c0["id"], c0["text"], c0["text_ko"], c0["note_ko"]) == (1, "mâm cặp", "척", "선반 고정구")
+    assert body["cards"][2]["text"] == "프레스"          # term_vi NULL → ko 폴백
+
+
+def test_learning_term_note_null_omitted_and_no_src(monkeypatch):
+    """note NULL → note_ko 키 생략, src 는 전건 생략(총괄 확정)."""
+    _patch_terms(monkeypatch)
+
+    cards = client.get("/api/v1/learn/cards?module=learning&lang=vi").json()["cards"]
+
+    assert "note_ko" not in cards[1]
+    assert "note_ko" in cards[0]
+    assert all("src" not in c for c in cards)
+
+
+def test_learning_term_lang_in_null_falls_back_ko(monkeypatch):
+    _patch_terms(monkeypatch)
+
+    cards = client.get("/api/v1/learn/cards?module=learning&lang=in").json()["cards"]
+
+    assert cards[0]["text"] == "cekam"
+    assert cards[1]["text"] == "보안경"                 # term_in NULL → ko 폴백
+    assert cards[2]["text"] == "mesin press"
+
+
+def test_learning_term_lang_ko_resolution(monkeypatch):
+    _patch_terms(monkeypatch)
+
+    cards = client.get("/api/v1/learn/cards?module=learning&lang=xx").json()["cards"]
+
+    assert [c["text"] for c in cards] == ["척", "보안경", "프레스"]   # 전건 term_ko
+
+
+def test_learning_quiz_set_id_uses_module_param(monkeypatch):
+    store = _patch_terms(monkeypatch)
+
+    body = client.get("/api/v1/learn/cards?module=learning&lang=vi").json()
+
+    assert body["quiz_set_id"] == 5
+    assert [c[1] for c in store["calls"] if "FROM quiz_sets" in c[0]] == [{"module": "learning"}]
+
+
+# ── fetch_term_cards — status 필터·캐시 (fetch_terms 동일 방식) ──
+
+def test_fetch_term_cards_status_filter_matches_fetch_terms(monkeypatch):
+    """동일 status 필터 — 기본 approved·draft, rejected 제외."""
+    store = _store(many=[("FROM glossary", [(1, "척", "mâm cặp", "cekam", None)])])
+    monkeypatch.setattr(glossary_terms.tenancy, "connect", fake_connect(store))
+
+    out = glossary_terms.fetch_term_cards()
+
+    assert out == ((1, "척", "mâm cặp", "cekam", None),)
+    sql, params = [c for c in store["calls"] if "FROM glossary" in c[0]][0]
+    assert "SELECT id, term_ko, term_vi, term_in, note" in sql
+    assert "status = ANY" in sql and "ORDER BY id" in sql
+    assert params == {"statuses": ["approved", "draft"]}          # 기본 집합
+    assert params["statuses"] == list(glossary_terms.statuses())  # fetch_terms 와 동일 소스
+    assert "rejected" not in params["statuses"]
+
+
+def test_fetch_term_cards_cached_60s(monkeypatch):
+    """두 번째 호출은 캐시 — DB 재조회 없음(fetch_terms 동일 방식)."""
+    connects = {"n": 0}
+    store = _store(many=[("FROM glossary", [(1, "척", None, None, None)])])
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def counting_connect(slug=None):
+        connects["n"] += 1
+        yield FakeConn(store)
+
+    monkeypatch.setattr(glossary_terms.tenancy, "connect", counting_connect)
+
+    first = glossary_terms.fetch_term_cards()
+    second = glossary_terms.fetch_term_cards()
+
+    assert first == second and connects["n"] == 1
