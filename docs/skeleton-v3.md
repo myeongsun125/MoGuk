@@ -217,7 +217,7 @@ POST /auth/login           {emp_no, pin}                   → {jwt, refresh}
 POST /auth/refresh         {refresh}                       → {jwt, refresh}   # 회전 = 새 쌍 발급. 구 refresh 무효화는 미결(M-15a)
 GET  /auth/me              (Authorization: Bearer <jwt>)   → {worker_id, tenant, typ}   # 보호 엔드포인트 대표 — 토큰 클레임만 반환(DB 미접근)
 # /auth/* 실패는 전부 401 + 동일 메시지 — 계정·토큰 존재 여부를 응답으로 구분하지 않는다
-GET  /learn/cards?module=
+GET  /learn/cards?module=safety|learning&lang= → {module, quiz_set_id, cards[{id, kind:'phrase'|'term', text, text_ko, high_risk, note_ko?}]}   # safety=phrases 시드(text_vi/in), learning=glossary(term_vi/in), lang 해석 퀴즈 동형(vi/in 지정 → 근로자 lang → ko), module 미지정·그 외 422, quiz_set_id는 module 세트 부재 시 null, LLM 호출 없음 (M-42)
 GET  /learn/quiz/{set_id}                                  → {set_id, module, title, status, items[{id, q, choices[], term_hints[{term_ko, term_lang}]}]}   # 근로자 lang 해석 vi→q_vi·choices_vi / in→q_in·choices_in / 부재 시 ko, answer_idx 미노출, status draft면 화면 라벨 "검수 전 문항" (M-38)
 POST /learn/quiz/{set_id}/submit {answers[]}               → {score, passed, label}   # score 0~100, passed=score≥tenant_settings.threshold_pass(90), label red<80/yellow<90/green, quiz_attempts INSERT(detail=answers·정오) (M-38)
 POST /ask                  {question, lang}                → {answer, sources[], verify:{score, passed, gated, gate_reason}, trace_id} | edge 보류 상한 30s 초과 시 504 (M-28a)   # 응답 언어 = 질의 lang (M-03b). verify: score = 되번역↔원질문 bge-m3 코사인 0~1(되번역 미수행·실패 시 null — grounded=false 전 경로·타임아웃·예산 0·LLM 오류·임베딩 실패·빈 입력) · passed = score ≥ τ(env, 가값 0.80, 실측 후 env 조정; grounded=true에서 score null이면 fail-open passed=true) · gated = 무근거 OR (안전 카테고리 AND passed=false) (M-10) · gate_reason = "grounding"|"threshold"|null (M-10b 비파괴 확장, M-34)
@@ -388,3 +388,4 @@ Dagster 에셋(이름 = 산출 테이블): `documents_raw → chunks_index → g
 | M-39 | QR 발송 (2026-09-02, 명선 확정) — workers.phone append(CREATE+ALTER IF NOT EXISTS), send-invite kakao_link 공유 URL, sms는 로드맵. 영향: SB·JH·BG(001 재적용) | 확정 (2026-09-02, 명선) |
 | M-40 | PII 마스킹 표시 계층 (2026-09-02, 명선 확정) — 관리자 응답 조립부 연락처만, 이름·사번 제외, env PII_MASK 기본 on, events detail·resolution_note 포함, 원본 무손실. 영향: SB·BG(env) | 확정 (2026-09-02, 명선) |
 | M-41 | 관리자 문서 업로드·자동 적재 (2026-09-02, 명선 확정) — JSON 텍스트 업로드(.md/.txt는 프론트에서 읽어 전송), ingest_document 잡 청킹(≤800자)·bge-m3 임베딩·chunks 적재, GET 목록(청크 수·잡 상태). PDF 파싱·multipart·Dagster 오케스트레이션은 로드맵. 영향: SB(백엔드)·JH(화면)·MS(§3) | 확정 (2026-09-02, 명선) |
+| M-42 | 근로자 학습 카드 (2026-09-02, 명선 확정) — safety 모듈=phrases_10(vi/in 시드, backend/app/data 사본 런타임 로드), learning 모듈=용어집 카드(fetch_term_cards 별도 조회), 카드→이해 확인 퀴즈→실패 시 다시 학습 루프. 매뉴얼·교육과정 카드화(vi/in 시드 필요)는 로드맵. 영향: SB(백엔드)·JH(화면)·MS(§3) | 확정 (2026-09-02, 명선) |
