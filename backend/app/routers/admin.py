@@ -39,6 +39,7 @@ UNANSWERED_ANSWER_PATH = "/api/v1/admin/unanswered/{question_id}/answer"
 GLOSSARY_APPROVE_PATH = "/api/v1/admin/glossary/{term_id}/approve"
 GLOSSARY_REJECT_PATH = "/api/v1/admin/glossary/{term_id}/reject"
 EVENTS_PATH = "/api/v1/admin/events"
+DOCUMENTS_PATH = "/api/v1/admin/documents"
 INVITE_PATH = "/api/v1/admin/workers/invite"
 SEND_INVITE_PATH = "/api/v1/admin/workers/{worker_id}/send-invite"
 LIST_PATH = "/api/v1/admin/reports"
@@ -170,6 +171,8 @@ async def upload_document(body: DocumentUploadRequest, request: Request) -> JSON
     text 빈 값·category 4종 이탈은 422.
     """
     _reject_identity_fields(await _json_body(request))
+    if role() == "edge":
+        return await _relay(DOCUMENTS_PATH, "POST", body.model_dump())
     try:
         result = await asyncio.to_thread(
             documents_service.create_document,
@@ -185,8 +188,10 @@ async def list_documents() -> JSONResponse:
     """[{id, title, category, origin, source, created_at, chunk_count, job_status}] 최신순 (M-41).
 
     chunk_count·job_status 는 조인으로 채운다 — 잡이 없는 기존 문서는 job_status null.
-    읽기 전용, 쓰기·이벤트 없음.
+    읽기 전용, 쓰기·이벤트 없음. M-28c ①②: edge 는 릴레이 경유.
     """
+    if role() == "edge":
+        return await _relay(DOCUMENTS_PATH, "GET", {})
     result = await asyncio.to_thread(documents_service.list_documents)
     return JSONResponse(status_code=200, content=result)
 
