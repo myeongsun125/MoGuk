@@ -115,6 +115,14 @@ export default function AdminWorkersScreen() {
     }
   }
 
+  // "문자로 보내기" — SMS 딥링크(<a href="sms:...">). phone은 화면 상태로만 들고 있던
+  // 값 그대로 사용(POST 본문에는 여전히 절대 싣지 않는다 — sms: URI에만 쓴다).
+  // currentLink(카톡 발송 전엔 invite_url, 발송 후엔 share_url) — 표시 중인 링크 그대로.
+  // phone 없거나 currentLink 없으면 href 자체를 안 실어 비활성 처리(앵커는 disabled 속성이
+  // 없어 href 부재로 클릭 무효화 — 접근성상 aria-disabled도 함께 표시).
+  const smsEnabled = !!phone.trim() && !!currentLink;
+  const smsHref = smsEnabled ? `sms:${phone}?body=${encodeURIComponent(currentLink!)}` : undefined;
+
   function handleSaveImage() {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -213,6 +221,17 @@ export default function AdminWorkersScreen() {
             >
               {sendStatus === "loading" ? t("admin.workers.submitting") : t("admin.workers.sendKakao")}
             </button>
+            <a
+              data-testid="invite-send-sms"
+              className={smsEnabled ? "sms-link" : "sms-link disabled"}
+              href={smsHref}
+              aria-disabled={!smsEnabled}
+              onClick={(e) => {
+                if (!smsEnabled) e.preventDefault();
+              }}
+            >
+              {t("admin.workers.sendSms")}
+            </a>
           </div>
 
           {!result.worker_id && (
