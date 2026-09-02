@@ -72,6 +72,7 @@
   "worker.quiz.resultTitle": "결과",
   "worker.quiz.draftLabel": "검수 전 문항입니다(원어민 검수 예정)",
   "worker.quiz.termLabel": "용어",
+  "worker.quiz.retryLearn": "다시 학습",
   "admin.documents.nav": "문서 등록",
   "admin.documents.titlePlaceholder": "문서 제목을 입력하세요",
   "admin.documents.categoryProcess": "공정",
@@ -87,5 +88,16 @@
   "admin.documents.statusRunning": "처리 중",
   "admin.documents.statusDone": "완료",
   "admin.documents.statusFailed": "실패",
-  "admin.documents.statusNone": "—"
+  "admin.documents.statusNone": "—",
+  "worker.nav.learn": "학습",
+  "worker.learn.title": "학습 카드",
+  "worker.learn.moduleSafety": "안전 문구",
+  "worker.learn.moduleLearning": "용어집",
+  "worker.learn.loading": "카드를 불러오는 중...",
+  "worker.learn.loadError": "카드를 불러오지 못했습니다. 다시 시도해 주세요.",
+  "worker.learn.retry": "다시 시도",
+  "worker.learn.empty": "표시할 카드가 없습니다.",
+  "worker.learn.highRisk": "위험",
+  "worker.learn.srcLabel": "출처",
+  "worker.learn.takeQuiz": "퀴즈 풀기"
 }

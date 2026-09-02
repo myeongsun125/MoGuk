@@ -57,7 +57,8 @@ async function runQuiz(page, correctCount, label) {
   if (resultLabel !== label) {
     throw new Error(`expected label=${label}, got ${resultLabel}`);
   }
-  return { resultLabel, resultStatus };
+  const retryLearnVisible = await page.getByTestId("quiz-retry-learn").isVisible().catch(() => false);
+  return { resultLabel, resultStatus, retryLearnVisible };
 }
 
 async function main() {
@@ -74,7 +75,8 @@ async function main() {
   try {
     const r = await runQuiz(page, 5, "green");
     if (r.resultStatus !== "통과") throw new Error(`expected passed, got ${r.resultStatus}`);
-    console.log("PASS: 5/5 -> green + 통과");
+    if (r.retryLearnVisible) throw new Error("passed=true인데 '다시 학습' 링크가 렌더됨");
+    console.log("PASS: 5/5 -> green + 통과, 다시 학습 링크 미표시");
   } catch (e) {
     console.error("FAIL:", e.message);
     failures++;
@@ -90,7 +92,8 @@ async function main() {
     try {
       const r = await runQuiz(p, 3, "yellow");
       if (r.resultStatus !== "통과") throw new Error(`expected passed, got ${r.resultStatus}`);
-      console.log("PASS: 3/5 -> yellow + 통과");
+      if (r.retryLearnVisible) throw new Error("passed=true인데 '다시 학습' 링크가 렌더됨");
+      console.log("PASS: 3/5 -> yellow + 통과, 다시 학습 링크 미표시");
     } catch (e) {
       console.error("FAIL:", e.message);
       failures++;
@@ -98,17 +101,44 @@ async function main() {
     await p.close();
   }
 
-  // red(0/5=0%, failed)
+  // red(0/5=0%, failed) — #94: passed=false -> "다시 학습" 링크(/learn?module=learning,
+  // set_id=1(기본값, 미지정) -> QUIZ_SET_META[1].module="learning") 렌더 확인.
   {
     const p = await browser.newPage({ viewport: VIEWPORT });
     await activate(p);
     try {
       const r = await runQuiz(p, 0, "red");
       if (r.resultStatus !== "미통과") throw new Error(`expected failed, got ${r.resultStatus}`);
-      console.log("PASS: 0/5 -> red + 미통과");
+      if (!r.retryLearnVisible) throw new Error("passed=false인데 '다시 학습' 링크가 렌더되지 않음");
+      const href = await p.getByTestId("quiz-retry-learn").getAttribute("href");
+      console.log("다시 학습 링크 href:", href);
+      if (href !== "/learn?module=learning") throw new Error(`다시 학습 링크 href 불일치: ${href}`);
+      console.log("PASS: 0/5 -> red + 미통과 + 다시 학습 링크(/learn?module=learning)");
     } catch (e) {
       console.error("FAIL:", e.message);
       failures++;
+    }
+    await p.close();
+  }
+
+  // #94: /quiz?set_id=2(safety_1, published) 직접 진입 -> set_id 쿼리 소비 확인.
+  // 이 페이지는 새로 열어 첫 goto()가 곧 이 URL이므로 SPA 상태 리셋 문제 없음(퀴즈 GET은
+  // 인증 optional이라 activate 없이도 렌더된다).
+  {
+    const p = await browser.newPage({ viewport: VIEWPORT });
+    await p.goto(`http://localhost:${PORT}/quiz?set_id=2`);
+    await p.getByTestId("quiz-item").first().waitFor({ state: "visible", timeout: 5000 });
+    const draftBanner = await p.getByTestId("quiz-draft-banner").isVisible().catch(() => false);
+    const itemCount = await p.getByTestId("quiz-item").count();
+    console.log("set_id=2 진입 -> draft 배너:", draftBanner, "문항 수:", itemCount);
+    if (draftBanner) {
+      console.error("FAIL: set_id=2(safety_1, published)인데 draft 배너가 렌더됨 — set_id 쿼리가 무시된 것으로 의심");
+      failures++;
+    } else if (itemCount !== 5) {
+      console.error("FAIL: set_id=2 문항 수가 5가 아님(safety_1 기대):", itemCount);
+      failures++;
+    } else {
+      console.log("PASS: /quiz?set_id=2 -> safety_1 로드(set_id 쿼리 소비 확인)");
     }
     await p.close();
   }

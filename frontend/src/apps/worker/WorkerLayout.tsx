@@ -59,6 +59,13 @@ export default function WorkerLayout() {
         >
           {t("worker.nav.quiz")}
         </NavLink>
+        <NavLink
+          to="/learn"
+          data-testid="tab-learn"
+          className={({ isActive }) => (isActive ? "worker-tab active" : "worker-tab")}
+        >
+          {t("worker.nav.learn")}
+        </NavLink>
       </nav>
     </div>
   );

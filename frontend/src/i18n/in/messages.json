@@ -72,6 +72,7 @@
   "worker.quiz.resultTitle": "Hasil",
   "worker.quiz.draftLabel": "Soal belum diperiksa (akan diperiksa oleh penutur asli)",
   "worker.quiz.termLabel": "Istilah",
+  "worker.quiz.retryLearn": "Belajar Lagi",
   "admin.documents.nav": "Unggah Dokumen",
   "admin.documents.titlePlaceholder": "Masukkan judul dokumen",
   "admin.documents.categoryProcess": "Proses",
@@ -87,5 +88,16 @@
   "admin.documents.statusRunning": "Diproses",
   "admin.documents.statusDone": "Selesai",
   "admin.documents.statusFailed": "Gagal",
-  "admin.documents.statusNone": "—"
+  "admin.documents.statusNone": "—",
+  "worker.nav.learn": "Belajar",
+  "worker.learn.title": "Kartu Belajar",
+  "worker.learn.moduleSafety": "Frasa Keselamatan",
+  "worker.learn.moduleLearning": "Glosarium",
+  "worker.learn.loading": "Memuat kartu...",
+  "worker.learn.loadError": "Gagal memuat kartu. Silakan coba lagi.",
+  "worker.learn.retry": "Coba lagi",
+  "worker.learn.empty": "Tidak ada kartu untuk ditampilkan.",
+  "worker.learn.highRisk": "Berbahaya",
+  "worker.learn.srcLabel": "Sumber",
+  "worker.learn.takeQuiz": "Kerjakan Kuis"
 }
