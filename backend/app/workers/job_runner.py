@@ -11,6 +11,9 @@ M-08b ②: 요약·severity 생성 실패(재시도 3회 소진 = local_failed)�
 M-05a: kind='ingest_answer' 는 관리자 답변을 documents(origin='admin_answer')+chunks 로
 적재하고 unanswered_queue.ingested_doc_id 를 채운다. 실패는 위 요약과 같은
 attempts 백오프·3회 failed 경로를 그대로 탄다.
+
+M-41: kind='ingest_document' 는 업로드 문서(origin='upload')를 청킹(documents.split_document,
+빈 줄·마크다운 제목 경계 800자 이하)·배치 임베딩해 chunks 로 편입한다. 실패 경로 동일.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import threading
 import time
 
 from app.agents.retrieve import to_vector_literal
-from app.services import approval, risk_reports, tenancy
+from app.services import approval, documents, risk_reports, tenancy
 from app.services.crypto import open_text
 from app.services.llm_adapter import complete, embed
 
@@ -225,6 +228,62 @@ def _handle_ingest_answer(cur, job: dict) -> None:
     )
 
 
+class IngestDocumentError(RuntimeError):
+    """문서 업로드 적재 실패 — 요약·답변 적재와 같은 재시도 경로를 탄다."""
+
+
+_SELECT_DOC_CATEGORY = "SELECT category FROM documents WHERE id = %(id)s"
+
+_INSERT_UPLOAD_CHUNK = """
+INSERT INTO chunks (document_id, chunk_idx, content, embedding, meta)
+VALUES (%(document_id)s, %(chunk_idx)s, %(content)s, %(embedding)s::vector, %(meta)s::jsonb)
+"""
+
+
+def _handle_ingest_document(cur, job: dict) -> None:
+    """M-41 — 업로드 문서를 청킹·배치 임베딩해 chunks 로 편입한다.
+
+    임베딩을 INSERT 보다 먼저 호출해 embed 실패 시 부분 적재가 남지 않게 한다.
+    meta = {category(문서 행 값), origin:'upload', draft:false} — 계약 3키 고정.
+    """
+    payload = job["payload"]
+    raw_text = payload.get("text") or ""
+    if not raw_text.strip():
+        raise IngestDocumentError(f"job={job['id']} payload.text 비어 있음")
+    try:
+        document_id = int(payload["document_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IngestDocumentError(f"job={job['id']} payload 필드 위반: {exc}") from exc
+
+    cur.execute(_SELECT_DOC_CATEGORY, {"id": document_id})
+    row = cur.fetchone()
+    if row is None:
+        raise IngestDocumentError(f"document_id={document_id} 없음")
+    category = row[0]
+
+    parts = documents.split_document(raw_text)
+    if not parts:
+        raise IngestDocumentError(f"document_id={document_id} 청킹 결과 0건")
+    vectors = embed(parts)             # M-02a 단일 런타임 — 배치 호출, 차원 위반은 embed 가 예외
+    for idx, (content, vec) in enumerate(zip(parts, vectors)):
+        cur.execute(
+            _INSERT_UPLOAD_CHUNK,
+            {
+                "document_id": document_id,
+                "chunk_idx": idx,      # 0 부터
+                "content": content,
+                "embedding": to_vector_literal(vec),
+                "meta": json.dumps(
+                    {"category": category, "origin": "upload", "draft": False},
+                    ensure_ascii=False,
+                ),
+            },
+        )
+    log.info(
+        "jobs: 문서 적재 job=%s document_id=%s chunks=%s", job["id"], document_id, len(parts)
+    )
+
+
 def _fail_job(cur, job: dict, exc: Exception) -> None:
     """attempts 증가 → 3회 소진 시 local_failed 처리. 원문은 건드리지 않는다."""
     attempts = int(job["attempts"]) + 1
@@ -267,6 +326,8 @@ def process_once() -> bool:
                     _handle_summarize(cur, job)
                 elif job["kind"] == approval.JOB_KIND_INGEST_ANSWER:
                     _handle_ingest_answer(cur, job)
+                elif job["kind"] == documents.JOB_KIND_INGEST_DOCUMENT:
+                    _handle_ingest_document(cur, job)
                 elif job["kind"] == "stt_summarize":
                     _transcribe_pending(job["payload"])  # V5 — 현재 미사용 경로
                 else:

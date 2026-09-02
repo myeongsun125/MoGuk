@@ -75,3 +75,65 @@ def create_document(
 
     log.info("documents: 업로드 접수 id=%s job=%s source=%s", doc_id, job_id, source)
     return {"id": doc_id, "job_id": job_id}
+
+
+# ── 청킹 (M-41 ②) ─────────────────────────────────────────
+# 기존 청킹은 scripts/ingest_seed.py(_split_800·make_chunks)에만 있고 앱 이미지는
+# backend/ 단독이라 임포트 불가 — 줄 경계 분할 규칙 동형으로 재작성(자결, 보고 등재).
+
+CHUNK_MAX_CHARS = 800
+
+
+def _split_oversize(block: str) -> list[str]:
+    """800자 초과 블록 — 줄 경계 누적 분할(_split_800 동형·오버랩 없음),
+    줄바꿈 없는 초장문은 800자 고정 절단(자결)."""
+    parts: list[str] = []
+    buf = ""
+    for line in block.splitlines():
+        while len(line) > CHUNK_MAX_CHARS:
+            if buf:
+                parts.append(buf)
+                buf = ""
+            parts.append(line[:CHUNK_MAX_CHARS])
+            line = line[CHUNK_MAX_CHARS:]
+        if buf and len(buf) + len(line) + 1 > CHUNK_MAX_CHARS:
+            parts.append(buf)
+            buf = line
+        else:
+            buf = (buf + "\n" + line) if buf else line
+    if buf:
+        parts.append(buf)
+    return parts
+
+
+def split_document(text: str) -> list[str]:
+    """빈 줄·마크다운 제목(#…)을 경계로 800자 이하 청크. 비어 있지 않으면 최소 1개.
+
+    경계마다 청크를 끊는다(블록 병합 없음 — 계약 문면 그대로). 제목 줄은 다음 블록의
+    머리로 붙인다. 800자 초과 블록은 _split_oversize 로 나눈다.
+    """
+    blocks: list[str] = []
+    cur: list[str] = []
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            if cur:
+                blocks.append("\n".join(cur))
+                cur = []
+            if stripped.startswith("#"):
+                cur = [line]                      # 제목은 다음 블록의 머리
+            continue
+        cur.append(line)
+    if cur:
+        blocks.append("\n".join(cur))
+
+    parts: list[str] = []
+    for b in blocks:
+        if len(b) <= CHUNK_MAX_CHARS:
+            parts.append(b)
+        else:
+            parts.extend(_split_oversize(b))
+    parts = [p for p in parts if p.strip()]
+    if not parts and (text or "").strip():        # 안전망 — 접수 검증상 도달하지 않는 경로
+        parts = [(text or "").strip()[:CHUNK_MAX_CHARS]]
+    return parts

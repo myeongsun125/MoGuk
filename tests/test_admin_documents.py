@@ -171,3 +171,127 @@ def test_identity_field_in_body_returns_400(monkeypatch):
 
     assert r.status_code == 400, r.text
     assert r.json()["detail"]["fields"] == ["actor"]
+
+
+# ══ ② 청킹 — split_document (빈 줄·마크다운 제목 경계, 800자 이하) ══
+
+def test_split_blank_line_and_heading_boundaries():
+    text = "## 1장\n첫 문단이다.\n\n둘째 문단이다.\n### 1.1\n셋째 문단이다."
+    parts = documents.split_document(text)
+
+    assert parts == ["## 1장\n첫 문단이다.", "둘째 문단이다.", "### 1.1\n셋째 문단이다."]
+    assert all(len(p) <= documents.CHUNK_MAX_CHARS for p in parts)
+
+
+def test_split_short_text_single_chunk():
+    parts = documents.split_document("한 문단짜리 짧은 본문.")
+    assert parts == ["한 문단짜리 짧은 본문."]          # 최소 1개 보장
+
+
+def test_split_oversize_block_line_boundary():
+    """800자 초과 블록 — 줄 경계 누적 분할, 전 청크 ≤800."""
+    line = "가" * 300
+    text = "\n".join([line] * 4)                       # 한 블록 1203자
+    parts = documents.split_document(text)
+
+    assert len(parts) == 2
+    assert all(len(p) <= documents.CHUNK_MAX_CHARS for p in parts)
+    assert "".join(parts).replace("\n", "") == "가" * 1200   # 내용 소실 없음
+
+
+def test_split_single_long_line_hard_cut():
+    """줄바꿈 없는 초장문 — 800자 고정 절단(자결)."""
+    parts = documents.split_document("나" * 1700)
+
+    assert [len(p) for p in parts] == [800, 800, 100]
+    assert "".join(parts) == "나" * 1700
+
+
+# ══ ② 잡 핸들러 — _handle_ingest_document ══════════════════
+
+from app.workers import job_runner
+
+DOC_TEXT = "## 점검\n시동 전 척 조임 확인.\n\n방호덮개 상태를 확인한다."   # 청크 2개 본문
+
+
+def _fake_vec(n):
+    return [[0.1, 0.2, 0.3]] * n
+
+
+def test_handler_chunks_embeds_and_inserts(monkeypatch):
+    seen = {}
+
+    def fake_embed(texts):
+        seen["texts"] = list(texts)
+        return _fake_vec(len(texts))
+
+    monkeypatch.setattr(job_runner, "embed", fake_embed)
+    store = _store(rows=[("SELECT category FROM documents", ("instruction",))])
+    cur = FakeCursor(store)
+
+    job_runner._handle_ingest_document(
+        cur, {"id": 77, "payload": {"document_id": 31, "text": DOC_TEXT}, "attempts": 0}
+    )
+
+    parts = documents.split_document(DOC_TEXT)
+    assert len(parts) >= 2                                     # 계약 지정 — n ≥ 2 본문
+    assert seen["texts"] == parts                              # 배치 임베딩 1회
+    ins = _params_for(store, "INSERT INTO chunks")
+    assert len(ins) == len(parts)
+    assert [p["chunk_idx"] for p in ins] == list(range(len(parts)))   # 0 부터
+    assert [p["content"] for p in ins] == parts
+    for p in ins:
+        assert _json.loads(p["meta"]) == {
+            "category": "instruction", "origin": "upload", "draft": False,
+        }                                                      # 계약 3키 고정
+
+
+def test_handler_missing_document_raises(monkeypatch):
+    monkeypatch.setattr(job_runner, "embed",
+                        lambda texts: pytest.fail("문서가 없는데 임베딩을 호출했다"))
+    store = _store(rows=[("SELECT category FROM documents", None)])
+
+    with pytest.raises(job_runner.IngestDocumentError):
+        job_runner._handle_ingest_document(
+            FakeCursor(store), {"id": 77, "payload": {"document_id": 999, "text": "x"}, "attempts": 0}
+        )
+    assert not any("INSERT INTO chunks" in s for s in _sqls(store))
+
+
+def test_handler_empty_text_raises():
+    with pytest.raises(job_runner.IngestDocumentError):
+        job_runner._handle_ingest_document(
+            FakeCursor(_store()), {"id": 77, "payload": {"document_id": 31, "text": "  "}, "attempts": 0}
+        )
+
+
+def test_process_once_dispatches_ingest_document(monkeypatch):
+    """kind 배선 — 성공 시 기존 done 처리 그대로."""
+    monkeypatch.setattr(job_runner, "embed", lambda texts: _fake_vec(len(texts)))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@127.0.0.1:1/test")
+    store = _store(rows=[
+        ("FOR UPDATE SKIP LOCKED", (77, "ingest_document", {"document_id": 31, "text": DOC_TEXT}, 0)),
+        ("SELECT category FROM documents", ("safety",)),
+    ])
+    monkeypatch.setattr(job_runner.tenancy, "connect", fake_connect(store))
+
+    assert job_runner.process_once() is True
+
+    assert any("status='done'" in s for s in _sqls(store))     # 기존 done 경로
+    assert len(_params_for(store, "INSERT INTO chunks")) == len(documents.split_document(DOC_TEXT))
+
+
+def test_process_once_failure_uses_existing_retry(monkeypatch):
+    """실패 시 기존 _fail_job 경로 그대로 — attempts 1 재시도."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@127.0.0.1:1/test")
+    store = _store(rows=[
+        ("FOR UPDATE SKIP LOCKED", (77, "ingest_document", {"document_id": 999, "text": "x"}, 0)),
+        ("SELECT category FROM documents", None),              # 문서 없음 → 예외
+    ])
+    monkeypatch.setattr(job_runner.tenancy, "connect", fake_connect(store))
+
+    assert job_runner.process_once() is True
+
+    retry = _params_for(store, "SET status='queued'")
+    assert retry and retry[0]["attempts"] == 1                 # 기존 백오프 재시도
+    assert not any("status='done'" in s for s in _sqls(store))
