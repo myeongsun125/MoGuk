@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useLang } from "../../../../i18n/LangContext";
 import { getCards } from "../../../../api/learn";
 import type { LearnCardsResponse } from "../../../../api/types";
@@ -14,9 +14,18 @@ const MODULE_LABEL_KEY: Record<Module, string> = {
   learning: "worker.learn.moduleLearning",
 };
 
+function isModule(value: string | null): value is Module {
+  return value === "safety" || value === "learning";
+}
+
 export default function LearnScreen() {
   const { lang, t } = useLang();
-  const [module, setModule] = useState<Module>("safety");
+  // #94 보강 — /learn?module=safety|learning 쿼리로 초기 선택 모듈을 지정할 수 있다
+  // (Quiz 화면의 "다시 학습" 링크가 사용). 없거나 잘못된 값이면 기존 기본(safety) 그대로.
+  // 최초 렌더 시점의 값만 반영 — 이후 탭 클릭으로 자유롭게 전환되는 기존 동작은 무변경.
+  const [searchParams] = useSearchParams();
+  const moduleParam = searchParams.get("module");
+  const [module, setModule] = useState<Module>(isModule(moduleParam) ? moduleParam : "safety");
   const [data, setData] = useState<LearnCardsResponse | null>(null);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>("loading");
 
@@ -104,8 +113,10 @@ export default function LearnScreen() {
             ))}
           </ul>
 
-          <div className="learn-quiz-cta">
-            {data.quiz_set_id != null ? (
+          {/* #94 추가(총괄 승인 0902) — quiz_set_id 없으면 버튼 영역 자체를 렌더하지 않는다
+              (이전엔 비활성 버튼+안내 문구였음, 렌더 안 함으로 변경). */}
+          {data.quiz_set_id != null && (
+            <div className="learn-quiz-cta">
               <Link
                 to={`/quiz?set_id=${data.quiz_set_id}`}
                 className="learn-quiz-link"
@@ -113,17 +124,8 @@ export default function LearnScreen() {
               >
                 {t("worker.learn.takeQuiz")}
               </Link>
-            ) : (
-              <>
-                <button type="button" disabled data-testid="learn-quiz-pending-button">
-                  {t("worker.learn.takeQuiz")}
-                </button>
-                <p className="learn-quiz-pending-note" data-testid="learn-quiz-pending">
-                  {t("worker.learn.quizPending")}
-                </p>
-              </>
-            )}
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>

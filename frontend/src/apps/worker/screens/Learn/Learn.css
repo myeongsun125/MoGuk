@@ -105,8 +105,7 @@
   gap: 6px;
 }
 
-.learn-quiz-link,
-.learn-quiz-cta button {
+.learn-quiz-link {
   display: inline-block;
   padding: 12px 20px;
   border-radius: 8px;
@@ -116,15 +115,4 @@
   font-size: 1rem;
   cursor: pointer;
   text-decoration: none;
-}
-
-.learn-quiz-cta button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.learn-quiz-pending-note {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #999;
 }

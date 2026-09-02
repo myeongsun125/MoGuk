@@ -72,6 +72,7 @@
   "worker.quiz.resultTitle": "Kết quả",
   "worker.quiz.draftLabel": "Câu hỏi chưa kiểm duyệt (sẽ được người bản ngữ kiểm duyệt)",
   "worker.quiz.termLabel": "Thuật ngữ",
+  "worker.quiz.retryLearn": "Học lại",
   "admin.documents.nav": "Đăng tài liệu",
   "admin.documents.titlePlaceholder": "Nhập tiêu đề tài liệu",
   "admin.documents.categoryProcess": "Quy trình",
@@ -98,6 +99,5 @@
   "worker.learn.empty": "Không có thẻ để hiển thị.",
   "worker.learn.highRisk": "Nguy hiểm",
   "worker.learn.srcLabel": "Nguồn",
-  "worker.learn.takeQuiz": "Làm bài trắc nghiệm",
-  "worker.learn.quizPending": "Bài trắc nghiệm đang chuẩn bị"
+  "worker.learn.takeQuiz": "Làm bài trắc nghiệm"
 }

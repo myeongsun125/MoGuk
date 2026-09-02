@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useLang } from "../../../../i18n/LangContext";
 import { getQuizSet, submitQuiz } from "../../../../api/learn";
 import type { QuizSet, QuizSubmitResult } from "../../../../api/types";
 import "./Quiz.css";
 
 // §3 M-38 확정 계약: GET /learn/quiz/{set_id}?lang=이 q·choices·term_hints를 이미
-// localize해 내려준다 — 세트 선택 UI는 아직 없어 이 화면의 임시 고정값(mock 매핑,
-// api/fixtures/learn.fixtures.ts QUIZ_SET_META[1]=learning_1).
-const SET_ID = 1;
+// localize해 내려준다. #94 보강 — /quiz?set_id=N 쿼리로 세트를 지정할 수 있게 됨
+// (Learn 화면의 "퀴즈 풀기" 링크가 사용). 쿼리 미지정·유효하지 않은 값이면 기존
+// 기본 동작(DEFAULT_SET_ID) 그대로 — 세트 선택 UI 자체는 여전히 없다.
+const DEFAULT_SET_ID = 1;
 
 type LoadStatus = "loading" | "loaded" | "error";
 type SubmitStatus = "idle" | "loading" | "error" | "done";
@@ -20,6 +22,9 @@ const LABEL_CLASS: Record<string, string> = {
 
 export default function QuizScreen() {
   const { lang, t } = useLang();
+  const [searchParams] = useSearchParams();
+  const setIdParam = searchParams.get("set_id");
+  const setId = setIdParam && /^\d+$/.test(setIdParam) ? Number(setIdParam) : DEFAULT_SET_ID;
   const [quizSet, setQuizSet] = useState<QuizSet | null>(null);
   const [loadStatus, setLoadStatus] = useState<LoadStatus>("loading");
   const [answers, setAnswers] = useState<(number | null)[]>([]);
@@ -29,7 +34,7 @@ export default function QuizScreen() {
   async function load() {
     setLoadStatus("loading");
     try {
-      const data = await getQuizSet(SET_ID, lang);
+      const data = await getQuizSet(setId, lang);
       setQuizSet(data);
       setAnswers(new Array(data.items.length).fill(null));
       setSubmitStatus("idle");
@@ -42,9 +47,9 @@ export default function QuizScreen() {
 
   useEffect(() => {
     load();
-    // lang이 바뀌면 서버가 다시 localize한 문항을 새로 받아야 한다.
+    // lang이 바뀌거나 set_id 쿼리가 바뀌면(예: 다른 세트 링크로 재진입) 새로 불러온다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
+  }, [lang, setId]);
 
   function selectAnswer(itemIdx: number, choiceIdx: number) {
     setAnswers((a) => a.map((v, i) => (i === itemIdx ? choiceIdx : v)));
@@ -54,7 +59,7 @@ export default function QuizScreen() {
     setSubmitStatus("loading");
     try {
       // 미응답 문항은 -1(어떤 choice와도 매칭되지 않는 값)로 채워 서버가 오답으로만 처리하게 한다.
-      const res = await submitQuiz(SET_ID, answers.map((a) => a ?? -1));
+      const res = await submitQuiz(setId, answers.map((a) => a ?? -1));
       setResult(res);
       setSubmitStatus("done");
     } catch {
@@ -151,6 +156,11 @@ export default function QuizScreen() {
               <p className={result.passed ? "quiz-passed" : "quiz-failed"} data-testid="quiz-result-status">
                 {result.passed ? t("worker.quiz.passed") : t("worker.quiz.failed")}
               </p>
+              {!result.passed && (
+                <Link to={`/learn?module=${quizSet.module}`} className="quiz-retry-learn" data-testid="quiz-retry-learn">
+                  {t("worker.quiz.retryLearn")}
+                </Link>
+              )}
             </div>
           )}
         </>

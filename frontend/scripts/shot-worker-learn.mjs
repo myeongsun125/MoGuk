@@ -58,25 +58,17 @@ async function main() {
     console.log("PASS: note_ko/src 옵셔널 렌더 + 누락 카드도 에러 없이 렌더됨");
   }
 
-  // safety 모듈은 quiz_set_id=null -> 퀴즈 버튼 비활성 + 안내, 링크 없음.
-  await page.getByTestId("learn-quiz-pending").waitFor({ state: "visible", timeout: 5000 }).then(
-    () => console.log("PASS: quiz_set_id=null -> '퀴즈 준비 중' 안내 렌더"),
-    () => {
-      console.error("FAIL: quiz_set_id=null인데 '퀴즈 준비 중' 안내가 렌더되지 않음");
-      failures++;
-    },
-  );
-  const pendingButtonDisabled = await page.getByTestId("learn-quiz-pending-button").isDisabled();
-  if (!pendingButtonDisabled) {
-    console.error("FAIL: quiz_set_id=null인데 퀴즈 버튼이 활성화됨");
+  // safety 모듈은 quiz_set_id=null -> 퀴즈 버튼 영역 자체가 렌더되지 않는다(#94 추가,
+  // 총괄 승인 0902 — 이전엔 비활성 버튼+안내 문구였으나 렌더 안 함으로 변경).
+  await page.waitForTimeout(300); // 카드 로딩과 별개로 버튼 영역 부재를 확정하기 위한 여유
+  const linkVisibleOnSafety = await page.getByTestId("learn-quiz-link").isVisible().catch(() => false);
+  const ctaCountOnSafety = await page.locator(".learn-quiz-cta").count();
+  console.log("safety: 퀴즈 링크 표시:", linkVisibleOnSafety, "/ CTA 영역 개수:", ctaCountOnSafety);
+  if (linkVisibleOnSafety || ctaCountOnSafety !== 0) {
+    console.error("FAIL: quiz_set_id=null인데 퀴즈 버튼/CTA 영역이 렌더됨");
     failures++;
   } else {
-    console.log("PASS: quiz_set_id=null -> 퀴즈 버튼 비활성화 확인");
-  }
-  const linkVisibleOnSafety = await page.getByTestId("learn-quiz-link").isVisible().catch(() => false);
-  if (linkVisibleOnSafety) {
-    console.error("FAIL: quiz_set_id=null인데 퀴즈 링크가 렌더됨");
-    failures++;
+    console.log("PASS: quiz_set_id=null -> 퀴즈 버튼 영역 자체가 렌더되지 않음");
   }
 
   // B — learning(term) 모듈: high_risk 항상 false, quiz_set_id 있음 -> 링크 렌더.
@@ -115,14 +107,42 @@ async function main() {
     console.error("FAIL: 퀴즈 링크 href가 /quiz를 포함하지 않음:", href);
     failures++;
   }
-  const pendingVisibleOnLearning = await page.getByTestId("learn-quiz-pending").isVisible().catch(() => false);
-  if (pendingVisibleOnLearning) {
-    console.error("FAIL: quiz_set_id가 있는데 '퀴즈 준비 중' 안내가 남아있음");
+  const ctaCountOnLearning = await page.locator(".learn-quiz-cta").count();
+  if (ctaCountOnLearning !== 1) {
+    console.error("FAIL: quiz_set_id가 있는데 CTA 영역이 정확히 1개가 아님:", ctaCountOnLearning);
     failures++;
   }
 
   await page.screenshot({ path: OUT_PNG, fullPage: true });
   console.log(`saved ${OUT_PNG}`);
+
+  // C — #94: /learn?module=learning 쿼리로 초기 선택 모듈 지정(Quiz "다시 학습" 링크가
+  // 사용). 새 페이지의 첫 goto()이므로 SPA 상태 리셋 문제 없음.
+  {
+    const p = await browser.newPage({ viewport: VIEWPORT });
+    await p.goto(`http://localhost:${PORT}/learn?module=learning`);
+    await p.getByTestId("learn-card-list").waitFor({ state: "visible", timeout: 5000 });
+
+    const learningTabSelected = await p.getByTestId("learn-module-learning").getAttribute("aria-selected");
+    console.log("module=learning 쿼리 -> learning 탭 aria-selected:", learningTabSelected);
+    if (learningTabSelected !== "true") {
+      console.error("FAIL: module=learning 쿼리인데 learning 탭이 초기 선택되지 않음");
+      failures++;
+    } else {
+      console.log("PASS: module 쿼리로 초기 선택 모듈 지정 확인(learning)");
+    }
+
+    const cardText = await p.getByTestId("learn-card").first().locator(".learn-card-text-ko").textContent();
+    console.log("첫 카드(ko):", cardText);
+    if (cardText !== "척") {
+      console.error("FAIL: module=learning 쿼리인데 렌더된 카드가 learning(용어집) 세트가 아님:", cardText);
+      failures++;
+    } else {
+      console.log("PASS: module 쿼리로 지정한 모듈의 카드가 실제로 로드됨");
+    }
+
+    await p.close();
+  }
 
   await browser.close();
   await server.close();
