@@ -281,6 +281,45 @@ def test_process_once_dispatches_ingest_document(monkeypatch):
     assert len(_params_for(store, "INSERT INTO chunks")) == len(documents.split_document(DOC_TEXT))
 
 
+def test_list_documents_fields_order_and_join(monkeypatch):
+    """③ GET — 8필드·최신순(id DESC 질의)·chunk_count·job_status 조인, 잡 없는 문서 null."""
+    import datetime as _dt
+
+    at = _dt.datetime(2026, 9, 2, 9, 0, tzinfo=_dt.timezone.utc)
+    store = _store(many=[("FROM documents d", [
+        (31, "선반 점검 절차", "instruction", "upload", "upload:lathe.md", at, 3, "done"),
+        (2, "PR-120 크랭크 프레스 작업 매뉴얼", "equipment", "seed",
+         "data/seed/manuals/press_manual.md", at, 42, None),
+    ])])
+    monkeypatch.setattr(documents.tenancy, "connect", fake_connect(store))
+
+    r = client.get("/api/v1/admin/documents")
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [tuple(row) for row in body] == [documents.LIST_KEYS] * 2   # 8필드·키 순서
+    assert body[0]["id"] == 31 and body[0]["job_status"] == "done"
+    assert body[0]["chunk_count"] == 3
+    assert body[1]["job_status"] is None                   # 잡 없는 기존 문서 — null(자결)
+    assert body[0]["created_at"] == "2026-09-02T09:00:00+00:00"
+
+    sql = [s for s in _sqls(store) if "FROM documents d" in s][0]
+    assert "ORDER BY d.id DESC" in sql                     # 최신순
+    assert "count(*) FROM chunks" in sql                   # chunk_count 조인
+    assert "kind = 'ingest_document'" in sql               # job_status 조인(해당 잡 최신)
+    assert "ORDER BY j.id DESC LIMIT 1" in sql
+
+
+def test_list_documents_read_only(monkeypatch):
+    store = _store(many=[("FROM documents d", [])])
+    monkeypatch.setattr(documents.tenancy, "connect", fake_connect(store))
+
+    assert client.get("/api/v1/admin/documents").json() == []
+    for sql, _ in store["calls"]:
+        assert sql.strip().split()[0].upper() == "SELECT", sql
+    assert store["commits"] == 0
+
+
 def test_process_once_failure_uses_existing_retry(monkeypatch):
     """실패 시 기존 _fail_job 경로 그대로 — attempts 1 재시도."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@127.0.0.1:1/test")

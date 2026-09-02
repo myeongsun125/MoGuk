@@ -180,6 +180,17 @@ async def upload_document(body: DocumentUploadRequest, request: Request) -> JSON
     return JSONResponse(status_code=202, content=result)
 
 
+@router.get("/documents")
+async def list_documents() -> JSONResponse:
+    """[{id, title, category, origin, source, created_at, chunk_count, job_status}] 최신순 (M-41).
+
+    chunk_count·job_status 는 조인으로 채운다 — 잡이 없는 기존 문서는 job_status null.
+    읽기 전용, 쓰기·이벤트 없음.
+    """
+    result = await asyncio.to_thread(documents_service.list_documents)
+    return JSONResponse(status_code=200, content=result)
+
+
 @router.get("/glossary")
 async def list_glossary(status: str | None = approval.GLOSSARY_DEFAULT_STATUS) -> JSONResponse:
     """용어 후보 목록 — 기본 필터 draft. 읽기 전용(전이는 approve/reject 소관)."""

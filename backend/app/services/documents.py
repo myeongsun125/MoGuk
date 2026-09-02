@@ -77,6 +77,48 @@ def create_document(
     return {"id": doc_id, "job_id": job_id}
 
 
+# ── 목록 (M-41 ③) ─────────────────────────────────────────
+
+LIST_KEYS = (
+    "id", "title", "category", "origin", "source", "created_at", "chunk_count", "job_status",
+)
+
+# chunk_count·job_status 는 조인(스칼라 서브쿼리)으로 채운다. job_status 는 해당 문서를
+# 가리키는 ingest_document 잡의 최신 상태 — 잡이 없는 기존 문서(seed·admin_answer)는
+# null (계약 외 — 자결, 보고 등재). 최신순 = id DESC.
+_LIST_DOCUMENTS = """
+SELECT d.id, d.title, d.category, d.origin, d.source, d.created_at,
+       (SELECT count(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count,
+       (SELECT j.status FROM jobs j
+         WHERE j.kind = 'ingest_document'
+           AND (j.payload ->> 'document_id')::int = d.id
+         ORDER BY j.id DESC LIMIT 1) AS job_status
+FROM documents d
+ORDER BY d.id DESC
+"""
+
+
+def _iso(value):
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def list_documents() -> list[dict]:
+    """관리자 문서 목록 — 8필드, 최신순(id DESC). 읽기 전용."""
+    with tenancy.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_LIST_DOCUMENTS)
+            rows = cur.fetchall()
+    out = []
+    for r in rows:
+        row = dict(zip(LIST_KEYS, r))
+        row["created_at"] = _iso(row["created_at"])
+        row["chunk_count"] = int(row["chunk_count"] or 0)
+        out.append(row)
+    return out
+
+
 # ── 청킹 (M-41 ②) ─────────────────────────────────────────
 # 기존 청킹은 scripts/ingest_seed.py(_split_800·make_chunks)에만 있고 앱 이미지는
 # backend/ 단독이라 임포트 불가 — 줄 경계 분할 규칙 동형으로 재작성(자결, 보고 등재).
