@@ -59,6 +59,7 @@
   "admin.workers.sendCopied": "Tautan telah disalin",
   "admin.workers.sendError": "Gagal membagikan. Silakan salin tautan di bawah",
   "admin.workers.linkRefreshed": "Tautan baru telah diperbarui (kode QR sebelumnya tidak berlaku lagi)",
+  "admin.workers.sendSms": "Kirim lewat SMS",
   "worker.quiz.title": "Kuis keselamatan",
   "worker.quiz.loadingItems": "Memuat soal...",
   "worker.quiz.loadError": "Gagal memuat soal. Silakan coba lagi.",

@@ -51,11 +51,22 @@ async function main() {
   );
 
   // C — 정상 발급 → invite_url 표시 + QR 캔버스 렌더 + 이미지 저장 다운로드 왕복.
+  // phone은 비워둔 채 제출 — "문자로 보내기"가 phone 없을 때 비활성인지 먼저 확인하기 위함.
   await page.getByTestId("invite-name").fill("김철수");
   await page.getByTestId("invite-emp-no").fill("EMP-NEW-001");
   await page.getByTestId("invite-lang").selectOption("in");
   await page.getByTestId("invite-submit").click();
   await page.getByTestId("invite-result").waitFor({ state: "visible", timeout: 5000 });
+
+  // 문자로 보내기 — phone 없음 -> href 없음(비활성) 확인.
+  const smsHrefNoPhone = await page.getByTestId("invite-send-sms").getAttribute("href");
+  console.log("phone 없을 때 sms href:", smsHrefNoPhone);
+  if (smsHrefNoPhone !== null) {
+    console.error("FAIL: phone 없는데 문자 버튼에 href가 실려있음(비활성 아님)");
+    failures++;
+  } else {
+    console.log("PASS: phone 없으면 문자 버튼 href 없음(비활성)");
+  }
 
   const inviteUrl = await page.getByTestId("invite-url").textContent();
   console.log("invite_url:", inviteUrl);
@@ -149,6 +160,26 @@ async function main() {
     } else {
       console.log("PASS: link-refreshed 안내 렌더 확인");
     }
+  }
+
+  // D — phone 입력 후 재발급 -> "문자로 보내기" href = sms:{phone}?body={currentLink}.
+  await page.getByTestId("invite-new").click();
+  await page.getByTestId("invite-form").waitFor({ state: "visible", timeout: 5000 });
+  await page.getByTestId("invite-name").fill("박영희");
+  await page.getByTestId("invite-emp-no").fill("EMP-NEW-002");
+  await page.getByTestId("invite-phone").fill("01099998888");
+  await page.getByTestId("invite-submit").click();
+  await page.getByTestId("invite-result").waitFor({ state: "visible", timeout: 5000 });
+
+  const linkForSms = await page.getByTestId("invite-url").textContent();
+  const smsHrefWithPhone = await page.getByTestId("invite-send-sms").getAttribute("href");
+  console.log("phone 있을 때 sms href:", smsHrefWithPhone, "/ 현재 링크:", linkForSms);
+  const expectedHref = `sms:01099998888?body=${encodeURIComponent(linkForSms ?? "")}`;
+  if (smsHrefWithPhone !== expectedHref) {
+    console.error("FAIL: sms href가 phone·currentLink 조합과 일치하지 않음:", smsHrefWithPhone, "!=", expectedHref);
+    failures++;
+  } else {
+    console.log("PASS: phone 있으면 문자 버튼 href = sms:{phone}?body={currentLink} 확인");
   }
 
   await page.screenshot({ path: OUT_PNG, fullPage: true });
