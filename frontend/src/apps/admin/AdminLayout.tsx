@@ -23,13 +23,15 @@ const LANG_ENDONYM: Record<Lang, string> = {
 // SPA 내부 라우팅(Link)으로만 이동해야 mock 모듈 상태가 유지된다 — 실API 붙으면
 // 상태가 서버 DB에 있어 무관해지지만, 지금은 이 nav가 mock 데모의 전제조건이다.
 function AdminLayoutInner() {
-  const { lang, setLang } = useAdminLang();
+  const { lang, setLang, t } = useAdminLang();
+  // ①(M-41) 신규 항목만 i18n 키로 — 기존 5개는 스코프 밖(무접촉), t()도 이 항목에만 사용.
+  const links = [...LINKS, { to: "/admin/documents", label: t("admin.documents.nav") }];
 
   return (
     <div className="admin-layout">
       <div className="admin-header" data-testid="admin-header">
         <nav className="admin-nav" data-testid="admin-nav">
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}

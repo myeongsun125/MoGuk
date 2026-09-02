@@ -71,5 +71,20 @@
   "worker.quiz.failed": "Belum lulus",
   "worker.quiz.resultTitle": "Hasil",
   "worker.quiz.draftLabel": "Soal belum diperiksa (akan diperiksa oleh penutur asli)",
-  "worker.quiz.termLabel": "Istilah"
+  "worker.quiz.termLabel": "Istilah",
+  "admin.documents.nav": "Unggah Dokumen",
+  "admin.documents.titlePlaceholder": "Masukkan judul dokumen",
+  "admin.documents.categoryProcess": "Proses",
+  "admin.documents.categoryInstruction": "Panduan Kerja",
+  "admin.documents.categorySafety": "Keselamatan",
+  "admin.documents.categoryEquipment": "Peralatan",
+  "admin.documents.fileHint": "Hanya mendukung file .md, .txt",
+  "admin.documents.submit": "Daftarkan",
+  "admin.documents.submitting": "Mendaftarkan...",
+  "admin.documents.errorInvalid": "Silakan periksa judul, kategori, dan isi",
+  "admin.documents.errorGeneric": "Gagal mendaftarkan dokumen. Silakan coba lagi.",
+  "admin.documents.statusQueued": "Menunggu",
+  "admin.documents.statusRunning": "Diproses",
+  "admin.documents.statusDone": "Selesai",
+  "admin.documents.statusFailed": "Gagal"
 }

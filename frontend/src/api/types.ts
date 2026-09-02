@@ -120,8 +120,11 @@ export interface ConfirmResponse {
 }
 
 // 대시보드 — skeleton-v3 §3 GET /admin/dashboard (B). #45 실API 계약 그대로(0830 머지).
-// per_worker/per_module 은 이 API 응답에 없음(§3 "V5" 명시) — 별도 상수 mock(아래)로 분리.
-export type ComprehensionLabel = "red" | "yellow" | "green";
+// 학습 KPI 4키(per_worker/per_module/completion_rate/avg_comprehension)는 M-38로 실API
+// 착륙(dashboard.py RESPONSE_KEYS·PER_WORKER_KEYS·PER_MODULE_KEYS·COMPLETION_KEYS 코드
+// 대조 확정, M-41 시점 기준 더 이상 mock 상수 분리 대상 아님) — 그래도 optional 유지:
+// activated 근로자 0명 등 초기 상태에서 응답 자체는 오되 화면이 안전하게 숨길 수 있게.
+export type ComprehensionLabel = "red" | "yellow" | "green"; // v_comprehension(001:69) CASE 그대로
 
 export interface ReportStatusCounts {
   submitted: number;
@@ -140,6 +143,14 @@ export interface HourlyTrendPoint {
   count: number;
 }
 
+// completion_rate — dashboard.py COMPLETION_KEYS 그대로. 분자=quiz_attempts DISTINCT
+// worker_id(시도), 분모=workers WHERE activated_at IS NOT NULL(활성). 분모 0이면 rate null.
+export interface DashboardCompletionRate {
+  workers_attempted: number;
+  workers_activated: number;
+  rate: number | null;
+}
+
 export interface DashboardSummary {
   open_reports: number; // KPI① 미확인 위험보고 수 — A 화면과 동일 소스(risk_reports)
   reports_by_status: ReportStatusCounts; // KPI② 상태별 3칸 (건수, % 없음)
@@ -148,22 +159,29 @@ export interface DashboardSummary {
   reports_today_hourly: HourlyTrendPoint[]; // 오늘 시간대별 보고 건수, 00시~현재 zero-fill
   generated_at: string;
   timezone: string;
-  // 학습 KPI(V5) — 실API 미반환(admin.py:76 이월). 응답에 없으면 화면이 보조 섹션을 숨긴다(P8 결손 수정).
+  // 학습 KPI(M-38, dashboard.py RESPONSE_KEYS 실API 착륙) — optional 유지: 초기(활성 근로자
+  // 0명 등) 응답이라도 화면이 안전하게 보조 섹션/카드를 숨길 수 있게.
   per_worker?: PerWorkerRow[];
   per_module?: PerModuleRow[];
+  completion_rate?: DashboardCompletionRate;
+  avg_comprehension?: number | null;
 }
 
-// 보조 영역 — 학습 KPI(V5), /admin/dashboard 응답에 없어 상수 mock으로 별도 관리.
+// 근로자별 이해도 행 — dashboard.py PER_WORKER_KEYS(v_comprehension SELECT) 코드 대조 확정.
+// name 없음(뷰에 없는 필드) — 화면은 worker_id로만 식별한다.
 export interface PerWorkerRow {
   worker_id: number;
-  name: string;
-  comprehension: number;
+  quiz_set_id: number;
+  score: number;
   label: ComprehensionLabel;
+  created_at: string;
 }
 
+// 모듈별 집계 — dashboard.py PER_MODULE_KEYS(quiz_sets JOIN v_comprehension GROUP BY module).
 export interface PerModuleRow {
   module: string;
-  completion_rate: number;
+  n: number;
+  avg_score: number;
 }
 
 // 승인큐 — skeleton-v3 §3 GET /admin/glossary?status= / approve|reject (C). DB(001) 컬럼 그대로.
@@ -289,4 +307,38 @@ export interface QuizSubmitResult {
   score: number;
   passed: boolean;
   label: string;
+}
+
+// 문서 등록(관리자 업로드) — POST/GET /admin/documents (M-41). §3 등재 문구는 아직 구
+// multipart 그대로지만, docs/ms-m41(0902 명선 확정, 미머지)이 실 계약을 JSON으로 확정:
+// {title,category,text,filename?} → 202 {id,job_id}, GET → 목록. 백엔드는 POST가 아직
+// NotImplementedError 스텁이고 GET 라우트 자체가 없다(admin.py 대조 확인) — 계약은
+// 확정이지만 코드 미착륙이라 mock 경계로 동작한다. category CHECK(001 documents 테이블
+// 74-76행) 그대로 — mock 4개 아님, 실 DB 제약값.
+export type DocumentCategory = "process" | "instruction" | "safety" | "equipment";
+export type JobStatus = "queued" | "running" | "done" | "failed"; // jobs.status CHECK(001) 그대로
+
+export interface DocumentUploadRequest {
+  title: string;
+  category: DocumentCategory;
+  text: string;
+  filename: string;
+}
+
+// docs/ms-m41: documents(origin:'upload', source:'upload:'+filename) 생성 + ingest_document
+// 잡 큐잉 → 202 {id, job_id}. id=documents.id, job_id=jobs.id.
+export interface DocumentUploadResult {
+  id: number;
+  job_id: number;
+}
+
+export interface DocumentListItem {
+  id: number;
+  title: string;
+  category: DocumentCategory | string;
+  origin: "upload" | "admin_answer" | "seed";
+  source: string | null;
+  created_at: string;
+  chunk_count: number;
+  job_status: JobStatus | string;
 }

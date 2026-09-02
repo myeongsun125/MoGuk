@@ -12,6 +12,7 @@ import AdminGlossaryScreen from "./apps/admin/screens/Glossary";
 import AdminAuditLogScreen from "./apps/admin/screens/AuditLog";
 import AdminUnansweredScreen from "./apps/admin/screens/Unanswered";
 import AdminWorkersScreen from "./apps/admin/screens/Workers";
+import AdminDocumentsScreen from "./apps/admin/screens/Documents";
 import AdminLayout from "./apps/admin/AdminLayout";
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
               <Route path="events" element={<AdminAuditLogScreen />} />
               <Route path="unanswered" element={<AdminUnansweredScreen />} />
               <Route path="workers" element={<AdminWorkersScreen />} />
+              <Route path="documents" element={<AdminDocumentsScreen />} />
             </Route>
           </Routes>
         </BrowserRouter>

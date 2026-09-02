@@ -57,6 +57,24 @@ export default function AdminDashboardScreen() {
           <span className="kpi-label">④ 근거 인용률</span>
           <span className="kpi-value">{citationPct}</span>
         </div>
+
+        {data.avg_comprehension != null && (
+          <div className="kpi-card" data-testid="kpi-avg-comprehension">
+            <span className="kpi-label">⑤ 평균 이해도</span>
+            <span className="kpi-value">{Math.round(data.avg_comprehension)}점</span>
+          </div>
+        )}
+
+        {data.completion_rate && (
+          <div className="kpi-card" data-testid="kpi-completion-rate">
+            <span className="kpi-label">⑥ 학습 완료율</span>
+            <span className="kpi-value">
+              {data.completion_rate.rate === null
+                ? "—"
+                : `${Math.round(data.completion_rate.rate * 100)}%`}
+            </span>
+          </div>
+        )}
       </div>
 
       <section>
@@ -74,19 +92,19 @@ export default function AdminDashboardScreen() {
 
       {(data.per_worker?.length || data.per_module?.length) && (
         <section className="secondary-section" data-testid="secondary-section">
-          <p className="secondary-note">
-            아래는 보조 지표입니다 — 퀴즈 실데이터 연동 전이라 mock 값입니다.
-          </p>
+          <p className="secondary-note">아래는 퀴즈 학습 KPI 보조 지표입니다.</p>
 
           {!!data.per_worker?.length && (
             <>
-              <h2>근로자별 이해도 (mock)</h2>
+              <h2>근로자별 이해도</h2>
               <ul className="per-worker-list" data-testid="per-worker-list">
                 {data.per_worker.map((w) => (
-                  <li key={w.worker_id}>
+                  <li key={`${w.worker_id}-${w.quiz_set_id}`}>
                     <span className={`badge badge-label-${w.label}`}>{w.label}</span>
-                    <span className="pw-name">{w.name}</span>
-                    <span className="pw-score">{w.comprehension}점</span>
+                    <span className="pw-name">
+                      근로자 #{w.worker_id} · 세트 {w.quiz_set_id}
+                    </span>
+                    <span className="pw-score">{w.score}점</span>
                   </li>
                 ))}
               </ul>
@@ -95,15 +113,17 @@ export default function AdminDashboardScreen() {
 
           {!!data.per_module?.length && (
             <>
-              <h2>모듈별 완주율 (mock)</h2>
+              <h2>모듈별 평균</h2>
               <ul className="per-module-list" data-testid="per-module-list">
                 {data.per_module.map((m) => (
                   <li key={m.module}>
                     <span className="pm-name">{m.module}</span>
                     <div className="pm-bar-track">
-                      <div className="pm-bar-fill" style={{ width: `${m.completion_rate}%` }} />
+                      <div className="pm-bar-fill" style={{ width: `${m.avg_score}%` }} />
                     </div>
-                    <span className="pm-pct">{m.completion_rate}%</span>
+                    <span className="pm-pct">
+                      {m.avg_score}점 ({m.n}명)
+                    </span>
                   </li>
                 ))}
               </ul>
