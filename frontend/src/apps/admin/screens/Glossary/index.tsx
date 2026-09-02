@@ -52,7 +52,7 @@ export default function AdminGlossaryScreen() {
 
   return (
     <div className="admin-glossary" data-testid="admin-glossary-screen">
-      <h1>용어 승인큐</h1>
+      <h1>{t("admin.glossary.title")}</h1>
       <div className="pending-badge" data-testid="pending-count">
         승인 대기: {terms.length}건
       </div>

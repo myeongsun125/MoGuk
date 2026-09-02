@@ -20,6 +20,7 @@ async function main() {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: VIEWPORT });
+  let failures = 0;
 
   // B — 대시보드
   await page.goto(`http://localhost:${PORT}/admin/dashboard`);
@@ -31,6 +32,31 @@ async function main() {
   // C — 승인큐
   await page.goto(`http://localhost:${PORT}/admin/glossary`);
   await page.getByTestId("term-list").waitFor({ state: "visible", timeout: 5000 });
+
+  // 7차: 승인큐 nav 라벨·화면 제목 i18n 배선 확인 — ko -> vi -> ko 토글 시 실제로 바뀌는지.
+  const navKo = await page.getByRole("link", { name: "승인큐" }).count();
+  const h1Ko = await page.locator("h1").textContent();
+  await page.getByTestId("admin-lang-vi").click();
+  await page.waitForTimeout(50);
+  const h1Vi = await page.locator("h1").textContent();
+  const navViCount = await page.locator('[data-testid="admin-nav"] a', { hasText: "Hàng chờ duyệt" }).count();
+  console.log("glossary h1 ko:", h1Ko, "/ vi:", h1Vi, "/ nav(ko exists):", navKo, "/ nav(vi count):", navViCount);
+  if (h1Ko === h1Vi || navViCount === 0) {
+    console.error("FAIL: 승인큐 화면 제목/nav 라벨이 vi 토글 후 바뀌지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 승인큐 제목·nav 라벨 vi 토글 확인");
+  }
+  await page.getByTestId("admin-lang-ko").click();
+  await page.waitForTimeout(50);
+  const h1Back = await page.locator("h1").textContent();
+  if (h1Back !== h1Ko) {
+    console.error("FAIL: 승인큐 ko 복귀 후 제목이 원래대로 돌아오지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 승인큐 ko 복귀 확인");
+  }
+
   const before = await page.getByTestId("pending-count").textContent();
   console.log("glossary before:", before);
   await page.screenshot({ path: GLOSSARY_BEFORE_PNG });
@@ -45,6 +71,12 @@ async function main() {
   await server.close();
   console.log(`saved ${GLOSSARY_BEFORE_PNG}`);
   console.log(`saved ${GLOSSARY_AFTER_PNG}`);
+
+  if (failures > 0) {
+    console.error(`\n${failures} CHECK(S) FAILED`);
+    process.exit(1);
+  }
+  console.log("\nALL CHECKS PASSED");
 }
 
 main().catch((err) => {

@@ -19,8 +19,35 @@ async function main() {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: VIEWPORT });
 
+  let failures = 0;
+
   await page.goto(`http://localhost:${PORT}/admin/unanswered`);
   await page.getByTestId("unanswered-row").first().waitFor({ state: "visible", timeout: 5000 });
+
+  // 7차: 무근거 질의 nav 라벨·화면 제목 i18n 배선 확인 — ko -> vi -> ko 토글 시 실제로 바뀌는지.
+  const h1Ko = await page.locator("h1").textContent();
+  await page.getByTestId("admin-lang-vi").click();
+  await page.waitForTimeout(50);
+  const h1Vi = await page.locator("h1").textContent();
+  const navViCount = await page
+    .locator('[data-testid="admin-nav"] a', { hasText: "Câu hỏi chưa có căn cứ" })
+    .count();
+  console.log("unanswered h1 ko:", h1Ko, "/ vi:", h1Vi, "/ nav(vi count):", navViCount);
+  if (h1Ko === h1Vi || navViCount === 0) {
+    console.error("FAIL: 무근거 질의 화면 제목/nav 라벨이 vi 토글 후 바뀌지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 무근거 질의 제목·nav 라벨 vi 토글 확인");
+  }
+  await page.getByTestId("admin-lang-ko").click();
+  await page.waitForTimeout(50);
+  const h1Back = await page.locator("h1").textContent();
+  if (h1Back !== h1Ko) {
+    console.error("FAIL: 무근거 질의 ko 복귀 후 제목이 원래대로 돌아오지 않음");
+    failures++;
+  } else {
+    console.log("PASS: 무근거 질의 ko 복귀 확인");
+  }
 
   const beforeCount = await page.getByTestId("unanswered-count").textContent();
   const beforeRows = await page.getByTestId("unanswered-row").count();
@@ -82,6 +109,12 @@ async function main() {
 
   await browser.close();
   await server.close();
+
+  if (failures > 0) {
+    console.error(`\n${failures} CHECK(S) FAILED`);
+    process.exit(1);
+  }
+  console.log("\nALL CHECKS PASSED");
 }
 
 main().catch((err) => {

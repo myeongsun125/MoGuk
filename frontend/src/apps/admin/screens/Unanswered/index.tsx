@@ -72,7 +72,7 @@ export default function AdminUnansweredScreen() {
 
   return (
     <div className="admin-unanswered" data-testid="admin-unanswered-screen">
-      <h1>무근거 질의 대기열</h1>
+      <h1>{t("admin.unanswered.title")}</h1>
       <div className="pending-badge" data-testid="unanswered-count">
         대기 중: {items.length}건
       </div>

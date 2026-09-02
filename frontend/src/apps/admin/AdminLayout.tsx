@@ -3,12 +3,13 @@ import { AdminLangProvider, useAdminLang } from "../../i18n/AdminLangContext";
 import type { Lang } from "../../api/types";
 import "./AdminLayout.css";
 
-const LINKS = [
+// labelKey가 있으면 i18n 배선 대상(7차: 승인큐·무근거 질의) — 나머지는 스코프 밖 무접촉.
+const LINKS: { to: string; label?: string; labelKey?: string }[] = [
   { to: "/admin/reports", label: "위험보고" },
   { to: "/admin/dashboard", label: "대시보드" },
-  { to: "/admin/glossary", label: "승인큐" },
+  { to: "/admin/glossary", labelKey: "admin.glossary.nav" },
   { to: "/admin/events", label: "감사 로그" },
-  { to: "/admin/unanswered", label: "무근거 질의" },
+  { to: "/admin/unanswered", labelKey: "admin.unanswered.nav" },
   { to: "/admin/workers", label: "근로자 등록" },
 ];
 
@@ -24,7 +25,7 @@ const LANG_ENDONYM: Record<Lang, string> = {
 // 상태가 서버 DB에 있어 무관해지지만, 지금은 이 nav가 mock 데모의 전제조건이다.
 function AdminLayoutInner() {
   const { lang, setLang, t } = useAdminLang();
-  // ①(M-41) 신규 항목만 i18n 키로 — 기존 5개는 스코프 밖(무접촉), t()도 이 항목에만 사용.
+  // ①(M-41) 문서 등록 + 7차(승인큐·무근거 질의)만 i18n 키로 — 나머지 3개는 스코프 밖(무접촉).
   const links = [...LINKS, { to: "/admin/documents", label: t("admin.documents.nav") }];
 
   return (
@@ -37,7 +38,7 @@ function AdminLayoutInner() {
               to={l.to}
               className={({ isActive }) => (isActive ? "admin-nav-link active" : "admin-nav-link")}
             >
-              {l.label}
+              {l.labelKey ? t(l.labelKey) : l.label}
             </NavLink>
           ))}
         </nav>
