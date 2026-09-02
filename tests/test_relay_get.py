@@ -74,6 +74,10 @@ EDGE_CASES = [
      {"title": "t", "category": "safety", "text": "본문"},
      {"title": "t", "category": "safety", "text": "본문", "filename": None}, 202,
      {"id": 31, "job_id": 77}),
+    # M-42: 학습 카드 — module·lang 쿼리스트링 온전 전달
+    ("GET", "/api/v1/learn/cards?module=safety&lang=vi",
+     "/api/v1/learn/cards?module=safety&lang=vi", {}, {}, 200,
+     {"module": "safety", "quiz_set_id": 5, "cards": []}),
 ]
 
 
@@ -498,6 +502,35 @@ def test_dispatch_documents_post_invalid_422(monkeypatch):
     status, body = relay_poller.dispatch(
         "POST", "/api/v1/admin/documents", {"title": "t", "category": "x", "text": ""}
     )
+    assert status == 422 and body == {"detail": "사유"}
+
+
+# ── M-42: 학습 카드 디스패치 ───────────────────────────────
+
+def test_dispatch_cards_passes_module_lang_and_worker_id(monkeypatch):
+    seen = {}
+
+    def fake_cards(module, lang=None, worker_id=None):
+        seen.update(module=module, lang=lang, worker_id=worker_id)
+        return {"module": module, "quiz_set_id": None, "cards": []}
+
+    monkeypatch.setattr("app.services.learn_cards.get_cards", fake_cards)
+    status, body = relay_poller.dispatch(
+        "GET", "/api/v1/learn/cards?module=learning&lang=in", {}, None, {"wid": 9}
+    )
+    assert status == 200 and body["module"] == "learning"
+    assert seen == {"module": "learning", "lang": "in", "worker_id": 9}
+
+
+def test_dispatch_cards_invalid_module_422(monkeypatch):
+    """검증 실패 매핑이 core 라우터와 동일하다 — 422 (module 미지정도 동일 경로)."""
+    from app.services import learn_cards
+
+    def boom(*a, **k):
+        raise learn_cards.InvalidModule("사유")
+
+    monkeypatch.setattr("app.services.learn_cards.get_cards", boom)
+    status, body = relay_poller.dispatch("GET", "/api/v1/learn/cards", {})
     assert status == 422 and body == {"detail": "사유"}
 
 

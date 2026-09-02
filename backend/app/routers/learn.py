@@ -23,6 +23,7 @@ router = APIRouter(prefix="/learn", tags=["learn"])
 # M-28c 동형 릴레이 경로 (M-38·M-42)
 QUIZ_PATH = "/api/v1/learn/quiz/{set_id}"
 SUBMIT_PATH = "/api/v1/learn/quiz/{set_id}/submit"
+CARDS_PATH = "/api/v1/learn/cards"
 
 
 @router.get("/cards")
@@ -34,8 +35,13 @@ async def cards(
     """{module, quiz_set_id, cards[{id, kind, text, text_ko, high_risk, note_ko?, src?}]} (M-42).
 
     인증 optional(퀴즈 GET 동형). module 미지정·safety/learning 외 값은 422 —
-    판정은 서비스 단일 지점(릴레이 경로 공용).
+    판정은 서비스 단일 지점(릴레이 경로 공용). M-28c ①②: edge 는 릴레이 경유.
     """
+    if role() == "edge":
+        q = "&".join(f"{k}={quote(v)}" for k, v in (("module", module), ("lang", lang)) if v)
+        item = queue.enqueue("GET", CARDS_PATH + (f"?{q}" if q else ""), {}, identity)
+        relayed = await queue.wait_for_response(item)
+        return JSONResponse(status_code=relayed["status_code"], content=relayed["body"])
     try:
         result = await asyncio.to_thread(
             learn_cards.get_cards, module, lang, (identity or {}).get("wid")
