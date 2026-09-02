@@ -1,5 +1,6 @@
-"""/learn — 학습카드·퀴즈 (modules/learning, M-38). [새봄]
+"""/learn — 학습카드·퀴즈 (modules/learning, M-38·M-42). [새봄]
 
+GET  /learn/cards?module=&lang=        학습 카드 — phrase(safety)·term(learning) (M-42)
 GET  /learn/quiz/{set_id}?lang=        문항 조회 — answer_idx 미노출(§3:221)
 POST /learn/quiz/{set_id}/submit       {answers[]} → {score, passed, label} (§3:222)
 lang 미지정 → Bearer 근로자 lang(optional_identity — 미인증이면 ko), 지정 → vi·in 외 ko 폴백.
@@ -13,20 +14,35 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StrictInt
 
 from app.routers.auth import optional_identity, require_worker
-from app.services import quiz
+from app.services import learn_cards, quiz
 from app.services.relay import queue
 from app.services.system_service import role
 
 router = APIRouter(prefix="/learn", tags=["learn"])
 
-# M-28c 동형 릴레이 경로 (M-38)
+# M-28c 동형 릴레이 경로 (M-38·M-42)
 QUIZ_PATH = "/api/v1/learn/quiz/{set_id}"
 SUBMIT_PATH = "/api/v1/learn/quiz/{set_id}/submit"
 
 
 @router.get("/cards")
-def cards(module: str | None = None) -> dict:
-    raise NotImplementedError("[새봄] GET /learn/cards?module=")
+async def cards(
+    module: str | None = None,
+    lang: str | None = None,
+    identity: dict | None = Depends(optional_identity),
+) -> JSONResponse:
+    """{module, quiz_set_id, cards[{id, kind, text, text_ko, high_risk, note_ko?, src?}]} (M-42).
+
+    인증 optional(퀴즈 GET 동형). module 미지정·safety/learning 외 값은 422 —
+    판정은 서비스 단일 지점(릴레이 경로 공용).
+    """
+    try:
+        result = await asyncio.to_thread(
+            learn_cards.get_cards, module, lang, (identity or {}).get("wid")
+        )
+    except learn_cards.InvalidModule as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return JSONResponse(status_code=200, content=result)
 
 
 @router.get("/quiz/{set_id}")
