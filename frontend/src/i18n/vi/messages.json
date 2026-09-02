@@ -71,5 +71,21 @@
   "worker.quiz.failed": "Chưa đạt",
   "worker.quiz.resultTitle": "Kết quả",
   "worker.quiz.draftLabel": "Câu hỏi chưa kiểm duyệt (sẽ được người bản ngữ kiểm duyệt)",
-  "worker.quiz.termLabel": "Thuật ngữ"
+  "worker.quiz.termLabel": "Thuật ngữ",
+  "admin.documents.nav": "Đăng tài liệu",
+  "admin.documents.titlePlaceholder": "Nhập tiêu đề tài liệu",
+  "admin.documents.categoryProcess": "Quy trình",
+  "admin.documents.categoryInstruction": "Hướng dẫn công việc",
+  "admin.documents.categorySafety": "An toàn",
+  "admin.documents.categoryEquipment": "Thiết bị",
+  "admin.documents.fileHint": "Chỉ hỗ trợ tệp .md, .txt",
+  "admin.documents.submit": "Đăng ký",
+  "admin.documents.submitting": "Đang đăng ký...",
+  "admin.documents.errorInvalid": "Vui lòng kiểm tra tiêu đề, phân loại, nội dung",
+  "admin.documents.errorGeneric": "Đăng tài liệu thất bại. Vui lòng thử lại.",
+  "admin.documents.statusQueued": "Đang chờ",
+  "admin.documents.statusRunning": "Đang xử lý",
+  "admin.documents.statusDone": "Hoàn tất",
+  "admin.documents.statusFailed": "Thất bại",
+  "admin.documents.statusNone": "—"
 }

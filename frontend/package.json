@@ -13,6 +13,8 @@
     "shot:admin-events": "node scripts/shot-admin-events.mjs",
     "shot:admin-unanswered": "node scripts/shot-admin-unanswered.mjs",
     "shot:admin-workers": "node scripts/shot-admin-workers.mjs",
+    "shot:admin-documents": "node scripts/shot-admin-documents.mjs",
+    "shot:admin-dashboard": "node scripts/shot-admin-dashboard.mjs",
     "shot:worker-quiz": "node scripts/shot-worker-quiz.mjs",
     "rehearse": "node scripts/rehearse.mjs",
     "postinstall": "playwright install chromium"

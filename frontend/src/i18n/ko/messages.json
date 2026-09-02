@@ -71,5 +71,21 @@
   "worker.quiz.failed": "미통과",
   "worker.quiz.resultTitle": "결과",
   "worker.quiz.draftLabel": "검수 전 문항입니다(원어민 검수 예정)",
-  "worker.quiz.termLabel": "용어"
+  "worker.quiz.termLabel": "용어",
+  "admin.documents.nav": "문서 등록",
+  "admin.documents.titlePlaceholder": "문서 제목을 입력하세요",
+  "admin.documents.categoryProcess": "공정",
+  "admin.documents.categoryInstruction": "작업지침",
+  "admin.documents.categorySafety": "안전",
+  "admin.documents.categoryEquipment": "장비",
+  "admin.documents.fileHint": ".md, .txt 파일만 지원합니다",
+  "admin.documents.submit": "등록",
+  "admin.documents.submitting": "등록 중...",
+  "admin.documents.errorInvalid": "제목·분류·내용을 확인해 주세요",
+  "admin.documents.errorGeneric": "문서 등록에 실패했습니다. 다시 시도해 주세요.",
+  "admin.documents.statusQueued": "대기 중",
+  "admin.documents.statusRunning": "처리 중",
+  "admin.documents.statusDone": "완료",
+  "admin.documents.statusFailed": "실패",
+  "admin.documents.statusNone": "—"
 }

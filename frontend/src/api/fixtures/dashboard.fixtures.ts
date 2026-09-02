@@ -4,9 +4,25 @@ import { statusCounts } from "./adminReports.fixtures";
 // #45 실API shape 그대로(0830). ①② 는 adminReports.fixtures 의 mock 저장소를 집계해서
 // A 화면과 항상 같은 숫자가 나오게 한다 — 고정값이 아니다.
 // ③④는 unanswered_queue·questions API가 아직 mock 화면이 없어 총괄 지정값 유지.
+// 학습 KPI 4키(per_worker/per_module/completion_rate/avg_comprehension)는 M-38로 같은
+// 실API 응답에 착륙(dashboard.py PER_WORKER_KEYS 등 코드 대조 확정) — 더 이상 별도
+// 상수로 분리하지 않고 이 함수 안에서 실 shape 그대로 만든다(M-41).
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
+
+const PER_WORKER: PerWorkerRow[] = [
+  { worker_id: 1, quiz_set_id: 1, score: 94, label: "green", created_at: "2026-09-01T09:12:00" },
+  { worker_id: 2, quiz_set_id: 1, score: 86, label: "yellow", created_at: "2026-09-01T09:20:00" },
+  { worker_id: 3, quiz_set_id: 2, score: 71, label: "red", created_at: "2026-09-01T10:03:00" },
+  { worker_id: 4, quiz_set_id: 1, score: 90, label: "green", created_at: "2026-09-01T10:15:00" },
+  { worker_id: 5, quiz_set_id: 2, score: 83, label: "yellow", created_at: "2026-09-01T11:00:00" },
+];
+
+const PER_MODULE: PerModuleRow[] = [
+  { module: "learning", n: 12, avg_score: 82.4 },
+  { module: "safety", n: 9, avg_score: 76.1 },
+];
 
 export function buildDashboardMock(): DashboardSummary {
   const counts = statusCounts();
@@ -25,23 +41,9 @@ export function buildDashboardMock(): DashboardSummary {
     reports_today_hourly: hours.map((hour, i) => ({ hour, count: sample[i % sample.length] })),
     generated_at: `${dateStr}T${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`,
     timezone: "Asia/Seoul",
-    per_worker: PER_WORKER_MOCK,
-    per_module: PER_MODULE_MOCK,
+    per_worker: PER_WORKER,
+    per_module: PER_MODULE,
+    completion_rate: { workers_attempted: 5, workers_activated: 8, rate: 0.625 },
+    avg_comprehension: 84.8,
   };
 }
-
-// 보조 영역 — 퀴즈 실데이터 전이라 API 무관 상수 mock. §3 "학습 KPI는 V5" 명시분.
-export const PER_WORKER_MOCK: PerWorkerRow[] = [
-  { worker_id: 1, name: "응우옌 반 A", comprehension: 94, label: "green" },
-  { worker_id: 2, name: "쩐 티 B", comprehension: 86, label: "yellow" },
-  { worker_id: 3, name: "Budi C", comprehension: 71, label: "red" },
-  { worker_id: 4, name: "레 반 D", comprehension: 90, label: "green" },
-  { worker_id: 5, name: "Sari E", comprehension: 83, label: "yellow" },
-];
-
-export const PER_MODULE_MOCK: PerModuleRow[] = [
-  { module: "learning", completion_rate: 78 },
-  { module: "safety", completion_rate: 65 },
-  { module: "speaking", completion_rate: 52 },
-  { module: "settlement", completion_rate: 40 },
-];
